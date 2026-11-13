@@ -34,3 +34,16 @@ async def test_every_other_name_is_a_dns_error(fixture_hosts: StartHosts) -> Non
     async with aiohttp.ClientSession(connector=connector) as session:
         with pytest.raises(aiohttp.ClientConnectorDNSError):
             await session.get("http://nowhere.test/")
+
+
+async def test_the_resolver_logs_each_name_it_is_asked(fixture_hosts: StartHosts) -> None:
+    hosts = fixture_hosts(SITE, OTHER)
+    connector = aiohttp.TCPConnector(resolver=hosts.resolver, use_dns_cache=False)
+
+    async with aiohttp.ClientSession(connector=connector) as session:
+        async with session.get("http://site.test/") as response:
+            await response.read()
+        with pytest.raises(aiohttp.ClientConnectorDNSError):
+            await session.get("http://nowhere.test/")
+
+    assert hosts.resolver.lookups == ("site.test", "nowhere.test")

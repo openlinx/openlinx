@@ -21,13 +21,60 @@ class SecretValues:
     """The values of a Crawl's secret settings, for text that may quote one, such as a hook's
     error (023-fix-code-audit D3)."""
 
-    # Longest first, so a value that holds another is replaced whole.
     values: tuple[str, ...] = ()
 
-    def redact(self, text: str) -> str:
+    def redact(self, text: str, *, truncated: bool = False) -> str:
+        # Replacement markers can themselves match a secret: find spans before rendering.
+        spans: list[tuple[int, int]] = []
         for value in self.values:
-            text = text.replace(value, REDACTED)
-        return text
+            if not value:
+                continue
+            start = text.find(value)
+            while start != -1:
+                spans.append((start, start + len(value)))
+                start = text.find(value, start + 1)
+            if truncated and (length := _secret_prefix_suffix(text, value)):
+                spans.append((len(text) - length, len(text)))
+        return _redact_spans(text, spans)
+
+
+def _secret_prefix_suffix(text: str, secret: str) -> int:
+    # Only a proper prefix could continue beyond the cut. KMP bounds both the copied
+    # secret prefix and the work by the carried text, even for repetitive secrets.
+    prefix = secret[: min(len(secret) - 1, len(text))]
+    if not prefix:
+        return 0
+    fallback = [0] * len(prefix)
+    matched = 0
+    for index in range(1, len(prefix)):
+        while matched and prefix[index] != prefix[matched]:
+            matched = fallback[matched - 1]
+        if prefix[index] == prefix[matched]:
+            matched += 1
+        fallback[index] = matched
+    matched = 0
+    for character in text:
+        while matched and (matched == len(prefix) or character != prefix[matched]):
+            matched = fallback[matched - 1]
+        if character == prefix[matched]:
+            matched += 1
+    return matched
+
+
+def _redact_spans(text: str, spans: list[tuple[int, int]]) -> str:
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(spans):
+        if merged and start < merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    pieces: list[str] = []
+    previous = 0
+    for start, end in merged:
+        pieces.extend((text[previous:start], REDACTED))
+        previous = end
+    pieces.append(text[previous:])
+    return "".join(pieces)
 
 
 def secret_values(config: Mapping[str, Any], settings: frozenset[str]) -> SecretValues:

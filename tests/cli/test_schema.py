@@ -1,4 +1,5 @@
-"""`linx schema` (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
+"""`linx schema` (015-add-crawl-store, 018-add-schema-conventions, 022-add-fetch-policy,
+crawl-store)."""
 
 from collections.abc import Iterator
 from typing import Any
@@ -40,9 +41,49 @@ def test_columns_of_seeds() -> None:
     ]
 
 
+def test_columns_of_response_headers() -> None:
+    (item,) = run_cli("schema", "response_headers").json()["items"]
+
+    assert (
+        [
+            {key: column[key] for key in ("name", "type", "nullable", "primary_key", "references")}
+            for column in item["columns"]
+        ],
+        item["indexes"],
+    ) == (
+        [
+            {
+                "name": "url_id",
+                "type": "INTEGER",
+                "nullable": False,
+                "primary_key": True,
+                "references": "urls.id",
+            },
+            {
+                "name": "headers",
+                "type": "TEXT",
+                "nullable": False,
+                "primary_key": False,
+                "references": None,
+            },
+        ],
+        [],
+    )
+
+
 def columns_of(table: str) -> dict[str, dict[str, Any]]:
     (item,) = run_cli("schema", table).json()["items"]
     return {column["name"]: column for column in item["columns"]}
+
+
+def test_the_http_version_is_a_later_column() -> None:
+    column = columns_of("origins")["http_version"]
+
+    assert (
+        column["nullable"],
+        column["values"],
+        column["description"].startswith("Filled from v0.2. "),
+    ) == (True, ["http_2", "http_1_1"], True)
 
 
 def test_column_formats() -> None:

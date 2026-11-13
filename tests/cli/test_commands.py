@@ -9,6 +9,7 @@ import pytest
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
+from openlinx.crawl.fetch.proxy import ProxyVariables
 from openlinx.crawl.settings import CrawlSettings
 from openlinx.services.settings import default_tables
 from tests.support.app import example_app
@@ -164,6 +165,16 @@ def test_warning_and_info_codes_of_this_change() -> None:
     ] == [("warning", None), ("info", None)]
 
 
+def test_the_codes_of_the_fetch_policy_are_listed() -> None:
+    diagnostics = run_cli("commands").json()["diagnostics"]
+
+    assert [
+        (d["code"], d["level"], d["exit_code"])
+        for d in diagnostics
+        if d["code"] in {"seed_redirected_out_of_scope"}
+    ] == [("seed_redirected_out_of_scope", "warning", None)]
+
+
 def test_naming_rule_for_input_errors() -> None:
     diagnostics = run_cli("commands").json()["diagnostics"]
 
@@ -183,8 +194,15 @@ def test_naming_rule_for_input_errors() -> None:
     )
 
 
-def test_no_environment_variable_is_honoured() -> None:
-    assert run_cli("commands").json()["environment"] == []
+def test_the_proxy_variables_are_the_one_exception() -> None:
+    environment = run_cli("commands").json()["environment"]
+    # Every variable a run reads, as one with all of them set records them.
+    read = ProxyVariables(http="http://proxy.test", https="http://proxy.test", no_proxy="x")
+
+    assert [entry["names"] for entry in environment] == [["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]]
+    assert [[name.lower() for name in entry["names"]] for entry in environment] == [
+        list(read.recorded())
+    ]
 
 
 def test_detection_signals_change_nothing() -> None:

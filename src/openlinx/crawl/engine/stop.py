@@ -16,6 +16,11 @@ def _rank(reason: StopReason) -> int:
     return 1 if reason in TRANSITIONS["running", "failed"] else 0
 
 
+def _ends_under_way(reason: StopReason) -> bool:
+    """Every stop but the URL limit's, which refuses new URLs only (022-add-fetch-policy D4)."""
+    return reason != "max_urls"
+
+
 _OFF_LOOP = (
     "the stop flag is set only on the loop of its Crawl: from another thread, call "
     "loop.call_soon_threadsafe(stop.set, reason)"
@@ -33,7 +38,14 @@ class StopSignal:
         self._cause: BaseException | None = None
         self._on_first_set: list[Callable[[StopReason], object]] = []
         self._was_set = asyncio.Event()
+        # Set by every stop but the URL limit's, which refuses new URLs only, so a retry and a
+        # network pause already under way go on within the grace (022-add-fetch-policy D4).
+        self._ends_under_way = asyncio.Event()
         self._closed = False
+        # Any stop keeps a new request from starting; only one that ends what is under way
+        # cuts a retry or a network pause.
+        self.new_requests = _View(self, self._was_set)
+        self.under_way = _View(self, self._ends_under_way)
 
     @property
     def is_set(self) -> bool:
@@ -59,6 +71,8 @@ class StopSignal:
         self._on_its_loop()
         if self._closed:
             return
+        if _ends_under_way(reason):
+            self._ends_under_way.set()
         first = self._reason is None
         if self._reason is None or _rank(reason) > _rank(self._reason):
             self._reason, self._cause = reason, cause
@@ -69,7 +83,6 @@ class StopSignal:
                 callback(reason)
 
     def write_failed(self, error: BaseException) -> None:
-        """Writing the crawl file failed, wherever it was written."""
         self.set("write_failed", write_failure_cause(error))
 
     def close(self) -> StopReason | None:
@@ -92,6 +105,22 @@ class StopSignal:
             self._loop = loop
         elif loop is not self._loop:
             raise RuntimeError(_OFF_LOOP)
+
+
+class _View:
+    """One kind of the Crawl's stop, set when the flag is set with a reason of its kind."""
+
+    def __init__(self, signal: StopSignal, event: asyncio.Event) -> None:
+        self._signal = signal
+        self._event = event
+
+    @property
+    def is_set(self) -> bool:
+        return self._event.is_set()
+
+    async def wait(self) -> None:
+        self._signal._on_its_loop()
+        await self._event.wait()
 
 
 class StopGrace:

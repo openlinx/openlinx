@@ -1,11 +1,17 @@
 """Link discovery in HTML (020-add-crawl-core, crawling)."""
 
+from datetime import UTC, datetime
+
+import msgspec
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from openlinx.crawl.fetch.fetcher import FetchResult
 from openlinx.crawl.pages.links import links_in_tree, locate_links, parse_html
+from openlinx.crawl.pages.preparation import PageSettings, prepare_page, response_links
 from openlinx.crawl.references import DiscoveredLink
+from openlinx.crawl.scope import scope_rules
 from openlinx.crawl.urls import NormalizedUrl
 from tests.support.pages import page_links
 
@@ -16,22 +22,121 @@ def _links(html: str, url: NormalizedUrl = SITE) -> list[DiscoveredLink]:
     return list(page_links(html.encode(), "text/html", url))
 
 
+_NAV_MAIN = '<nav><a href="/same">Nav</a></nav><main><a href="/same">Main</a></main>'
+_LINK_HEADERS = (("Link", '</c>; rel="canonical", </next>; rel="next"'),)
+
+
+def _links_with_headers(html: str, headers: tuple[tuple[str, str], ...]) -> list[DiscoveredLink]:
+    response = FetchResult(
+        status_code=200,
+        reason="OK",
+        headers=(("Content-Type", "text/html"), *headers),
+        body=html.encode(),
+        fetched_at=datetime(2026, 10, 27, tzinfo=UTC),
+        response_time_ms=1,
+    )
+    scope = scope_rules(SITE)
+    settings = PageSettings(scope=scope, strip_params=None)
+    prepared = prepare_page(SITE, response, settings)
+    return list(response_links(SITE, response, scope, None) + prepared.html_links)
+
+
+@pytest.mark.parametrize(
+    ("html", "headers", "kept"),
+    [
+        pytest.param(_NAV_MAIN, (), (0,), id="dropped-tail"),
+        pytest.param(_NAV_MAIN, (), (1,), id="second-only"),
+        pytest.param(_NAV_MAIN, _LINK_HEADERS, (2, 3), id="omitted-headers"),
+        pytest.param("", _LINK_HEADERS, (), id="omitted-all-header-only"),
+        pytest.param("", _LINK_HEADERS, (0,), id="header-only-dropped-tail"),
+    ],
+)
+def test_a_subset_of_a_page_s_links_is_refused(
+    html: str, headers: tuple[tuple[str, str], ...], kept: tuple[int, ...]
+) -> None:
+    links = _links_with_headers(html, headers)
+
+    with pytest.raises(RuntimeError, match=r"^pass every Link of the Page; filter after locating$"):
+        locate_links(parse_html(html), [links[index] for index in kept], expected_total=len(links))
+
+
+def test_links_out_of_ordinal_order_are_refused() -> None:
+    links = _links(_NAV_MAIN)
+
+    with pytest.raises(RuntimeError, match=r"^pass every Link of the Page; filter after locating$"):
+        locate_links(parse_html(_NAV_MAIN), reversed(links), expected_total=2)
+
+
+def test_header_links_after_html_links_are_refused() -> None:
+    links = _links_with_headers(_NAV_MAIN, (("Link", '</c>; rel="canonical"'),))
+    reordered = [
+        msgspec.structs.replace(links[1], ordinal=1),
+        msgspec.structs.replace(links[2], ordinal=2),
+        msgspec.structs.replace(links[0], ordinal=3),
+    ]
+
+    with pytest.raises(RuntimeError, match=r"^pass every Link of the Page; filter after locating$"):
+        locate_links(parse_html(_NAV_MAIN), reordered, expected_total=3)
+
+
+def test_an_empty_page_has_no_link_locations() -> None:
+    links = _links_with_headers("", ())
+
+    assert locate_links(parse_html(""), links, expected_total=0) == {}
+
+
+def test_complete_links_are_located_by_ordinal_after_the_headers() -> None:
+    links = _links_with_headers(_NAV_MAIN, (("Link", '</c>; rel="canonical"'),))
+
+    located = locate_links(parse_html(_NAV_MAIN), links, expected_total=3)
+
+    assert [
+        (
+            ordinal,
+            location.element.text(),
+            location.placing.parent.tag if location.placing.parent is not None else None,
+        )
+        for ordinal, location in located.items()
+    ] == [(2, "Nav", "nav"), (3, "Main", "main")]
+
+
+def test_a_complete_header_only_page_has_no_dom_locations() -> None:
+    links = _links_with_headers("", _LINK_HEADERS)
+
+    assert locate_links(parse_html(""), links, expected_total=2) == {}
+
+
 def test_a_relative_link_is_resolved_against_the_base_href() -> None:
     links = _links('<base href="http://site.test/docs/"><a href="guide">Guide</a>')
 
-    assert links == [
-        DiscoveredLink(
-            type="hyperlink",
-            target=NormalizedUrl("http://site.test/docs/guide"),
-            raw="guide",
-            element="a",
-            attribute="href",
-            rel=(),
-            nofollow=False,
-            skip_reason=None,
-            declared_in="body",
-            ordinal=1,
-            is_internal=True,
+    assert [
+        (
+            link.type,
+            link.target,
+            link.raw,
+            link.element,
+            link.attribute,
+            link.rel,
+            link.nofollow,
+            link.skip_reason,
+            link.declared_in,
+            link.ordinal,
+            link.is_internal,
+        )
+        for link in links
+    ] == [
+        (
+            "hyperlink",
+            "http://site.test/docs/guide",
+            "guide",
+            "a",
+            "href",
+            (),
+            False,
+            None,
+            "body",
+            1,
+            True,
         )
     ]
 
@@ -44,11 +149,16 @@ def test_each_link_comes_with_its_element_and_the_element_that_places_it() -> No
         '<a href="/b">B</a></main><footer><noscript><img src="/pixel.gif" alt=""></noscript>'
         "</footer>"
     )
-    located = locate_links(parse_html(html), _links(html))
+    links = _links(html)
+    located = locate_links(parse_html(html), links, expected_total=4)
 
     assert [
-        (link.ordinal, element.attributes.get(link.attribute or ""), placing.tag)
-        for link, element, placing in located
+        (
+            link.ordinal,
+            located[link.ordinal].element.attributes.get(link.attribute or ""),
+            located[link.ordinal].placing.tag,
+        )
+        for link in links
     ] == [
         (1, "/a.png", "img"),
         (2, "/a-2x.png 2x", "img"),
@@ -59,7 +169,11 @@ def test_each_link_comes_with_its_element_and_the_element_that_places_it() -> No
 
 def test_a_link_the_tree_does_not_hold_is_an_error() -> None:
     with pytest.raises(RuntimeError, match="link 2 is not in the tree"):
-        locate_links(parse_html('<a href="/a">A</a>'), _links('<a href="/a">A</a><a href="/b">'))
+        locate_links(
+            parse_html('<a href="/a">A</a>'),
+            _links('<a href="/a">A</a><a href="/b">'),
+            expected_total=2,
+        )
 
 
 def _found(html: str, url: NormalizedUrl = SITE) -> list[tuple[str, str]]:
@@ -325,13 +439,14 @@ def test_every_link_of_a_document_is_located_once(html: str) -> None:
         follow_nofollow=False,
     )
 
-    located = locate_links(tree, links)
+    located = locate_links(tree, links, expected_total=len(links))
 
-    assert [link for link, _, _ in located] == links
+    assert list(located) == [link.ordinal for link in links]
     # Each Link is paired with the element that holds its reference.
     assert all(
-        link.raw.strip() in (element.attributes.get(link.attribute or "") or "")
-        for link, element, _ in located
+        link.raw.strip()
+        in (located[link.ordinal].element.attributes.get(link.attribute or "") or "")
+        for link in links
     )
 
 

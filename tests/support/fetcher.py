@@ -14,6 +14,8 @@ from openlinx.store.records import FetchError
 class FakePage:
     body: str
     content_type: str = "text/html"
+    status: int = 200
+    headers: tuple[tuple[str, str], ...] = ()
     # Seconds on the clock before it answers, as a slow server takes.
     delay: float = 0.0
     # No HTTP response, with this fetch_error, until the clock's monotonic time `until`, or
@@ -22,18 +24,19 @@ class FakePage:
     until: float | None = None
 
 
-_NOT_FOUND = FakePage("")
+_NOT_FOUND = FakePage("", status=404)
 
 
 class FakeFetcher:
-    """Answers at once from `pages`, by the whole URL or else by path, so one host can differ
-    from the others, and 404 for any other URL; `starts` records each request's URL and the
+    """Answers from `pages`, by the whole URL or else by path, so one host can differ from the
+    others, after the page's delay, and 404 for any other URL; a sequence of pages answers in
+    turn, one per request, then repeats its last. `starts` records each request's URL and the
     clock's monotonic time when it started."""
 
     def __init__(
         self,
         clock: Clock,
-        pages: Mapping[str, FakePage],
+        pages: Mapping[str, FakePage | Sequence[FakePage]],
         *,
         outages: Sequence[tuple[float, float]] = (),
         on_start: Mapping[str, Callable[[], object]] | None = None,
@@ -43,8 +46,11 @@ class FakeFetcher:
         whatever its URL: the network itself is down. `on_start` runs a callback, by the whole
         URL or else by path, when its request starts, as a stop request that arrives then;
         `on_answer` runs one when its response is about to be returned."""
+        if any(not isinstance(page, FakePage) and not page for page in pages.values()):
+            raise ValueError("a sequence of fake pages takes at least one page")
         self._clock = clock
         self._pages = pages
+        self._answered: dict[str, int] = {}
         self._outages = outages
         self._on_start = on_start or {}
         self._on_answer = on_answer or {}
@@ -59,15 +65,15 @@ class FakeFetcher:
 
     async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         path = urlsplit(request.url).path or "/"
+        # The time of the request, as the real Fetcher stamps it.
+        fetched_at = self._clock.now()
         started = self._clock.monotonic()
         self.starts.append((request.url, started))
         callback = self._on_start.get(request.url) or self._on_start.get(path)
         if callback is not None:
             callback()
-        page = self._pages.get(request.url) or self._pages.get(path)
+        page = self._page(request.url if request.url in self._pages else path)
         fails = self._fails(page, started)
-        status_code = 200 if page is not None else 404
-        page = page or _NOT_FOUND
         self._in_flight += 1
         self.most_in_flight = max(self.most_in_flight, self._in_flight)
         try:
@@ -83,20 +89,28 @@ class FakeFetcher:
             return FetchFailure(
                 fetch_error=fails,
                 message="No HTTP response, as the test asks",
-                fetched_at=self._clock.now(),
+                fetched_at=fetched_at,
             )
         return FetchResult(
-            status_code=status_code,
-            reason=HTTPStatus(status_code).phrase,
-            headers=(("Content-Type", page.content_type),),
+            status_code=page.status,
+            reason=HTTPStatus(page.status).phrase,
+            headers=(("Content-Type", page.content_type), *page.headers),
             body=page.body.encode(),
-            fetched_at=self._clock.now(),
+            fetched_at=fetched_at,
             response_time_ms=0,
         )
 
-    def _fails(self, page: FakePage | None, started: float) -> FetchError | None:
+    def _page(self, key: str) -> FakePage:
+        found = self._pages.get(key, _NOT_FOUND)
+        if isinstance(found, FakePage):
+            return found
+        count = self._answered.get(key, 0)
+        self._answered[key] = count + 1
+        return found[min(count, len(found) - 1)]
+
+    def _fails(self, page: FakePage, started: float) -> FetchError | None:
         if any(begins <= started < ends for begins, ends in self._outages):
             return "connection_error"
-        if page is None or page.fails is None:
+        if page.fails is None:
             return None
         return page.fails if page.until is None or started < page.until else None

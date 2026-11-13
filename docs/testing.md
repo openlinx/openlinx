@@ -24,7 +24,7 @@ A seam is a public interface where behaviour is observed without reaching inside
 | 1 | **CLI** | Commands' JSON output, exit codes, files written, `-o`, errors | Typer `CliRunner` in-process; a few real subprocess runs per OS (Windows console encoding, `--detach`) |
 | 2 | **Services and store API** | Query, Crawl and Report service behaviour shared by the CLI and MCP; the Workspace and crawl-store API (create, write, read, migrate) | Direct calls to the public service / store API with a real crawl store in a temp Workspace |
 | 3 | **HTTP (local fixture site)** | Crawling: Scope, robots.txt, redirects, TLS, Resources, retries, politeness | The real crawler against a local test HTTP(S) server; aiohttp is never mocked |
-| 4 | **Pure-logic modules** | URL normalisation, Scope decisions, robots directives, the `--where` language, Rule evaluation, Indexability, the Page extractor (HTML in → Page data out), content metrics (words, sentences, Flesch, pixel widths) | Table-driven tests with literal expected values; property-based tests (hypothesis) for normalisation and the `--where` parser |
+| 4 | **Pure-logic modules** | URL normalisation, Scope decisions, robots directives, politeness and pause formulas (listed below), the `--where` language, Rule evaluation, Indexability, the Page extractor (HTML in → Page data out), content metrics (words, sentences, Flesch, pixel widths) | Table-driven tests with literal expected values; property-based tests (hypothesis) for normalisation and the `--where` parser |
 | 5 | **MCP tools** | Tool listings, inputs and outputs, error mapping | An in-process MCP client session |
 | 6 | **Store contract** | The public schema ([ADR-0002](adr/0002-sqlite-crawl-store-public-schema.md)) and the data a Crawl leaves behind | `linx schema` compared with `docs/schema.md`. **"Seam 3+6"**: crawl the fixture site, then read the documented tables through a read-only connection. `linx sql` is used only in tests about `sql` itself. |
 | 7 | **Report** | Report Sections, escaping, working offline, notes merge, `report brief` | Parse the generated HTML (no browser) and check the brief's JSON |
@@ -32,6 +32,29 @@ A seam is a public interface where behaviour is observed without reaching inside
 | 9 | **Report script** | The Report's inline table script (sorting, filtering) | `node --test` in CI (Node is already there for `openspec validate`); skipped locally when Node is missing |
 
 A change's `design.md` names the seams it is tested at. Adding a new seam is a design decision recorded there and agreed with the maintainer before any test uses it.
+
+### Crawl formula tables at seam 4
+
+Design D16 of `023-fix-code-audit` names these formula and blocking-response tables:
+
+| Interface | Source | Existing test |
+|---|---|---|
+| `global_cap` | [fetch/politeness.py](../src/openlinx/crawl/fetch/politeness.py) | [test_politeness.py](../tests/crawl/test_politeness.py): `test_the_global_cap_is_four_times_the_concurrency_within_20_to_100` |
+| `watchdog_seconds` | [fetch/requester.py](../src/openlinx/crawl/fetch/requester.py) | [test_watchdog.py](../tests/crawl/test_watchdog.py): `test_the_watchdog_is_120_seconds_or_30_more_than_the_request_deadline` |
+| `pause_after` | [engine/pause.py](../src/openlinx/crawl/engine/pause.py) | [test_network_pause.py](../tests/crawl/test_network_pause.py): `test_the_requests_in_a_row_that_pause_the_crawl` |
+| `probe_times` | [engine/pause.py](../src/openlinx/crawl/engine/pause.py) | [test_network_pause.py](../tests/crawl/test_network_pause.py): `test_probes_back_off_to_once_a_minute` |
+| `BlockingRuns` | [fetch/politeness.py](../src/openlinx/crawl/fetch/politeness.py) | [test_blocking.py](../tests/crawl/test_blocking.py): `test_a_host_warns_at_ten_403_or_429_responses_in_a_row` |
+
+Their expected values are literal tables, beside the Crawl Service tests of the
+same rules. Timing scenarios use `crawl_result` with `FakeFetcher` and `FakeClock`;
+real I/O, including the fixture site, uses `SystemClock`.
+
+The overtaken-skip race is exercised through that service boundary in
+[test_warning_log.py](../tests/crawl/test_warning_log.py),
+`test_a_skip_that_a_raise_overtook_counts_its_handler_failure_once_decided_again`.
+Its handler records both `hyperlink` and `image` calls before the test checks one
+counted warning, proving the race was staged. `Outcomes` remains internal; this
+does not add it to the direct test seams.
 
 ### Where tests live
 
@@ -56,7 +79,7 @@ These fakes stand in for things outside our code. They are the only test doubles
 - **Randomness:** an injectable random source (e.g. for crawl id collisions)
 - **DNS:** a DNS resolver hook
 - **Proxy:** a local test proxy
-- **TLS trust:** a test CA (trustme) passed into the crawler's TLS setup, so the OS trust store is never touched
+- **TLS trust:** a test CA (trustme) passed into the crawler's TLS setup, so no test installs a CA into the OS trust store; and truststore's import made to fail, for the certifi fallback
 - **Processes:** the OS process-spawn call (not our own launcher function)
 - **`doctor`:** network and trust-store probes
 - **SQLite's report of a held `-shm` file:** `SQLITE_IOERR_TRUNCATE`, which a killed writer whose process is still exiting causes on Windows only at random
@@ -71,6 +94,34 @@ Never replace our own modules or our own CLI with a double. Installer tests use 
 - **Mock only system boundaries:** the network outside the fixture site, the clock, randomness and, occasionally, the file system. Never mock our own modules. The Fetcher interface and an injectable clock exist so that scheduler and politeness tests can be deterministic.
 - **One logical assertion per test,** with a name that says *what* happens, not *how*.
 - **Cross-platform:** CI runs the whole suite on Windows, macOS and Linux × Python 3.12–3.14.
+
+### Narrow implementation checks
+
+Two existing checks pin a specific implementation choice with a measured cost:
+
+- [test_hooks.py](../tests/crawl/test_hooks.py),
+  `test_a_handler_s_rows_for_a_url_are_written_in_one_statement`, counts SQLAlchemy
+  `before_cursor_execute` events for the fixture handler's inserts. Several rows
+  for each URL must use one statement, preserving per-URL batching rather than
+  paying for a separate execution per row.
+- [test_writer.py](../tests/store/test_writer.py),
+  `test_the_replay_runs_units_without_a_savepoint`, traces SQLite statements and
+  checks that the insert runs twice with no savepoint. This pins the optimistic
+  batch/replay choice of `017` D6, whose purpose is to avoid per-unit savepoint cost.
+  [replay_now](../tests/support/writer.py) triggers a real failing unit through
+  `writer.run`, then flushes, so a replay mismatch fails at its cause.
+
+These checks retain their narrow purpose; they do not make other hook or writer
+internals public seams. Test new behaviour through the service and store APIs.
+
+### Hook type contracts
+
+[test_handler_types.py](../tests/test_handler_types.py) is checked by strict mypy
+with the rest of `src`, `tests` and `scripts`. It deliberately mismatches handler
+rows and writer rows, extractor config types, and a pass's async-only writer API.
+Each mismatch has a coded `type: ignore`; mypy's unused-ignore check fails if that
+mismatch stops being rejected. Executing the file with pytest alone does not prove
+these type contracts.
 
 ## Helpers
 
@@ -91,14 +142,15 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **`loop_factory`** (`openlinx.aio`): every async test runs on the loop it makes (Proactor on Windows, Selector elsewhere), through the `pytest_asyncio_loop_factories` hook in `tests/conftest.py`. No test sets an event-loop policy; ruff bans them.
 - **Fixture site** (`tests/fixture_site/`, see its [README](../tests/fixture_site/README.md)): the local HTTP server that tests crawl, at seam 3.
   - A site is data: a `Site` maps request paths to routes, such as `Page`, `Redirect` and `Robots`.
-  - `server = fixture_site(site)` starts it on `127.0.0.1`, on a given port with `fixture_site(site, port=port)`, such as one where a failed Crawl found nothing listening, and returns a `ServerHandle` with `base_url`, `url(path)` and the request log. `module_fixture_site` is the variant for hypothesis tests.
-  - `hosts = fixture_hosts(site, other)` starts two instances for multi-host Crawls: `site.test` and `www.site.test` name the first, `other.test` the second, through `hosts.resolver`, the DNS resolver hook; every other name fails as a DNS error.
+  - `server = fixture_site(site)` starts it on `127.0.0.1`, on a given port with `fixture_site(site, port=port)` (over https with `fixture_site(site, tls)`), such as one where a failed Crawl found nothing listening, and returns a `ServerHandle` with `base_url`, `url(path)` and the request log. `module_fixture_site` is the variant for hypothesis tests.
+  - `hosts = fixture_hosts(site, other)` starts two instances for multi-host Crawls: `site.test` and `www.site.test` name the first, `other.test` the second, through `hosts.resolver`, the DNS resolver hook, on port 80; every other name or port fails as a DNS error.
+  - `hosts = fixture_tls_hosts(site, other)` (`tests/fixture_site/tls.py`): `site.test` over http and https, and https listeners whose certificates fail, for the TLS scenarios; see the [README](../tests/fixture_site/README.md).
 - **Dependency allowlist** (`tests/dependency_allowlist.txt`, checked by `tests/test_dependencies.py`): every runtime dependency, transitive ones included, with a reason. A second test fails on any telemetry or LLM SDK, allowlisted or not.
 - **`temp_workspace`** (`tests/support/workspace.py`): creates `tmp_path / "home" / "work"`, makes it the current folder and returns `TempWorkspace(home, root)`. The root sits under the fake home, where the Workspace search stops.
 - **The fixture app** (`tests/support/app.py`, design D8 of 010): `example_app()` is `build_app(extra=AppExtra(...))` with what the contract scenarios register, the settings tables `example` (`ExampleSettings`, with `level` and the unset `token`) and the keyed `groups` (`GroupsTable`, entries with a `level`), both in `tests/support/settings.py` and registered by their references `EXAMPLE_TABLE` and `GROUPS_TABLE`, so `--help` never loads them, and, through `AppExtra(commands=...)`, the contract fixture Commands: `example-list` (the example list Command of the cli-contract spec, with `--odd`), `example-long-list` (items `n=1` to `n=60`), `example-rows` (rows `n=1`, `n=2`), `example-rows-waiting`, which holds its second row until a line arrives on stdin, so a real-process test can prove rows are flushed one by one, `example-rows-interrupted` (a row, then Ctrl+C), `example-needs-argument <name>`, `example-progress` (two progress events), `example-mixed` (an event, a warning, an event), `example-warn-and-wait` (a warning, then a wait for a line on stdin), `example-failed-outcome` (a partial result with exit code 1), `example-raises` (`RuntimeError("disk exploded")`), `example-warning-inside` (a warning inside its result), `example-interrupted` (Ctrl+C), `example-aborted` (Click's `Abort`) and `example-read-crawl`, which takes `--workspace` and `--crawl` and reports the id of the Crawl it read, as `050`'s Commands will. The fixture app's own codes, such as `example_failed`, are declared in `tests/support/app.py`, so the real tool never lists them. Each call builds a fresh app with its own registry, so nothing leaks between tests. Pass it as `run_cli(..., app=example_app())`. `settings_tables(app)` (same module) gives the settings tables an app registered. A seam-2 call of a service builds no app: it takes `default_tables()` of `openlinx.services.settings`, the services' own default, with `EXAMPLE_TABLE` registered on it when it needs the example table.
 - **`crawled(*args)`** (`tests/support/crawling.py`): runs `linx crawl` with `args` through `run_cli` and returns the path of the crawl file its result names, failing with the exit code and stderr when the Command does not exit 0. Seam 3+6 tests then read the file with `query` and `crawl_row`.
-- **`crawl_result(seed, hooks=None, *, resolver=None, pages=None, reporter=None, clock=None, fetcher=None, stop=None, **crawl)`** (same module): crawls through the Crawl Service instead, which alone takes test hooks, the DNS resolver hook, a page executor (`pages`, a function that builds one), a reporter, a `FakeClock`, a fake Fetcher and the `StopSignal` that `060`'s stop request sets, with `crawl` as settings of the `[crawl]` table, and returns its `CrawlResult`.
-- **`continued(crawl, overrides=None, hooks=None, *, resolver=None, reporter=None, clock=None, fetcher=None, stop=None)`** (same module): continues the Crawl that a `CrawlResult` ended through the Crawl Service, as `060`'s resume does, with `CrawlOverrides` for the settings a resume may change, and returns the continue's `CrawlResult`.
+- **`crawl_result(seed, hooks=None, *, resolver=None, trust_anchors=None, pages=None, reporter=None, clock=None, fetcher=None, stop=None, **crawl)`** (same module): crawls through the Crawl Service instead, which alone takes test hooks, a page executor (`pages`, a function that builds one), a reporter, a `FakeClock`, a Fetcher factory, into which it binds the DNS resolver hook (`resolver`) and the test CA (`trust_anchors`) or a fake Fetcher (`fetcher`), and the `StopSignal` that `060`'s stop request sets, with `crawl` as settings of the `[crawl]` table, and returns its `CrawlResult`.
+- **`continued(crawl, overrides=None, hooks=None, *, resolver=None, trust_anchors=None, reporter=None, clock=None, fetcher=None, stop=None)`** (same module): continues the Crawl that a `CrawlResult` ended through the Crawl Service, as `060`'s resume does, with `CrawlOverrides` for the settings a resume may change, and returns the continue's `CrawlResult`.
 - **`stopped_with_an_error()`** (same module): a Crawl that its URL limit stopped after one URL got no response, as a continue finds it, for the units a continue runs.
 - **`page_row(html, content_type=..., content_area=..., headers=..., url=...)`** (`tests/support/page_data.py`): the Page row of an analysed Page at `url` with this body and these response headers besides its Content-Type, with the Links the crawl engine gives it, through page preparation with the built-in extractors, the Page extractor's config being `content_area` when it is given, and then the Page handler, so a seam-4 test of a Page data column checks the decoding, the extractor and the handler's mapping at once. It fails on an `extractor_error`, naming each extractor's error and where it was raised. `page_link_rows(html, headers=..., url=...)` gives the same Page's Link rows, through the `links` handler. `response_link_rows(content_type, headers=..., url=...)` gives the Link rows of an in-Scope 200 response that is not HTML, such as a PDF, built as the crawl engine builds its result: its header Links, and no extractor output.
 - **`page_links(body, content_type, url, follow_nofollow=False)`** (`tests/support/pages.py`): the Links of a document, as page preparation reads them from a 200 response with the URL's own Scope, for the link extractor's seam-4 tests.
@@ -109,6 +161,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **`FakeClock`** (`tests/support/clock.py`): implements `openlinx.clock.Clock`.
   - `now()` starts at `2026-01-01T00:00:00+00:00`, or at the `start` given, as in `FakeClock(start=datetime(2026, 9, 27, 14, 3, 12, tzinfo=UTC))`. `monotonic()` starts at `0.0`.
   - `advance(seconds)` moves both, and wakes the sleeps that are due.
+  - `shift_wall(seconds)` moves only `now()`, forwards or backwards; monotonic time and pending sleep deadlines stay unchanged.
   - `await sleep(seconds)` waits until virtual time reaches its wake time, with no real wait. Time jumps to the earliest wake once nothing else can run: no clock call in 100 turns of the loop in a row, and no `off_loop()` hold open. So two sleeps at once move the clock once, as two hosts' rate waits do.
   - It models the event loop and the writer thread, never real I/O, which makes no clock call: a test with the fixture site or the aiohttp Fetcher uses `SystemClock`, and `tests/test_code_style.py` names a `FakeClock` beside either.
   - `off_loop()` is held while the loop waits for work on another thread that finishes without clock time, such as a writer unit (design D7 of 020).
@@ -116,9 +169,10 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
   Production code takes a `Clock`, which is `SystemClock` outside tests.
 - **Politeness timing** (the hosts' slots, the global cap, the rate turn, the task bound) is tested through the Crawl Service with `FakeFetcher` and `FakeClock`, never on the Requester's parts: `crawl_result(seed, clock=clock, fetcher=fetcher)`, with a page executor of the test's own (`pages=`) for the task bound.
 - **`FakeFetcher(clock, pages, outages=(), on_start=None, on_answer=None)`** (`tests/support/fetcher.py`): the fake Fetcher, for timing scenarios only. Pass it with its `FakeClock`: `crawl_result(seed, clock=clock, fetcher=fetcher)`.
-  - It answers from `pages`, keyed by the whole URL or else by path, so one host can differ from the others, and 404 for any other URL. A `FakePage(body, content_type="text/html", delay=0.0, fails=None, until=None)` answers after `delay` seconds on the clock.
+  - It answers from `pages`, keyed by the whole URL or else by path, so one host can differ from the others, and 404 for any other URL. A `FakePage(body, content_type="text/html", status=200, headers=(), delay=0.0, fails=None, until=None)` answers after `delay` seconds on the clock; a sequence of them answers in turn, one per request, and then repeats its last.
   - No HTTP response: a page with `fails`, a `fetch_error` such as `"connection_error"`, gets none until the clock's `monotonic()` reaches `until`, or ever when `until` is `None`, as a dead section does. `outages`, spans of `monotonic()` time such as `[(1, 30)]`, fail every request that starts in them, whatever its URL, as a network that is down does. A failure takes the page's delay too, as a connection that times out does.
   - `on_start` maps a whole URL or a path to a callback that runs when its request starts, such as `lambda: stop.set("interrupt")`, which stops the Crawl at that point as an interrupt or a stop request would.
+  - `on_answer` runs a callback by URL or path after the response's delay, before returning its outcome. `fetched_at` was captured before either callback, so a wall-clock shift here models a system-time change during the request.
   - `starts` holds each request's whole URL and the `monotonic()` at which it started, and `path_starts` the same by path, for a test of one host. `most_in_flight` is the most requests in flight at once.
   - A test of the network pause's count needs failures that end one by one, from URLs that are requested. While paused, the URLs of an origin whose robots.txt failed wait at the pause's gate, and when a dead section ends it they are all recorded at once from the kept verdict.
 - **Crawls** (`tests/support/crawls.py`): `new_crawl(workspace)` is a `NewCrawl` request for any Spider-mode Crawl with no secrets, for tests whose scenario does not name its metadata; pass it to `openlinx.services.crawls.create_crawl`. `create_any_crawl(temp_workspace, **changes)` creates one, with `changes` to the request, at `STARTED_AT` (`2026-09-27T14:03:12.345Z`, the spec's example) in the Workspace of the current folder. `create_crawl_at(temp_workspace, started_at, suffix)` creates one started at an ISO time, such as `"2026-09-27T10:00:00.000Z"`, whose id ends with `suffix`. `crawl_without_seeds(temp_workspace)` creates one whose `seeds` table is empty, for scenarios that fill it themselves. `crawl_row(file)` reads the `crawl` row as SQLite stores it, and `query(file, sql, params=())` any rows, with `?` parameters, both through a read-only connection.

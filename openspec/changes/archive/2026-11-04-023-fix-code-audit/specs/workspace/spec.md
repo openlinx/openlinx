@@ -1,36 +1,4 @@
-## REMOVED Requirements
-
-### Requirement: No environment variables
-
-**Reason:** it said the proxy variables are honoured, which no fetch does; "Environment variables change nothing" replaces it.
-
-**Migration:** none.
-
 ## ADDED Requirements
-
-### Requirement: Environment variables change nothing
-
-**In short:** environment variables never select the Workspace, change a setting or change a result.
-
-Environment variables SHALL NOT select the Workspace, SHALL NOT be a source of settings, and SHALL NOT change a Command's behaviour or output. The only inputs are flags and `openlinx.toml`, plus the operating system's own notion of the home folder and the current folder. No environment variable is honoured, so `linx commands` lists none under `environment`. One kind of variable may be read:
-
-- **Detection signals.** Read-only detection signals that host agents set, such as Codex's `CODEX_SANDBOX_NETWORK_DISABLED`, MAY be read to word diagnostics and hints, for example by `linx doctor`. They SHALL NOT change a Command's result, its exit code, the Workspace or any setting.
-
-#### Scenario: A Workspace variable is ignored
-- **WHEN** the Workspace is resolved from `H/work/a`, which contains `.openlinx/`, while the environment variables `OPENLINX_WORKSPACE` and `HTTP_PROXY` are set to `H/work/b` and `http://127.0.0.1:3128`
-- **THEN** the Workspace root is `H/work/a`
-
-#### Scenario: No environment variable is honoured
-- **WHEN** `linx commands` runs
-- **THEN** its `environment` list is empty
-
-#### Scenario: Detection signals change nothing
-- **WHEN** `linx commands` runs once with the environment variable `CODEX_SANDBOX_NETWORK_DISABLED=1` and once without it
-- **THEN** both runs write byte-identical stdout and exit with code 0
-
-#### Scenario: Setting variables are ignored
-- **WHEN** the settings of a Workspace without `openlinx.toml` are resolved with the environment variables `OPENLINX_EXAMPLE__LEVEL`, `EXAMPLE__LEVEL` and `LEVEL` all set to `high`
-- **THEN** `example.level` is `"low"`
 
 ### Requirement: A refused given value names its key
 

@@ -1,0 +1,245 @@
+"""Reading a response body up to its cap (022-add-fetch-policy D1; Pure)."""
+
+import asyncio
+import gzip
+import hashlib
+import tracemalloc
+import zlib
+from collections.abc import AsyncIterator
+
+import brotli
+import pytest
+
+from openlinx.crawl.fetch.body import BODY_LIMIT, Body, BodyDecodingError, read_body
+
+# A product listing, as a shop's category page repeats it.
+ROW = b'<li class="product"><a href="/p/1">Trail shoe</a> <span>89.00</span></li>\n'
+
+
+async def _chunks(data: bytes, size: int) -> AsyncIterator[bytes]:
+    for start in range(0, len(data), size):
+        yield data[start : start + size]
+
+
+def _read(data: bytes, limit: int, chunk_size: int = 4096) -> tuple[int, bool, bool, int]:
+    body = asyncio.run(read_body(_chunks(data, chunk_size), None, limit))
+    return len(body.data), body.truncated, data.startswith(body.data), body.transferred_bytes
+
+
+def test_a_body_at_the_cap_is_read_whole() -> None:
+    page = ROW * 1000
+
+    assert _read(page, limit=len(page)) == (len(page), False, True, len(page))
+
+
+def test_a_body_past_the_cap_is_cut_at_the_cap() -> None:
+    page = ROW * 1000
+
+    # The last chunk was read whole: the bytes read, not the bytes kept.
+    assert _read(page + b"<p>", limit=len(page)) == (len(page), True, True, len(page) + 3)
+
+
+def test_the_cap_falls_inside_a_chunk() -> None:
+    page = ROW * 1000
+
+    assert _read(page, limit=10_000, chunk_size=65_536) == (10_000, True, True, 65_536)
+
+
+def _packed(data: bytes, coding: str) -> bytes:
+    if coding == "gzip":
+        return gzip.compress(data, mtime=0)
+    if coding == "br":
+        packed: bytes = brotli.compress(data)
+        return packed
+    if coding == "deflate":
+        return zlib.compress(data)
+    # Raw deflate, without the zlib wrapper, as some servers send for "deflate".
+    packer = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+    return packer.compress(data) + packer.flush()
+
+
+def _decoded(packed: bytes, coding: str, limit: int = BODY_LIMIT) -> Body:
+    return asyncio.run(read_body(_chunks(packed, 4096), coding, limit))
+
+
+@pytest.mark.parametrize("coding", ["gzip", "br", "deflate", "raw deflate"])
+def test_a_compressed_body_is_decoded(coding: str) -> None:
+    page = ROW * 1000
+    packed = _packed(page, coding)
+
+    body = _decoded(packed, "deflate" if coding == "raw deflate" else coding)
+
+    assert (body.data == page, body.truncated, body.transferred_bytes) == (
+        True,
+        False,
+        len(packed),
+    )
+
+
+@pytest.mark.parametrize("coding", ["gzip", "br"])
+def test_a_compressed_body_is_capped_after_decoding(coding: str) -> None:
+    # A decompression bomb: 25 MiB of zeros in a body of a few kilobytes.
+    packed = _packed(bytes(25 * 1024 * 1024), coding)
+
+    body = _decoded(packed, coding)
+
+    assert (len(body.data), body.truncated) == (BODY_LIMIT, True)
+
+
+@pytest.mark.parametrize("coding", ["gzip", "br"])
+def test_a_bomb_in_one_chunk_is_decoded_only_up_to_the_cap(coding: str) -> None:
+    # 64 MiB of zeros, packed into one chunk as small as a connection reads at once.
+    packed = _packed(bytes(64 * 1024 * 1024), coding)
+    limit = 1024 * 1024
+
+    tracemalloc.start()
+    try:
+        body = asyncio.run(read_body(_chunks(packed, len(packed)), coding, limit))
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert (len(body.data), body.truncated, peak < 8 * limit) == (limit, True, True)
+
+
+def test_stacked_codings_are_decoded_last_first() -> None:
+    page = ROW * 1000
+    packed = brotli.compress(gzip.compress(page, mtime=0))
+
+    body = _decoded(packed, "gzip, br")
+
+    assert body.data == page
+
+
+@pytest.mark.parametrize(
+    ("packed", "coding"),
+    [
+        (ROW * 10, "gzip"),
+        (ROW * 10, "br"),
+        (gzip.compress(ROW * 1000, mtime=0)[:-100], "gzip"),
+    ],
+    ids=["not gzip", "not br", "gzip cut short"],
+)
+def test_a_body_that_fails_to_decode_is_refused(packed: bytes, coding: str) -> None:
+    with pytest.raises(BodyDecodingError):
+        _decoded(packed, coding)
+
+
+def test_a_coding_that_was_not_offered_is_kept_as_received() -> None:
+    packed = ROW * 10
+
+    body = _decoded(packed, "zstd")
+
+    assert (body.data, body.transferred_bytes) == (packed, len(packed))
+
+
+def test_an_empty_body_under_a_coding_is_empty() -> None:
+    # A redirect with no body, from a server that labels every response gzip.
+    body = _decoded(b"", "gzip")
+
+    assert (body.data, body.transferred_bytes) == (b"", 0)
+
+
+def test_stacked_codings_decode_a_body_up_to_the_cap() -> None:
+    # A server that gzips a file that is gzipped already, sending it a few bytes to a read: near
+    # the cap, the outer layer holds trailer bytes that give no output of their own.
+    photo = b"".join(hashlib.sha256(n.to_bytes(4)).digest() for n in range(2000))
+    page = ROW * 50 + photo
+    packed = gzip.compress(gzip.compress(page, mtime=0), mtime=0)
+
+    body = asyncio.run(read_body(_chunks(packed, 7), "gzip, gzip", len(page)))
+
+    assert (body.data == page, body.truncated) == (True, False)
+
+
+def test_a_zlib_body_whose_first_chunk_is_one_byte_is_decoded() -> None:
+    # A server that trickles its body, one byte to a read.
+    page = ROW * 100
+    packed = zlib.compress(page)
+
+    body = asyncio.run(read_body(_chunks(packed, 1), "deflate", BODY_LIMIT))
+
+    assert body.data == page
+
+
+def test_every_member_of_a_gzip_body_is_decoded() -> None:
+    # Two gzip files concatenated, as a server that appends a compressed footer sends them.
+    head, tail = ROW * 500, b"<footer>Shop</footer>\n"
+    packed = gzip.compress(head, mtime=0) + gzip.compress(tail, mtime=0)
+
+    body = _decoded(packed, "gzip")
+
+    assert body.data == head + tail
+
+
+async def _pieces(*pieces: bytes) -> AsyncIterator[bytes]:
+    for piece in pieces:
+        yield piece
+
+
+@pytest.mark.parametrize("coding", ["gzip", "deflate", "br"])
+def test_bytes_after_a_finished_stream_are_ignored(coding: str) -> None:
+    # A server that ends every response with a line break after the compressed body.
+    page = ROW * 100
+
+    body = asyncio.run(read_body(_pieces(_packed(page, coding), b"\r\n"), coding, BODY_LIMIT))
+
+    assert body.data == page
+
+
+def test_a_gzip_member_boundary_split_after_its_first_byte_is_decoded() -> None:
+    head, tail = ROW * 500, b"<footer>Shop</footer>\n"
+    first = gzip.compress(head, mtime=0)
+    packed = first + gzip.compress(tail, mtime=0)
+    # The read ends right after the next member's first byte, 0x1f.
+    split = len(first) + 1
+
+    body = asyncio.run(read_body(_pieces(packed[:split], packed[split:]), "gzip", BODY_LIMIT))
+
+    assert body.data == head + tail
+
+
+@pytest.mark.parametrize(
+    "chunking", ["together", "members", "separate prefix", "attached prefix", "one byte"]
+)
+def test_gzip_members_are_decoded_across_chunk_boundaries(chunking: str) -> None:
+    first = gzip.compress(b"first", mtime=0)
+    second = gzip.compress(b"second", mtime=0)
+    pieces = {
+        "together": [first + second],
+        "members": [first, second],
+        "separate prefix": [first, second[:1], second[1:]],
+        "attached prefix": [first + second[:1], second[1:]],
+        "one byte": [bytes([byte]) for byte in first + second],
+    }[chunking]
+
+    body = asyncio.run(read_body(_pieces(*pieces), "gzip"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"firstsecond", False, 51)
+
+
+def test_a_gzip_member_after_a_separate_prefix_is_bounded() -> None:
+    first = gzip.compress(b"first", mtime=0)
+    second = gzip.compress(b"x" * 1024, mtime=0)
+
+    body = asyncio.run(read_body(_pieces(first, second[:1], second[1:]), "gzip", 128))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"first" + b"x" * 123, True, 54)
+
+
+@pytest.mark.parametrize("junk", [b"X", b"\x00", b"\n"])
+@pytest.mark.parametrize("chunking", ["together", "separate prefix", "one byte", "before member"])
+def test_trailing_junk_cannot_restart_a_gzip_member(junk: bytes, chunking: str) -> None:
+    first = gzip.compress(b"first", mtime=0)
+    second = gzip.compress(b"second", mtime=0)
+    packed = first + second[:1] + junk + second[1:]
+    pieces = {
+        "together": [packed],
+        "separate prefix": [first, second[:1], junk, second[1:]],
+        "one byte": [bytes([byte]) for byte in packed],
+        "before member": [first, junk, second],
+    }[chunking]
+
+    body = asyncio.run(read_body(_pieces(*pieces), "gzip"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"first", False, 52)

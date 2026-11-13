@@ -129,10 +129,11 @@ def test_a_late_check_lowers_the_depth_of_a_url_still_queued(
                 "/late.html": Page(body='<a href="/x">X</a>', after="/b", delay=SLOW / 2),
                 "/a": Page(body='<a href="/b">B</a><a href="/hold">H</a>'),
                 "/b": Page(body='<a href="/b2">B2</a><a href="/x">X</a>'),
-                # Slow, so the lowered /x, read once depth 3 has ended, starts well after it.
-                "/b2": Page(body="<p>B2</p>", delay=SLOW / 4),
+                "/b2": Page(body="<p>B2</p>"),
                 "/hold": Page(body="<p>H</p>", delay=SLOW),
-                "/x": Page(body="<p>X</p>"),
+                # Slow, so /b2, read once depth 2 has ended with the lowered /x, starts well
+                # after it (022 D2: a pass reads the open depth again from its top).
+                "/x": Page(body="<p>X</p>", delay=SLOW / 4),
             }
         )
     )
@@ -145,9 +146,9 @@ def test_a_late_check_lowers_the_depth_of_a_url_still_queued(
         "SELECT url, fetch_state, crawl_depth FROM urls WHERE url IN (?, ?) ORDER BY id",
         [server.url("/b2"), server.url("/x")],
     ) == [(server.url("/b2"), "fetched", 3), (server.url("/x"), "fetched", 2)]
-    # Not dispatched at depth 3 beside /b2, so the check lowered it while it was queued.
+    # Dispatched at depth 2, before depth 3 opened, so the check lowered it while it was queued.
     started = {request.path: request.received_at for request in server.requests}
-    assert started["/x"] - started["/b2"] >= SLOW / 4
+    assert started["/b2"] - started["/x"] >= SLOW / 4
 
 
 @pytest.mark.slow

@@ -4,7 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from openlinx.store.records import DeclaredIn, HttpVersion, LinkType
+from openlinx.store.records import (
+    DeclaredIn,
+    HttpVersion,
+    LinkAttribute,
+    LinkElement,
+    LinkType,
+)
 
 type SameSite = Literal["strict", "lax", "none"]
 type Indexability = Literal["indexable", "non_indexable"]
@@ -25,24 +31,6 @@ type Readability = Literal[
 type LinkPosition = Literal["head", "navigation", "header", "footer", "sidebar", "content"]
 # Filled from v1.1, by JavaScript rendering.
 type HtmlSource = Literal["raw", "rendered"]
-# The elements and attributes that 020's Link discovery reads.
-type LinkElement = Literal[
-    "a",
-    "area",
-    "link",
-    "iframe",
-    "frame",
-    "meta",
-    "img",
-    "source",
-    "video",
-    "audio",
-    "track",
-    "embed",
-    "object",
-    "script",
-]
-type LinkAttribute = Literal["href", "src", "srcset", "poster", "data", "content"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

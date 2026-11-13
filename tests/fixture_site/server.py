@@ -2,12 +2,13 @@
 
 import asyncio
 import socket
+import ssl
 import struct
 import threading
 import time
 from collections.abc import Awaitable, Callable, Coroutine, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 from xml.sax.saxutils import escape
 
 from aiohttp import web
@@ -17,11 +18,12 @@ from openlinx.aio import loop_factory
 from tests.fixture_site.routes import (
     CONTENT_TYPES,
     DEFAULT_CONTENT_TYPE,
+    Answer,
     LargeFile,
     Page,
     Redirect,
+    Responses,
     Robots,
-    Route,
     Site,
     Sitemap,
     SitemapIndex,
@@ -131,7 +133,7 @@ def _xml_response(body: bytes) -> web.Response:
     return web.Response(body=body, headers={"Content-Type": CONTENT_TYPES[".xml"]})
 
 
-def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
+def _respond(site: Site, route: Answer, base_url: str) -> web.StreamResponse:
     match route:
         case Page():
             return _page_response(site, route, base_url)
@@ -156,6 +158,19 @@ def _respond(site: Site, route: Route, base_url: str) -> web.StreamResponse:
             response = web.StreamResponse(headers={"Content-Type": DEFAULT_CONTENT_TYPE})
             response.content_length = size
             return response
+
+
+async def _endless_body(
+    request: web.Request, response: web.StreamResponse, *, trickle: bool
+) -> web.StreamResponse:
+    # The declared headers, then a body that never ends: a hostile server's slow read.
+    stream = web.StreamResponse(status=response.status, headers=response.headers)
+    await stream.prepare(request)
+    if not trickle:
+        await asyncio.Event().wait()
+    while True:
+        await stream.write(b" ")
+        await asyncio.sleep(0.1)
 
 
 async def _reset_inside_body(
@@ -186,11 +201,7 @@ def _pattern_chunks(size: int) -> Iterator[bytes]:
 
 
 def _build_app(
-    site: Site,
-    base_url: Callable[[], str],
-    in_flight: set[asyncio.Task[Any]],
-    log: RequestLog,
-    after_seconds: float,
+    site: Site, base_url: Callable[[], str], log: RequestLog, after_seconds: float
 ) -> web.Application:
     requested: dict[str, asyncio.Event] = {}
 
@@ -198,24 +209,29 @@ def _build_app(
         return requested.setdefault(path, asyncio.Event())
 
     @web.middleware
-    async def log_and_track(
+    async def logged(
         request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
     ) -> web.StreamResponse:
         log.add(request)
         seen(request.path).set()
-        task = asyncio.current_task()
-        assert task is not None
-        in_flight.add(task)
         try:
             return await handler(request)
         finally:
-            in_flight.discard(task)
             log.answered()
 
+    # Requests so far, per path of a Responses route.
+    answered: dict[str, int] = {}
+
     async def handle(request: web.Request) -> web.StreamResponse:
-        route = site.routes.get(request.path)
-        if route is None:
+        found = site.routes.get(request.path)
+        if found is None:
             raise web.HTTPNotFound
+        if isinstance(found, Responses):
+            count = answered.get(request.path, 0)
+            answered[request.path] = count + 1
+            route = found.answers[min(count, len(found.answers) - 1)]
+        else:
+            route = found
         if route.after is not None:
             try:
                 async with asyncio.timeout(after_seconds):
@@ -238,6 +254,8 @@ def _build_app(
         if route.reset_after is not None:
             assert isinstance(response, web.Response)
             return await _reset_inside_body(request, response, route.reset_after)
+        if route.stall_body or route.trickle:
+            return await _endless_body(request, response, trickle=route.trickle)
         if isinstance(route, LargeFile):
             await response.prepare(request)
             for chunk in _pattern_chunks(route.size):
@@ -245,28 +263,44 @@ def _build_app(
             await response.write_eof()
         return response
 
-    app = web.Application(middlewares=[log_and_track])
+    app = web.Application(middlewares=[logged])
     app.router.add_route("*", "/{tail:.*}", handle)
     return app
 
 
-class RunningServer:
-    def __init__(self, site: Site, after_seconds: float = AFTER_SECONDS, *, port: int = 0) -> None:
-        self._loop = loop_factory()
-        self._thread = threading.Thread(target=self._loop.run_forever, name="fixture-site")
-        self._thread.start()
+class ThreadedApp:
+    """An aiohttp app on 127.0.0.1, served from a thread of its own, on `port` when one is
+    given."""
+
+    def __init__(
+        self, app: web.Application, name: str, tls: ssl.SSLContext | None = None, port: int = 0
+    ) -> None:
         self._in_flight: set[asyncio.Task[Any]] = set()
-        self._log = log = RequestLog()
-        app = _build_app(site, lambda: self.handle.base_url, self._in_flight, log, after_seconds)
+        app.middlewares.append(self._track)
+        self._loop = loop_factory()
+        self._thread = threading.Thread(target=self._loop.run_forever, name=name)
+        self._thread.start()
         self._runner = web.AppRunner(app)
         try:
             self._call(self._runner.setup())
-            self._call(web.TCPSite(self._runner, "127.0.0.1", port).start())
+            self._call(web.TCPSite(self._runner, "127.0.0.1", port, ssl_context=tls).start())
         except BaseException:
             self._stop_loop()
             raise
         host, port = self._runner.addresses[0][:2]
-        self.handle = ServerHandle(f"http://{host}:{port}", log)
+        self.base_url = f"{'https' if tls else 'http'}://{host}:{port}"
+
+    @web.middleware
+    async def _track(
+        self, request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
+    ) -> web.StreamResponse:
+        task = asyncio.current_task()
+        assert task is not None
+        self._in_flight.add(task)
+        try:
+            return await handler(request)
+        finally:
+            self._in_flight.discard(task)
 
     def _call[T](self, coroutine: Coroutine[Any, Any, T]) -> T:
         return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result()
@@ -287,6 +321,37 @@ class RunningServer:
             self._call(self._runner.cleanup())
         finally:
             self._stop_loop()
+
+
+class Serve(Protocol):
+    """Starts a fixture instance for a site, over https when it is given a TLS context, and
+    on `port` when one is given, such as the one a failed Crawl could not reach."""
+
+    def __call__(
+        self, site: Site, tls: ssl.SSLContext | None = None, *, port: int = 0
+    ) -> ServerHandle: ...
+
+
+class RunningServer:
+    def __init__(
+        self,
+        site: Site,
+        after_seconds: float = AFTER_SECONDS,
+        tls: ssl.SSLContext | None = None,
+        *,
+        port: int = 0,
+    ) -> None:
+        self._log = log = RequestLog()
+        self._app = ThreadedApp(
+            _build_app(site, lambda: self.handle.base_url, log, after_seconds),
+            name="fixture-site",
+            tls=tls,
+            port=port,
+        )
+        self.handle = ServerHandle(self._app.base_url, log)
+
+    def stop(self) -> None:
+        self._app.stop()
         # At the test's teardown: a route that waited in vain fails the test.
         if self._log.failures:
             raise AssertionError("; ".join(self._log.failures))

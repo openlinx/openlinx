@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal, TypedDict
 
 from openlinx.crawl.urls import NormalizedUrl
@@ -49,7 +50,7 @@ type SkipReason = Literal[
 ]
 # The reasons a URL is recorded as skipped when it is discovered, never dispatched; a later
 # followed Link re-queues a URL skipped for one of them (020-add-crawl-core D5).
-type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed"]
+type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed", "max_redirects"]
 type LinkType = Literal[
     "hyperlink",
     "canonical",
@@ -71,10 +72,82 @@ type LinkType = Literal[
     "sitemap_hreflang",
     "javascript_redirect",
 ]
-# Through these a URL is requested as a Resource; openlinx.crawl.following reads them,
-# and so does the urls upsert, which may import nothing of the crawl but urls.
+# The elements and attributes that 020's Link discovery reads.
+type LinkElement = Literal[
+    "a",
+    "area",
+    "link",
+    "iframe",
+    "frame",
+    "meta",
+    "img",
+    "source",
+    "video",
+    "audio",
+    "track",
+    "embed",
+    "object",
+    "script",
+]
+type LinkAttribute = Literal["href", "src", "srcset", "poster", "data", "content"]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LinkTypeInfo:
+    requested: Literal["followed", "resource"] | None
+    sources: tuple[tuple[LinkElement, LinkAttribute], ...]
+    header: bool
+
+
+# Discovery keeps the rel and parent conditions; the store also needs the request policy
+# without importing discovery (023-fix-code-audit D12).
+LINK_TYPES: Mapping[LinkType, LinkTypeInfo] = MappingProxyType(
+    {
+        "hyperlink": LinkTypeInfo(
+            requested="followed", sources=(("a", "href"), ("area", "href")), header=False
+        ),
+        "canonical": LinkTypeInfo(requested="followed", sources=(("link", "href"),), header=True),
+        "pagination": LinkTypeInfo(requested="followed", sources=(("link", "href"),), header=True),
+        "hreflang": LinkTypeInfo(requested="followed", sources=(("link", "href"),), header=True),
+        "iframe": LinkTypeInfo(
+            requested="followed", sources=(("iframe", "src"), ("frame", "src")), header=False
+        ),
+        "meta_refresh": LinkTypeInfo(
+            requested="followed", sources=(("meta", "content"),), header=False
+        ),
+        "http_refresh": LinkTypeInfo(requested="followed", sources=(), header=True),
+        "image": LinkTypeInfo(
+            requested="resource",
+            sources=(("img", "src"), ("img", "srcset"), ("source", "srcset"), ("video", "poster")),
+            header=False,
+        ),
+        "css": LinkTypeInfo(requested="resource", sources=(("link", "href"),), header=False),
+        "javascript": LinkTypeInfo(
+            requested="resource", sources=(("script", "src"),), header=False
+        ),
+        "video": LinkTypeInfo(
+            requested="resource",
+            sources=(("video", "src"), ("source", "src"), ("track", "src")),
+            header=False,
+        ),
+        "audio": LinkTypeInfo(
+            requested="resource",
+            sources=(("audio", "src"), ("source", "src"), ("track", "src")),
+            header=False,
+        ),
+        "media": LinkTypeInfo(
+            requested="resource", sources=(("embed", "src"), ("object", "data")), header=False
+        ),
+        "amphtml": LinkTypeInfo(requested=None, sources=(("link", "href"),), header=False),
+        "mobile_alternate": LinkTypeInfo(requested=None, sources=(("link", "href"),), header=False),
+        "misc": LinkTypeInfo(requested=None, sources=(("link", "href"),), header=False),
+        "xml_sitemap": LinkTypeInfo(requested=None, sources=(), header=False),
+        "sitemap_hreflang": LinkTypeInfo(requested=None, sources=(), header=False),
+        "javascript_redirect": LinkTypeInfo(requested=None, sources=(), header=False),
+    }
+)
 RESOURCE_LINK_TYPES: frozenset[LinkType] = frozenset(
-    {"image", "css", "javascript", "video", "audio", "media"}
+    link_type for link_type, info in LINK_TYPES.items() if info.requested == "resource"
 )
 type DeclaredIn = Literal["head", "body", "http_header"]
 type DiscoveredVia = (
@@ -92,7 +165,9 @@ type FetchError = Literal[
     "tls_error",
 ]
 # extractor_error keeps parsed = 1; the others mean nothing came out of page preparation.
-type ParseError = Literal["extractor_error", "body_too_large", "worker_crashed", "parse_timeout"]
+type ParseError = Literal[
+    "extractor_error", "body_too_large", "unsupported_encoding", "worker_crashed", "parse_timeout"
+]
 
 # The --crawl value that selects the Crawl that started last.
 LATEST = "latest"
@@ -138,6 +213,9 @@ class QueuedUrl:
     crawl_depth: int
     discovered_via: DiscoveredVia
     found_on_url_id: int | None
+    # The way the URL's Redirect Chain was first found: its own discovered_via, or for a
+    # redirect target the first that is no redirect, so a redirected image is still a Resource.
+    chain_via: DiscoveredVia
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -151,6 +229,15 @@ class NewUrl:
     in_scope: bool
     # Why none of the Page's Links to it is followed; None queues it (design D5).
     skip_reason: DiscoverySkipReason | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResponseHeaders:
+    """A row of response_headers: the headers of a URL's last attempt (022-add-fetch-policy D7)."""
+
+    url_id: int
+    # As received, in order and letter case, with cookie values redacted.
+    headers: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -233,6 +320,27 @@ class CrawlSummary:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Redirect:
+    """A 3xx response's redirect: its raw Location header, the URL it leads to at the URL's
+    depth, None without a usable Location, and the hop limit the unit holds that URL to,
+    counting back over the file (022-add-fetch-policy D2)."""
+
+    location: str | None
+    target: NewUrl | None
+    max_redirects: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Reclassified:
+    """A URL's is_internal and in_scope decided again: a URL of a Seed's Redirect Chain,
+    against the Scope the chain ended in (022-add-fetch-policy D3)."""
+
+    url_id: int
+    is_internal: bool
+    in_scope: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Provenance:
     """How a URL was found, as its dispatch read it from the URL's queued row."""
 
@@ -253,8 +361,15 @@ class FetchedUrl:
     fetched_at: datetime
     response_time_ms: int
     parsed: bool
+    attempt_count: int
+    # A 3xx response's redirect; None for any other status.
+    redirect: Redirect | None
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
+    body_truncated: bool = False
+    content_encoding: str | None = None
+    size_bytes: int | None = None
+    transferred_bytes: int | None = None
     # NULL when robots.txt was not checked (design D6).
     blocked_by_robots_txt: bool | None = None
     discovered: tuple[NewUrl, ...] = ()
@@ -284,6 +399,8 @@ class ErroredUrl:
     fetch_error_message: str
     # None without a request of its own: its origin's robots.txt got no response.
     fetched_at: datetime | None
+    # 0 without a request of its own.
+    attempt_count: int
     blocked_by_robots_txt: bool | None = None
     rows: tuple[HandlerRows[Any], ...] = ()
 

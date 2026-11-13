@@ -6,6 +6,7 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import Connection
 
 from openlinx.clock import Clock, SystemClock
@@ -28,6 +29,27 @@ def test_advance_moves_wall_time_and_monotonic_time() -> None:
         datetime(2026, 1, 1, 0, 0, 1, 500000, tzinfo=UTC),
         1.5,
     )
+
+
+@pytest.mark.parametrize(
+    ("seconds", "wall_time"),
+    [
+        (3600.0, datetime(2026, 1, 1, 1, 0, 1, tzinfo=UTC)),
+        (-3600.0, datetime(2025, 12, 31, 23, 0, 1, tzinfo=UTC)),
+    ],
+)
+async def test_a_wall_time_shift_preserves_monotonic_time_and_sleep_deadlines(
+    seconds: float, wall_time: datetime
+) -> None:
+    clock = FakeClock()
+    pending = asyncio.create_task(clock.sleep(5))
+    await clock.sleep(1)
+
+    clock.shift_wall(seconds)
+    shifted = (clock.now(), clock.monotonic())
+    await pending
+
+    assert (shifted, clock.monotonic()) == ((wall_time, 1.0), 5.0)
 
 
 async def test_sleep_advances_virtual_time_without_waiting() -> None:

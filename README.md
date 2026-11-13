@@ -50,6 +50,8 @@ linx commands
 
 It prints one JSON document with every Command, its options and output, the exit codes, every diagnostic code and the environment variables it honours. See [docs/cli.md](docs/cli.md) for the contract every Command follows and [docs/workspace.md](docs/workspace.md) for Workspaces and `openlinx.toml`.
 
+Crawl only sites you own or have permission to crawl; the defaults are polite, see [docs/crawler.md](docs/crawler.md).
+
 ## Learn more
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md): how to make a change and open a pull request, for people and coding agents.
@@ -57,6 +59,7 @@ It prints one JSON document with every Command, its options and output, the exit
 - [CONTEXT.md](CONTEXT.md): the glossary. Every doc, test and piece of code uses its terms.
 - [docs/architecture.md](docs/architecture.md): how the pieces fit together.
 - [docs/crawling.md](docs/crawling.md): `linx crawl`, its options, and how URLs, Scope and Links work.
+- [docs/crawler.md](docs/crawler.md): the crawler as a site owner sees it, and how to limit or block it.
 - [docs/crawl-store.md](docs/crawl-store.md): how each Crawl is stored as one SQLite file, and how it is written and read.
 - [docs/schema.md](docs/schema.md): the public schema of a crawl file, for querying it with SQL.
 - [docs/adr/](docs/adr/): the decisions behind them.

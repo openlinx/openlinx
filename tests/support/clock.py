@@ -44,6 +44,9 @@ class FakeClock:
         self._monotonic += seconds
         self._wake_due()
 
+    def shift_wall(self, seconds: float) -> None:
+        self._now += timedelta(seconds=seconds)
+
     async def sleep(self, seconds: float) -> None:
         self._calls += 1
         if seconds <= 0:

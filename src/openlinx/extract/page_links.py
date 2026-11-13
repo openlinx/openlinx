@@ -36,19 +36,23 @@ class PageLinks(msgspec.Struct, frozen=True, kw_only=True):
 def extract_page_links(tree: LexborHTMLParser, page: PageInput, config: None) -> PageLinks:
     # Many Links share their ancestors, so each element's position is found once.
     positions: dict[int, LinkPosition] = {}
-    return PageLinks(
-        links=tuple(
+    located = locate_links(tree, page.links, expected_total=len(page.links))
+    attributes: list[LinkAttributes] = []
+    for link in page.links:
+        if link.declared_in == "http_header":
+            continue
+        location = located[link.ordinal]
+        attributes.append(
             LinkAttributes(
                 ordinal=link.ordinal,
-                anchor_text=_anchor_text(link, element),
-                alt_text=_alt_text(link, element),
-                hreflang=_attribute(link, element, "hreflang", "hreflang"),
-                media=_attribute(link, element, "mobile_alternate", "media"),
-                link_position=_position(link, placing, positions),
+                anchor_text=_anchor_text(link, location.element),
+                alt_text=_alt_text(link, location.element),
+                hreflang=_attribute(link, location.element, "hreflang", "hreflang"),
+                media=_attribute(link, location.element, "mobile_alternate", "media"),
+                link_position=_position(link, location.placing, positions),
             )
-            for link, element, placing in locate_links(tree, page.links)
         )
-    )
+    return PageLinks(links=tuple(attributes))
 
 
 def _anchor_text(link: DiscoveredLink, element: LexborNode) -> str | None:

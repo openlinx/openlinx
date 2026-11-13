@@ -410,7 +410,7 @@ A Command's name is its full path, for example `crawls list`. Each Command entry
 - `events`: `true` when the Command reports progress events
 - `formats`
 - `arguments`: each with `name`, `type`, `required`, `variadic`, `default` and `description`
-- `options`: each with `name`, `short`, `type`, `choices`, `default`, `required`, `multiple`, `global`, `setting` (its `openlinx.toml` key, or null), `secret` and `description`
+- `options`: each with `name`, `short`, `type`, `choices`, `default`, `min` and `max` (the bounds of a number, or null), `required`, `multiple`, `global`, `setting` (its `openlinx.toml` key, or null), `secret` and `description`; a hidden option SHALL NOT be listed
 - `fields`: `{available, default}` for list and rows Commands, otherwise null
 - `examples`
 
@@ -461,6 +461,14 @@ An option whose `setting` is not null SHALL take `secret` from that setting, so 
 #### Scenario: Same description on every OS
 - **WHEN** `linx commands` runs on Windows, macOS and Linux
 - **THEN** the entry for `init` is byte-identical on all three
+
+#### Scenario: Bounds of an option
+- **WHEN** `linx commands` runs
+- **THEN** the `--concurrency` option of the `crawl` entry has `"min":1` and `"max":50`, and its `--rate` option has `"min":null` and `"max":null`
+
+#### Scenario: A hidden option is not described
+- **WHEN** `linx commands` runs in a tool that includes the example settings Command with a hidden option `--internal-flag`
+- **THEN** no option of its entry has `"name":"--internal-flag"`
 
 ### Requirement: Light start
 

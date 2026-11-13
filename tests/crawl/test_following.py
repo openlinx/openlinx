@@ -295,3 +295,35 @@ def test_nofollow_keeps_a_hyperlink_from_requesting_its_target(
         )
         == reason
     )
+
+
+@pytest.mark.parametrize("follow_nofollow", [False, True])
+@pytest.mark.parametrize(
+    ("link_type", "reason"),
+    [
+        ("canonical", None),
+        ("pagination", None),
+        ("hreflang", None),
+        ("iframe", None),
+        ("meta_refresh", None),
+        ("http_refresh", None),
+        ("image", None),
+        ("css", None),
+        ("javascript", None),
+        ("video", None),
+        ("audio", None),
+        ("media", None),
+        ("amphtml", "link_type_not_followed"),
+        ("mobile_alternate", "link_type_not_followed"),
+        ("misc", "link_type_not_followed"),
+        ("xml_sitemap", "link_type_not_followed"),
+        ("sitemap_hreflang", "link_type_not_followed"),
+        ("javascript_redirect", "link_type_not_followed"),
+    ],
+)
+def test_nofollow_does_not_change_a_non_hyperlink_s_request_policy(
+    link_type: LinkType, reason: DiscoverySkipReason | None, follow_nofollow: bool
+) -> None:
+    assert (
+        skip_reason(link_type, True, page_nofollow=True, follow_nofollow=follow_nofollow) == reason
+    )

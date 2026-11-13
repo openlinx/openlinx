@@ -12,7 +12,7 @@
 | `commands` | every Command that `--help` shows, including `commands` itself, sorted by name |
 | `exit_codes` | `code`, `name` and `description` of each exit code |
 | `diagnostics` | every diagnostic code, with `level`, `exit_code` (null for warnings and info) and `description` |
-| `environment` | the environment variables the tool honours, as entries with `names` (matched in any letter case) and `description`; empty, as the workspace capability says |
+| `environment` | the environment variables the tool honours, as entries with `names` (matched in any letter case) and `description`; only the proxy family, as the workspace capability says |
 
 A Command's name is its full path, for example `crawls list`. Each Command entry SHALL have:
 - `name`, `summary` and `description`

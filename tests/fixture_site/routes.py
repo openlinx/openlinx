@@ -21,6 +21,10 @@ class RouteOptions:
     hang: bool = False
     # Send the headers and this many bytes of the body, then reset the connection.
     reset_after: int | None = None
+    # Send the headers, then never the body.
+    stall_body: bool = False
+    # Send the headers, then the body one byte every 100 ms, never ending.
+    trickle: bool = False
     # Answer only once the site has received a request for this path, then after `delay`.
     after: str | None = None
 
@@ -73,7 +77,21 @@ class LargeFile(RouteOptions):
     size: int
 
 
-Route = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
+Answer = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
+
+
+@dataclass(frozen=True)
+class Responses:
+    """One path's answers in turn, one per request to it, the last repeated after that."""
+
+    answers: Sequence[Answer]
+
+    def __post_init__(self) -> None:
+        if not self.answers:
+            raise ValueError("Responses takes at least one answer")
+
+
+Route = Answer | Responses
 
 
 def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:

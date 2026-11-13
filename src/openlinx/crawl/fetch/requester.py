@@ -2,16 +2,29 @@
 
 import asyncio
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 from typing import Protocol
 
 from openlinx.aio import first_of
 from openlinx.clock import Clock
 from openlinx.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
+from openlinx.crawl.fetch.pause_gate import PauseGate
 from openlinx.crawl.fetch.politeness import RateGate, RequestLimits
 from openlinx.crawl.urls import NormalizedUrl, host_key
+from openlinx.store.records import FetchError
+
+# The failures that may pass on a later attempt (022 design D4). A DNS, TLS or protocol error
+# is the name's or the server's answer, and the watchdog has waited past --timeout already.
+RETRIED_FAILURES: frozenset[FetchError] = frozenset(
+    {"timeout", "connection_refused", "connection_error"}
+)
+# A Retry-After past this is a server asking for more than one URL's retry should wait.
+RETRY_AFTER_CAP = 120.0
+TOO_MANY_REQUESTS_WAIT = 10.0
 
 
 def watchdog_seconds(request_deadline_seconds: float) -> float:
@@ -27,11 +40,11 @@ RATE_WINDOW_SECONDS = 60
 @dataclass(frozen=True, slots=True)
 class NotStarted:
     """A stop or the URL limit kept a URL's request, or its origin's robots.txt request, from
-    starting, which leaves the URL queued."""
+    starting, or a stop ended a retry that was due, which leaves the URL queued."""
 
 
 class Stop(Protocol):
-    """The Crawl's stop flag, as the Requester reads it."""
+    """One kind of the Crawl's stop, as a request reads it."""
 
     @property
     def is_set(self) -> bool: ...
@@ -39,10 +52,47 @@ class Stop(Protocol):
     async def wait(self) -> None: ...
 
 
+class Stops(Protocol):
+    """The Crawl's stop flag, as the Requester reads it: any stop keeps a new request from
+    starting, and only one that ends what is under way cuts a retry (022 design D4)."""
+
+    @property
+    def new_requests(self) -> Stop: ...
+
+    @property
+    def under_way(self) -> Stop: ...
+
+
+class _Never:
+    """A probe's stop: the network pause cancels its probes itself (design D16)."""
+
+    is_set = False
+
+    async def wait(self) -> None:
+        await asyncio.get_running_loop().create_future()
+
+
+@dataclass(frozen=True, slots=True)
+class Attempted:
+    """The last attempt's outcome of a URL's request, how many attempts it took, and whether
+    the network pause's closed gate ended its retries while one was due."""
+
+    outcome: FetchResult | FetchFailure
+    attempt_count: int
+    gated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeResult:
+    outcome: FetchResult | FetchFailure
+    elapsed_seconds: float
+
+
 class Requester:
     """The host's slot, its turn under --rate, the global cap, the URL limit and the watchdog
-    for every request, and the network pause's gate and probes; the engine decides from a
-    URL's outcome whether the pause retries it (design D7, D16)."""
+    for every request, a URL's retries (022 design D4), and the network pause's gate and
+    probes; the engine decides from a URL's outcome whether the pause retries it (design D7,
+    D16)."""
 
     def __init__(
         self,
@@ -53,8 +103,9 @@ class Requester:
         concurrency: int,
         cap: int,
         clock: Clock,
+        retries: int,
         watchdog_seconds: float,
-        stop: Stop,
+        stop: Stops,
     ) -> None:
         self._fetcher = fetcher
         self._limits = limits
@@ -62,33 +113,40 @@ class Requester:
         self._concurrency = concurrency
         self._clock = clock
         self._watchdog_seconds = watchdog_seconds
-        self._stop = stop
+        self._new_requests = stop.new_requests
+        self._under_way = stop.under_way
         self._starts: deque[float] = deque()
         self._hosts: dict[str, asyncio.Semaphore] = {}
         self._requests = asyncio.Semaphore(cap)
-        # The network pause's gate: set while requests may start (design D16).
-        self._open = asyncio.Event()
-        self._open.set()
-        # The requests still waiting at the gate, and the event of their last one.
-        self._at_gate = 0
-        self._gate_drained = asyncio.Event()
+        self._retries = retries
+        self._pause_gate = PauseGate()
 
     def close_gate(self) -> None:
-        self._open.clear()
+        self._pause_gate.close()
 
     def open_gate(self) -> None:
-        self._open.set()
+        self._pause_gate.open()
 
-    async def request_url(self, url: NormalizedUrl) -> FetchResult | FetchFailure | NotStarted:
-        """A URL's own request, which the URL limit counts with the slots held, so the count is
-        exact. After a stop, none starts (design D16)."""
-        async with self._gated_slots(url):
+    async def request_url(
+        self, url: NormalizedUrl, on_attempt: Callable[[FetchResult | FetchFailure], None]
+    ) -> Attempted | NotStarted:
+        """A URL's own request, with its retries. The URL limit counts the first attempt, with
+        the slots held, so the count is exact; a retry is the same URL (022 design D4). After a
+        stop, none starts (design D16). `on_attempt` hears each attempt's outcome as it ends,
+        so the network pause counts a URL before its retries (022 design D4)."""
+        async with self._gated_slots(url, self._new_requests) as passed:
             # Refused with its turn under --rate already taken, and never given back: after a
             # stop or at the limit, no request starts again.
-            if self._stop.is_set or not self._limits.start_request():
+            if not passed or not self._limits.start_request():
                 return NotStarted()
             self._starts.append(self._clock.monotonic())
-            return await self._send(url)
+            outcome = await self._send(url)
+            on_attempt(outcome)
+        retried = await self._retried(url, outcome, on_attempt, ends_at_gate=True)
+        if isinstance(retried, NotStarted):
+            # Given back unrecorded, so a continue requests it (022 design D4).
+            self.give_back()
+        return retried
 
     def give_back(self) -> None:
         """A URL request that is made again, as if it had not started (design D16)."""
@@ -108,74 +166,109 @@ class Requester:
     async def request_robots_txt(
         self, url: NormalizedUrl
     ) -> FetchResult | FetchFailure | NotStarted:
-        """One hop of an origin's robots.txt, which the URL limit never counts (design D6).
-        After a stop, none starts (design D16)."""
-        async with self._gated_slots(url):
-            if self._stop.is_set:
+        """One hop of an origin's robots.txt, with its retries, which the URL limit never
+        counts (design D6). After a stop, none starts (design D16). A retry waits at the network
+        pause's gate: robots.txt is no URL of the pause's count, and its origin's URLs wait for
+        its verdict (022 design D4)."""
+        async with self._gated_slots(url, self._new_requests) as passed:
+            if not passed:
                 return NotStarted()
-            return await self._send(url)
+            outcome = await self._send(url)
+        retried = await self._retried(url, outcome, _unheard, ends_at_gate=False)
+        return retried if isinstance(retried, NotStarted) else retried.outcome
 
-    async def request_probe(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
+    async def request_probe(self, url: NormalizedUrl) -> ProbeResult:
         """A probe of the network pause: through the host's slot, its turn and the global cap,
         but never the pause's gate or the URL limit (design D16)."""
-        async with self._slots(url, stops=False):
-            return await self._send(url)
+        async with self._slots(url, _Never()) as passed:
+            if not passed:
+                raise RuntimeError("A probe cannot be refused by its never-set stop")
+            started = self._clock.monotonic()
+            outcome = await self._send(url)
+            return ProbeResult(outcome, self._clock.monotonic() - started)
+
+    async def _retried(
+        self,
+        url: NormalizedUrl,
+        outcome: FetchResult | FetchFailure,
+        on_attempt: Callable[[FetchResult | FetchFailure], None],
+        *,
+        ends_at_gate: bool,
+    ) -> Attempted | NotStarted:
+        """The URL limit's stop refuses new URLs only, so the retries go on within its grace;
+        any other stop ends a due retry, and the URL is not recorded (022 design D4)."""
+        attempts = 1
+        while True:
+            wait, pause = retry_wait(outcome, attempts, self._clock.now())
+            # Politeness toward the host, whether or not the URL has a retry left.
+            if pause is not None:
+                self._gate.pause(host_key(url), pause)
+            if attempts > self._retries or not is_retried(outcome):
+                break
+            # Outside the slots: a waiting retry holds none of the host's --concurrency.
+            if not await self._before(self._under_way, wait):
+                return NotStarted()
+            # A closed gate ends a URL's retries: an outage spends none, and the network pause
+            # decides on the URL from its last outcome (022 design D4).
+            async with self._gated_slots(url, self._under_way, ends_at_gate=ends_at_gate) as passed:
+                if self._under_way.is_set:
+                    return NotStarted()
+                if not passed:
+                    return Attempted(outcome, attempts, gated=True)
+                outcome = await self._send(url)
+                on_attempt(outcome)
+            attempts += 1
+        return Attempted(outcome, attempts)
 
     @asynccontextmanager
-    async def _gated_slots(self, url: NormalizedUrl) -> AsyncIterator[None]:
+    async def _gated_slots(
+        self, url: NormalizedUrl, cutoff: Stop, *, ends_at_gate: bool = False
+    ) -> AsyncIterator[bool]:
+        """Whether the request passed the gate and holds its slots before `cutoff`; one that
+        `ends_at_gate` does not wait at a closed one."""
         # Waited before any slot, so a paused request leaves the host's slots to the probes; one
         # that took them as the pause began gives them back and its turn goes unused.
-        while True:
-            await self._past_gate()
-            async with self._slots(url, stops=True):
-                if self._open.is_set():
-                    yield
+        while await self._pause_gate.pass_request(ends_at_gate=ends_at_gate):
+            async with self._slots(url, cutoff) as held:
+                if not held or self._pause_gate.is_open:
+                    yield held
                     return
-
-    async def _past_gate(self) -> None:
-        """Those that waited at the gate wake a loop turn or more after it opens: a request
-        that comes since then goes behind them, so requests reach the host's slot in the order
-        they were dispatched (design D1)."""
-        while self._at_gate:
-            await self._gate_drained.wait()
-        if self._open.is_set():
-            return
-        if not self._at_gate:
-            self._gate_drained = asyncio.Event()
-        self._at_gate += 1
-        try:
-            await self._open.wait()
-        finally:
-            self._at_gate -= 1
-            if not self._at_gate:
-                self._gate_drained.set()
+        yield False
 
     @asynccontextmanager
-    async def _slots(self, url: NormalizedUrl, *, stops: bool) -> AsyncIterator[None]:
-        # The host's slot, then its turn under --rate, then the global cap: a request waiting
-        # for a busy host, or for its turn, holds no global permit.
+    async def _slots(self, url: NormalizedUrl, cutoff: Stop) -> AsyncIterator[bool]:
+        """Whether the request may start before `cutoff`; any host slot and global permit
+        held are released on exit from the context."""
+        # The host's slot and reserved turn precede the global permit, so their initial waits
+        # leave room for other hosts. After waiting for the permit, started() may still wait
+        # out the remaining --rate interval with the permit held.
         host = host_key(url)
         async with self._host(host):
-            wait = self._gate.reserve_turn(host)
-            if stops:
-                if not await self._turn_before_stop(wait):
-                    # Its caller sees the stop and starts nothing.
-                    yield
+            if not await self._before(cutoff, self._gate.reserve_turn(host)):
+                yield False
+                return
+            while True:
+                async with self._requests:
+                    paused = self._gate.pause_left(host)
+                    if not paused:
+                        await self._gate.started(host)
+                        yield not cutoff.is_set
+                        return
+                # A host pause that began while it waited for the permit is waited out without
+                # it, so a Retry-After holds no global permit and a stop ends that wait
+                # (022 design D4).
+                if not await self._before(cutoff, paused):
+                    yield False
                     return
-            elif wait > 0:
-                await self._clock.sleep(wait)
-            async with self._requests:
-                await self._gate.started(host)
-                yield
 
-    async def _turn_before_stop(self, wait: float) -> bool:
-        """Whether the turn came before the stop flag: a request that has not started does not
-        sleep out its turn after a stop (design D16)."""
-        if self._stop.is_set:
+    async def _before(self, cutoff: Stop, wait: float) -> bool:
+        """Whether `wait` seconds passed before `cutoff`: a request that has not started does
+        not sleep out its turn after a stop (design D16)."""
+        if cutoff.is_set:
             return False
         if wait <= 0:
             return True
-        turn = await first_of(self._clock.sleep(wait), self._stop.wait())
+        turn = await first_of(self._clock.sleep(wait), cutoff.wait())
         return not turn.cancelled()
 
     def _host(self, host: str) -> asyncio.Semaphore:
@@ -199,3 +292,52 @@ class Requester:
             message=f"No response within {self._watchdog_seconds:g} seconds",
             fetched_at=started_at,
         )
+
+
+def _unheard(outcome: FetchResult | FetchFailure) -> None:
+    """robots.txt's attempts: its verdict is counted, by the engine (design D16)."""
+
+
+def is_retried(outcome: FetchResult | FetchFailure) -> bool:
+    if isinstance(outcome, FetchFailure):
+        return outcome.fetch_error in RETRIED_FAILURES
+    return 500 <= outcome.status_code <= 599 or outcome.status_code == 429
+
+
+def retry_wait(
+    outcome: FetchResult | FetchFailure, attempt: int, ended: datetime
+) -> tuple[float, float | None]:
+    """The URL retry wait and independent host pause, in seconds (022 design D4).
+
+    Any valid Retry-After pauses the host; only a 429 or 503 replaces the retry backoff.
+    A 429 without one waits 10 seconds. `ended` is when the response ended, from which a
+    Retry-After date counts.
+    """
+    pause = None
+    if isinstance(outcome, FetchResult):
+        after = retry_after(outcome, ended)
+        if after is not None:
+            pause = min(after, RETRY_AFTER_CAP)
+        elif outcome.status_code == 429:
+            pause = TOO_MANY_REQUESTS_WAIT
+        if pause is not None and outcome.status_code in (429, 503):
+            return pause, pause
+    return 2.0 ** (attempt - 1), pause
+
+
+def retry_after(response: FetchResult, ended: datetime) -> float | None:
+    """The response's Retry-After in seconds, from a number of seconds or an HTTP date; None
+    without a header that reads as either."""
+    value = response.header("Retry-After")
+    if value is None:
+        return None
+    value = value.strip()
+    if value.isdigit():
+        return float(value)
+    try:
+        date = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if date.tzinfo is None:
+        return None
+    return max(0.0, (date - ended).total_seconds())

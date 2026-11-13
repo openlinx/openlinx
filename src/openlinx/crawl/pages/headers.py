@@ -3,9 +3,9 @@
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 
-from openlinx.crawl.pages.links import discovered_link, rel_link_type, rel_tokens
+from openlinx.crawl.pages.links import rel_link_type, rel_tokens
 from openlinx.crawl.pages.refresh import refresh_url
-from openlinx.crawl.references import DiscoveredLink, resolve_reference
+from openlinx.crawl.references import DiscoveredLink, discovered_link, resolve_reference
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.store.records import LinkType
 

@@ -1,6 +1,6 @@
 """A Crawl's hooks, composed here: the crawl core never imports them (020-add-crawl-core D9)."""
 
-from openlinx.crawl.engine.hooks import Hooks, Pass, PassContext, handler
+from openlinx.crawl.engine.hooks import Hooks, Pass, PassContext, UrlResult, handler
 from openlinx.crawl.pages.preparation import InProcessExecutor, PageExecutor
 from openlinx.extract.content_area import ContentArea
 from openlinx.extract.link_handler import link_rows
@@ -15,6 +15,8 @@ from openlinx.store.links import (
     write_links,
 )
 from openlinx.store.pages import write_cookies, write_pages
+from openlinx.store.records import ResponseHeaders
+from openlinx.store.response_headers import write_response_headers
 from openlinx.workspace.settings import Settings
 
 
@@ -28,9 +30,16 @@ def default_hooks(settings: Settings | None = None) -> Hooks:
             handler("pages", page_rows, write_pages),
             handler("cookies", cookie_rows, write_cookies),
             handler("links", link_rows, write_links),
+            handler("response_headers", _response_headers, write_response_headers),
         ),
         passes=(Pass("inlinks", count_inlinks),),
     )
+
+
+def _response_headers(result: UrlResult) -> tuple[ResponseHeaders, ...]:
+    if result.response is None:
+        return ()
+    return (ResponseHeaders(url_id=result.url_id, headers=result.response.headers),)
 
 
 async def count_inlinks(context: PassContext) -> None:

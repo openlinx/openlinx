@@ -5,6 +5,10 @@ import re
 
 # RFC 9309 2.2.1: a product token.
 _ROBOTS_USER_AGENT = re.compile(r"[a-zA-Z_-]+")
+# RFC 9110 5.5: VCHAR, SP and HTAB. aiohttp would send any other character as UTF-8 bytes,
+# which the RFC treats as obsolete and servers and log pipelines misread; CR or LF would end
+# the header, or start another one.
+_HEADER_VALUE = re.compile(r"[\t\x20-\x7e]+")
 
 
 def as_rate(rate: float) -> float:
@@ -14,6 +18,21 @@ def as_rate(rate: float) -> float:
             "is finite"
         )
     return rate
+
+
+def as_timeout(timeout: float) -> float:
+    if not (math.isfinite(timeout) and timeout > 0):
+        raise ValueError("a timeout is a finite number of seconds above 0")
+    return timeout
+
+
+def as_user_agent(user_agent: str) -> str:
+    if not user_agent.strip() or _HEADER_VALUE.fullmatch(user_agent) is None:
+        raise ValueError(
+            "a user agent has visible ASCII characters, spaces and tabs only, and not only "
+            "whitespace"
+        )
+    return user_agent
 
 
 def as_robots_token(token: str) -> str:

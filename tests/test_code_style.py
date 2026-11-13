@@ -1,4 +1,5 @@
-"""Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19)."""
+"""Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19;
+022-add-fetch-policy D2)."""
 
 import ast
 import re
@@ -864,23 +865,44 @@ def test_a_request_outside_the_requester_is_named() -> None:
 FACTORIES = {
     "Handler": "src/openlinx/crawl/engine/hooks.py",
     "Extractor": "src/openlinx/crawl/pages/preparation.py",
+    "DiscoveredLink": "src/openlinx/crawl/references.py",
 }
 
 
 def factory_violations(sources: Mapping[str, str]) -> list[str]:
-    """Hooks built outside their factories, given every module's source by its path."""
+    """Hooks and Links built outside their factories, by source path (023 D12)."""
     found = []
     for module, source in sources.items():
-        for node in ast.walk(ast.parse(source)):
+        tree = ast.parse(source)
+        names = {
+            alias.asname or alias.name: alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+            if alias.name in FACTORIES
+        }
+        link_factory_calls = {
+            call
+            for definition in tree.body
+            if isinstance(definition, ast.FunctionDef) and definition.name == "discovered_link"
+            for statement in definition.body
+            for call in ast.walk(statement)
+            if isinstance(call, ast.Call)
+        }
+        for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
             name = _base_name(node.func)
-            if name in FACTORIES and module != FACTORIES[name]:
+            name = names.get(name, name) if name is not None else None
+            if name in FACTORIES and (
+                module != FACTORIES[name]
+                or (name == "DiscoveredLink" and node not in link_factory_calls)
+            ):
                 found.append(f"{module}:{node.lineno} builds {name}(...) outside its factory")
     return found
 
 
-def test_hooks_are_built_only_through_their_factories() -> None:
+def test_hooks_and_links_are_built_only_through_their_factories() -> None:
     root = SRC.parent
     sources = {
         path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
@@ -889,8 +911,8 @@ def test_hooks_are_built_only_through_their_factories() -> None:
     }
 
     assert factory_violations(sources) == [], (
-        "a hook is built only through its factory: handler(name, handle, write) or "
-        "extractor(name, extract, config)"
+        "a hook or Link is built only through its factory: use handler(name, handle, write), "
+        "extractor(name, extract, config) or openlinx.crawl.references.discovered_link(...)"
     )
 
 
@@ -910,6 +932,30 @@ def test_a_hook_built_outside_its_factory_is_named() -> None:
         "tests/crawl/test_hooks.py:1 builds Handler(...) outside its factory",
         "src/openlinx/services/hooks.py:1 builds Handler(...) outside its factory",
         "src/openlinx/services/pages.py:1 builds Extractor(...) outside its factory",
+    ]
+
+
+def test_a_link_built_outside_its_factory_is_named() -> None:
+    sources = {
+        "src/openlinx/crawl/pages/links.py": "link = DiscoveredLink(type='hyperlink')\n",
+        "tests/crawl/test_links.py": "link = references.DiscoveredLink(type='hyperlink')\n",
+        "tests/crawl/test_scope.py": (
+            "from openlinx.crawl.references import DiscoveredLink as Link\n"
+            "link = Link(type='canonical')\n"
+        ),
+        "src/openlinx/crawl/references.py": (
+            "def discovered_link():\n    return DiscoveredLink(type='hyperlink')\n"
+            "def elsewhere():\n    return DiscoveredLink(type='hyperlink')\n"
+        ),
+        "src/openlinx/crawl/engine/hooks.py": "links: tuple[DiscoveredLink, ...]\n",
+        "tests/crawl/test_headers.py": "link = discovered_link('canonical')\n",
+    }
+
+    assert factory_violations(sources) == [
+        "src/openlinx/crawl/pages/links.py:1 builds DiscoveredLink(...) outside its factory",
+        "tests/crawl/test_links.py:1 builds DiscoveredLink(...) outside its factory",
+        "tests/crawl/test_scope.py:2 builds DiscoveredLink(...) outside its factory",
+        "src/openlinx/crawl/references.py:4 builds DiscoveredLink(...) outside its factory",
     ]
 
 
@@ -1075,6 +1121,81 @@ def test_a_wait_outside_the_clock_is_named() -> None:
     ]
 
 
+# Every row goes into urls through insert_urls, which records its origin first: an insert that
+# forgets it fails on a NULL origin_id and ends as a silent record_failed (022-add-fetch-policy
+# design D2).
+URLS_MODULE = "openlinx/store/urls.py"
+
+
+def _inserts_into_urls(node: ast.AST) -> bool:
+    return any(
+        isinstance(call, ast.Call)
+        and _base_name(call.func) == "insert"
+        and bool(call.args)
+        and isinstance(call.args[0], ast.Name)
+        and call.args[0].id == "urls"
+        for call in ast.walk(node)
+    )
+
+
+def url_insert_violations(sources: Mapping[str, str]) -> list[str]:
+    """Inserts into urls that bypass insert_urls, given every module's source by its path."""
+    found = []
+    for path, source in sources.items():
+        tree = ast.parse(source)
+        if path != URLS_MODULE:
+            if _inserts_into_urls(tree):
+                found.append(f"{path} inserts into urls")
+            continue
+        statements: set[str] = set()
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Assign)
+                and isinstance(node.targets[0], ast.Name)
+                and (
+                    _inserts_into_urls(node.value)
+                    or any(
+                        isinstance(name, ast.Name) and name.id in statements
+                        for name in ast.walk(node.value)
+                    )
+                )
+            ):
+                statements.add(node.targets[0].id)
+        for call, function in _calls_in_functions(tree):
+            if (
+                _base_name(call.func) == "execute"
+                and call.args
+                and isinstance(call.args[0], ast.Name)
+                and call.args[0].id in statements
+                and function != "insert_urls"
+            ):
+                found.append(f"{path}:{call.lineno} runs {call.args[0].id} outside insert_urls")
+    return found
+
+
+def test_every_insert_into_urls_goes_through_insert_urls() -> None:
+    assert url_insert_violations(_src_sources()) == []
+
+
+def test_an_insert_into_urls_outside_insert_urls_is_named() -> None:
+    sources = {
+        URLS_MODULE: (
+            "_INSERT = insert(urls).values(origin_id=ORIGIN_ID)\n"
+            "_INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])\n"
+            "def insert_urls(connection, statement, rows):\n"
+            "    connection.execute(statement, rows)\n"
+            "def record_seed(connection, row):\n"
+            "    connection.execute(_INSERT_URL, row)\n"
+        ),
+        "openlinx/store/links.py": "_LINK_TARGET = insert(urls)\n",
+    }
+
+    assert url_insert_violations(sources) == [
+        "openlinx/store/urls.py:6 runs _INSERT_URL outside insert_urls",
+        "openlinx/store/links.py inserts into urls",
+    ]
+
+
 # Work the loop waits for on another thread holds the Clock, so a test's virtual clock never
 # jumps meanwhile (020-add-crawl-core D7).
 HANDOFFS = {
@@ -1231,6 +1352,20 @@ def _called(call: ast.Call) -> str:
     return call.func.id if isinstance(call.func, ast.Name) else ""
 
 
+def _is_fake_fetcher_factory(factory: ast.expr) -> bool:
+    match factory:
+        case ast.Lambda(
+            body=ast.Call(
+                func=ast.Name(id="nullcontext"),
+                args=[ast.Call(func=ast.Name(id="FakeFetcher"))],
+                keywords=[],
+            )
+        ):
+            return True
+        case _:
+            return False
+
+
 def fake_clock_with_real_io(sources: Mapping[str, str]) -> list[str]:
     """Test functions that pair FakeClock with the fixture site or the aiohttp Fetcher."""
     found: list[str] = []
@@ -1245,7 +1380,11 @@ def fake_clock_with_real_io(sources: Mapping[str, str]) -> list[str]:
             arguments = {argument.arg for argument in function.args.args}
             unfaked_crawl = any(
                 _called(call) in CRAWLS
-                and not any(keyword.arg == "fetcher" for keyword in call.keywords)
+                and not any(
+                    keyword.arg == "fetcher"
+                    or (keyword.arg == "fetchers" and _is_fake_fetcher_factory(keyword.value))
+                    for keyword in call.keywords
+                )
                 for call in calls
             )
             if arguments & REAL_IO_FIXTURES or called & REAL_IO_CALLS or unfaked_crawl:
@@ -1264,8 +1403,51 @@ def test_no_test_pairs_the_virtual_clock_with_real_io() -> None:
 
     assert fake_clock_with_real_io(sources) == [], (
         "a FakeClock test uses FakeFetcher, never the fixture site or aiohttp: pass "
-        "fetcher=FakeFetcher(clock, pages), or use SystemClock with the fixture site"
+        "fetcher=FakeFetcher(clock, pages) or "
+        "fetchers=lambda policy, clock: nullcontext(FakeFetcher(clock, pages)), "
+        "or use SystemClock with the fixture site"
     )
+
+
+@pytest.mark.parametrize(
+    "crawl",
+    [
+        "start_crawl(plan, clock, reporter, hooks",
+        "continue_crawl(file, overrides, clock, reporter, hooks",
+    ],
+)
+def test_a_virtual_clock_with_an_explicit_fake_fetcher_factory_is_allowed(crawl: str) -> None:
+    sources = {
+        "tests/crawl/test_timing.py": "def test_factory():\n"
+        "    clock = FakeClock()\n"
+        f"    {crawl}, fetchers=lambda policy, clock: nullcontext(FakeFetcher(clock, {{}})))\n",
+    }
+
+    assert fake_clock_with_real_io(sources) == []
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        "",
+        ", fetchers=None",
+        ", fetchers=aiohttp_fetcher",
+        ", fetchers=unknown_factory",
+        ", fetchers=lambda policy, clock: nullcontext(fetcher)",
+        ", fetchers=lambda policy, clock: nullcontext(AiohttpFetcher(session, clock))",
+    ],
+)
+def test_a_virtual_clock_with_an_unproven_fetcher_factory_is_named(factory: str) -> None:
+    sources = {
+        "tests/crawl/test_timing.py": "def test_factory():\n"
+        "    clock = FakeClock()\n"
+        "    unused = FakeFetcher(clock, {})\n"
+        f"    start_crawl(plan, clock, reporter, hooks{factory})\n",
+    }
+
+    assert fake_clock_with_real_io(sources) == [
+        "tests/crawl/test_timing.py:1 test_factory pairs FakeClock with real I/O"
+    ]
 
 
 def test_a_virtual_clock_beside_real_io_is_named() -> None:

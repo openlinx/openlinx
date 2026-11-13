@@ -13,7 +13,7 @@ from typing import Any, cast
 import pytest
 from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import connect
@@ -1229,3 +1229,80 @@ def test_a_unit_whose_commit_fails_ends_the_writer_with_nothing_committed(
         [(0,)],
         [(0,)],
     )
+
+
+@pytest.mark.parametrize("reuse", ["execute", "begin", "read"])
+@pytest.mark.parametrize("catches_error", [False, True], ids=["raises", "catches"])
+def test_a_failed_commit_then_new_sql_never_resolves_the_batch_as_durable(
+    temp_workspace: TempWorkspace, reuse: str, catches_error: bool
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    add_a_deferred_reference(crawl.path)
+
+    def reuse_connection(connection: Connection) -> None:
+        if reuse == "execute":
+            insert_seed(2, "https://example.com/b")(connection)
+        elif reuse == "begin":
+            connection.begin()
+        else:
+            count_seeds(connection)
+
+    def failed_commit_then_reuse(connection: Connection) -> None:
+        breaks_a_deferred_reference(connection)
+        try:
+            connection.commit()
+        except IntegrityError:
+            connection.rollback()
+            if catches_error:
+                with pytest.raises(
+                    OperationalError, match="cannot start a transaction within a transaction"
+                ):
+                    reuse_connection(connection)
+                # SQLAlchemy cleaned up SQLite's old transaction; this is a fresh read.
+                assert count_seeds(connection) == 0
+            else:
+                reuse_connection(connection)
+
+    writer = CrawlWriter(crawl.path, FakeClock())
+    try:
+        first = writer.submit(insert_seed(1, "https://example.com/a"))
+        with pytest.raises(RuntimeError, match=r"failed_commit_then_reuse.*never commit"):
+            writer.run(failed_commit_then_reuse)
+    finally:
+        with pytest.raises(CrawlWriterClosedError):
+            writer.close()
+
+    assert query(crawl.path, SEEDS) == []
+    with pytest.raises(RuntimeError, match=r"failed_commit_then_reuse.*never commit"):
+        first.result(timeout=10)
+
+
+def test_a_successful_first_commit_stays_durable_when_a_second_commit_fails(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = crawl_without_seeds(temp_workspace)
+    add_a_deferred_reference(crawl.path)
+
+    def commits_then_fails(connection: Connection) -> None:
+        insert_seed(2, "https://example.com/b")(connection)
+        connection.commit()
+        breaks_a_deferred_reference(connection)
+        connection.commit()
+
+    writer = CrawlWriter(crawl.path, FakeClock())
+    try:
+        first = writer.submit(insert_seed(1, "https://example.com/a"))
+        with pytest.raises(RuntimeError, match=r"commits_then_fails.*never commit") as failed:
+            writer.run(commits_then_fails)
+        with pytest.raises(CrawlWriterClosedError):
+            writer.run(insert_seed(3, "https://example.com/c"))
+    finally:
+        with pytest.raises(CrawlWriterClosedError):
+            writer.close()
+
+    assert (
+        isinstance(failed.value.__cause__, IntegrityError),
+        first.result(timeout=10),
+        query(crawl.path, SEEDS),
+        query(crawl.path, "SELECT count(*) FROM children"),
+    ) == (True, None, [(1, "https://example.com/a"), (2, "https://example.com/b")], [(0,)])

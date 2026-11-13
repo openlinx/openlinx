@@ -1,17 +1,23 @@
-"""The link extractor (020-add-crawl-core D5)."""
+"""Link discovery selects the sources declared by the Link type table (020 D5; 023 D12)."""
 
 import re
 from collections.abc import Callable, Container, Iterable, Iterator, Mapping
 from dataclasses import dataclass
+from typing import TypeGuard
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from openlinx.crawl.following import skip_reason
 from openlinx.crawl.pages.decoding import query_codec
 from openlinx.crawl.pages.refresh import refresh_url
-from openlinx.crawl.references import C0_OR_SPACE, DiscoveredLink, resolve_base, resolve_reference
+from openlinx.crawl.references import (
+    C0_OR_SPACE,
+    DiscoveredLink,
+    discovered_link,
+    resolve_base,
+    resolve_reference,
+)
 from openlinx.crawl.urls import NormalizedUrl
-from openlinx.store.records import DeclaredIn, LinkType
+from openlinx.store.records import LINK_TYPES, DeclaredIn, LinkAttribute, LinkElement, LinkType
 
 type _Reference = tuple[LinkType, str, str]
 
@@ -27,18 +33,36 @@ _SINGLE_REFERENCES: Mapping[str, tuple[LinkType, str]] = {
     "embed": ("media", "src"),
     "object": ("media", "data"),
 }
+_SOURCE_PAIRS = frozenset(pair for info in LINK_TYPES.values() for pair in info.sources)
+_LINK_ELEMENTS = frozenset(element for element, _ in _SOURCE_PAIRS)
+_LINK_ATTRIBUTES = frozenset(attribute for _, attribute in _SOURCE_PAIRS)
 # The elements a <noscript>'s text gives Links of: its <link> and <meta> are head metadata,
 # which a browser that runs scripts never sees.
-_NOSCRIPT_ELEMENTS = ", ".join(
-    [
-        *(f"{tag}[{attribute}]" for tag, (_, attribute) in _SINGLE_REFERENCES.items()),
-        "img, video, source, track",
-    ]
+# Lexbor repeats a node for overlapping selectors; :is keeps each node's sources together.
+_NOSCRIPT_ELEMENTS = (
+    ":is("
+    + ", ".join(
+        f"{tag}[{attribute}]"
+        for tag, attribute in sorted(_SOURCE_PAIRS)
+        if tag not in {"link", "meta"}
+    )
+    + ")"
 )
 # Only a foreign <noscript> has elements in the tree.
 _ELEMENTS = (
-    f"{_NOSCRIPT_ELEMENTS}, link[href]:not(noscript link), meta[http-equiv]:not(noscript meta),"
-    " noscript"
+    ":is("
+    + ", ".join(
+        [
+            _NOSCRIPT_ELEMENTS,
+            *(
+                f"{tag}[{attribute}]:not(noscript {tag})"
+                for tag, attribute in sorted(_SOURCE_PAIRS)
+                if tag in {"link", "meta"}
+            ),
+            "noscript",
+        ]
+    )
+    + ")"
 )
 _FOREIGN_ROOTS = frozenset({"svg", "math"})
 # HTML integration points (HTML Standard): inside one a <noscript> is HTML, as in the body.
@@ -80,40 +104,6 @@ def base_url(tree: LexborHTMLParser, url: NormalizedUrl, encoding: str) -> str:
     return _base(tree, url, query_codec(encoding))
 
 
-def discovered_link(
-    link_type: LinkType,
-    target: NormalizedUrl,
-    raw: str,
-    *,
-    element: str | None,
-    attribute: str | None,
-    rel: tuple[str, ...],
-    declared_in: DeclaredIn,
-    ordinal: int,
-    is_internal: bool,
-    page_nofollow: bool,
-    follow_nofollow: bool,
-) -> DiscoveredLink:
-    """A Link of the document or of a header: its nofollow is its rel's, and the follow rule
-    gives its skip reason (design D5)."""
-    nofollow = "nofollow" in rel
-    return DiscoveredLink(
-        type=link_type,
-        target=target,
-        raw=raw,
-        element=element,
-        attribute=attribute,
-        rel=rel,
-        nofollow=nofollow,
-        skip_reason=skip_reason(
-            link_type, nofollow, page_nofollow=page_nofollow, follow_nofollow=follow_nofollow
-        ),
-        declared_in=declared_in,
-        ordinal=ordinal,
-        is_internal=is_internal,
-    )
-
-
 def rel_link_type(
     rel: tuple[str, ...], attributes: Container[str], types: Container[LinkType]
 ) -> LinkType | None:
@@ -146,13 +136,16 @@ def links_in_tree(
         target = resolve_reference(base, reference.raw, codec, strip_params)
         if target is None:
             continue
+        element, attribute = reference.element.tag, reference.attribute
+        if not _is_link_element(element) or not _is_link_attribute(attribute):
+            raise RuntimeError("Link source is not declared in LINK_TYPES")
         links.append(
             discovered_link(
                 reference.type,
                 target,
                 reference.raw,
-                element=reference.element.tag,
-                attribute=reference.attribute,
+                element=element,
+                attribute=attribute,
                 rel=reference.rel,
                 declared_in=reference.declared_in,
                 ordinal=first_ordinal + len(links),
@@ -162,6 +155,14 @@ def links_in_tree(
             )
         )
     return links
+
+
+def _is_link_element(element: str | None) -> TypeGuard[LinkElement]:
+    return element in _LINK_ELEMENTS
+
+
+def _is_link_attribute(attribute: str) -> TypeGuard[LinkAttribute]:
+    return attribute in _LINK_ATTRIBUTES
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -196,14 +197,32 @@ def link_references(tree: LexborHTMLParser) -> Iterator[LinkReference]:
             )
 
 
+@dataclass(frozen=True, slots=True)
+class LocatedLink:
+    element: LexborNode
+    placing: LexborNode
+
+
 def locate_links(
-    tree: LexborHTMLParser, links: Iterable[DiscoveredLink]
-) -> list[tuple[DiscoveredLink, LexborNode, LexborNode]]:
-    """Each HTML Link that links_in_tree found in the tree, with the element it came from and
-    the element that places it; header Links are left out. Raises RuntimeError for a Link the
-    tree does not hold."""
-    pending = [link for link in links if link.declared_in != "http_header"]
-    located: list[tuple[DiscoveredLink, LexborNode, LexborNode]] = []
+    tree: LexborHTMLParser, links: Iterable[DiscoveredLink], *, expected_total: int
+) -> Mapping[int, LocatedLink]:
+    """Locate HTML Links after checking the original Page's count and order (023 D11).
+
+    Pass expected_total from the original PageInput.links, before filtering. A Link the
+    tree does not hold raises RuntimeError too.
+    """
+    all_links = tuple(links)
+    invalid = "pass every Link of the Page; filter after locating"
+    if len(all_links) != expected_total:
+        raise RuntimeError(invalid)
+    seen_html = False
+    for ordinal, link in enumerate(all_links, start=1):
+        if link.ordinal != ordinal or (seen_html and link.declared_in == "http_header"):
+            raise RuntimeError(invalid)
+        if link.declared_in != "http_header":
+            seen_html = True
+    pending = [link for link in all_links if link.declared_in != "http_header"]
+    located: dict[int, LocatedLink] = {}
     # Resolution reads only a reference and the document's base and encoding, so a reference
     # that matches the next Link is the one that gave it, and one that does not resolved to
     # nothing.
@@ -217,7 +236,7 @@ def locate_links(
             reference.type,
             reference.raw,
         ):
-            located.append((link, reference.element, reference.placing))
+            located[link.ordinal] = LocatedLink(reference.element, reference.placing)
     if len(located) != len(pending):
         raise RuntimeError(f"link {pending[len(located)].ordinal} is not in the tree")
     return located

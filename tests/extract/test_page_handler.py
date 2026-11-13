@@ -45,7 +45,12 @@ def _fetched(
             headers=headers,
             fetched_at=datetime(2026, 1, 2, tzinfo=UTC),
             response_time_ms=1,
+            body_truncated=False,
+            content_encoding=None,
+            size_bytes=0,
+            transferred_bytes=0,
             directives=NO_DIRECTIVES,
+            redirect_target=None,
         ),
         **values,
     )

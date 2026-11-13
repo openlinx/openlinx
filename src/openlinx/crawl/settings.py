@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from openlinx.crawl.setting_rules import as_rate, as_robots_token
+from openlinx.crawl.setting_rules import as_rate, as_robots_token, as_timeout, as_user_agent
 from openlinx.naming import DEFAULT_ROBOTS_TOKEN
 from openlinx.store.records import ScopeKind
 
@@ -52,6 +52,33 @@ class CrawlSettings(BaseModel):
         description="The seconds a Crawl paused by lost network access waits for its Seed to "
         "answer before it fails; 0 fails at once.",
     )
+    user_agent: str | None = Field(
+        None,
+        description="The User-Agent request header of every request, robots.txt's included: "
+        "visible ASCII characters, spaces and tabs only. The tool's name, version and project "
+        "URL when unset.",
+    )
+    timeout: float = Field(
+        20,
+        strict=True,
+        description="Seconds within which a request attempt, its body included, must complete: "
+        "a finite number above 0.",
+    )
+    retries: int = Field(
+        2,
+        ge=0,
+        le=10,
+        description="How many times, 0 to 10, a request that timed out, could not connect or "
+        "got a 429 or 5xx status is tried again, after 1, 2, 4, ... seconds or as its "
+        "Retry-After asks.",
+    )
+    max_redirects: int = Field(
+        10,
+        ge=0,
+        le=50,
+        description="The most consecutive redirects, 0 to 50, followed from the first URL of a "
+        "Redirect Chain; the target of the next one is recorded as skipped.",
+    )
     robots_user_agent: str = Field(
         DEFAULT_ROBOTS_TOKEN,
         description="The token that selects robots.txt groups and user-agent-prefixed "
@@ -83,6 +110,16 @@ class CrawlSettings(BaseModel):
     @classmethod
     def _is_a_rate(cls, rate: float | None) -> float | None:
         return None if rate is None else as_rate(rate)
+
+    @field_validator("timeout")
+    @classmethod
+    def _is_a_timeout(cls, timeout: float) -> float:
+        return as_timeout(timeout)
+
+    @field_validator("user_agent")
+    @classmethod
+    def _is_a_user_agent(cls, user_agent: str | None) -> str | None:
+        return None if user_agent is None else as_user_agent(user_agent)
 
     @field_validator("robots_user_agent")
     @classmethod
