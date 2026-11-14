@@ -188,6 +188,17 @@ A header is read as RFC 6265 asks of a browser: attribute names match in any let
 
 Page data never holds a cookie's value, only its name and attributes, since a value can be a session token that lets anyone who reads the Crawl file sign in as the crawler.
 
+## Columns of later releases
+
+Some columns exist from v0.1 and are NULL, never 0, until the release that measures them, so that release changes no table and a query written now keeps working. Each one's description starts with `Filled from v<major>.<minor>. `, naming that release:
+- **v0.2:** the SERP pixel widths `title_1_width_px`, `title_2_width_px`, `meta_description_1_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, a copy of the origin's.
+- **v0.3:** `closest_similarity_pct` and `near_duplicate_count`; `structured_data_error_count` and `structured_data_warning_count`.
+- **v1.1, with JavaScript rendering:** `js_cookie_count`, `unique_js_inlinks` and `unique_js_outlinks`, and `links.html_source`.
+
+## Stored HTML
+
+`page_sources` exists from v0.1 and holds no rows, since v0.1 stores no HTML. From v0.2, a Crawl started with HTML storage on has one row per Page, with the encoding the Page was decoded with and its body as a zstd frame; see [schema.md](schema.md#table-page_sources).
+
 ## The two address forms
 
 - **`url_encoded_address`** is what the Crawl requested, so it joins `urls.url`, such as `https://xn--bcher-kva.test/%C3%BCber%20uns`.
