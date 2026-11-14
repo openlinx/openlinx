@@ -134,6 +134,19 @@ def test_compressed_page_sizes(temp_workspace: TempWorkspace, fixture_site: Star
     ) == [(10000, 46, "gzip")]
 
 
+def test_uncompressed_page_sizes(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/plain": Page(body="a" * 1234)}))
+    address = server.url("/plain")
+
+    crawl_file = crawl_result(address).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT size_bytes, transferred_bytes, content_encoding FROM pages WHERE address = ?",
+        [address],
+    ) == [(1234, 1234, None)]
+
+
 @pytest.mark.slow
 def test_a_page_lowered_in_flight_has_the_depth_of_its_url(
     temp_workspace: TempWorkspace, fixture_site: StartSite
