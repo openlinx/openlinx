@@ -37,19 +37,19 @@ _SENTENCE_END = re.compile(
 
 def content_blocks(tree: LexborHTMLParser, area: ContentArea) -> Iterator[str]:
     """The Content Area text, block by block, in document order."""
-    body = tree.body
-    if body is None:
+    container = tree.root if area.include else tree.body
+    if container is None:
         return
     # Each selector on its own: one selector list would let a selector that leaves a comment
     # or a string open swallow the ones after it.
     excluded = {node.mem_id for selector in area.exclude for node in tree.css(selector)}
     roots = {node.mem_id for selector in area.include for node in tree.css(selector)}
-    # The walk starts inside <body>, so <body> and <html> are looked at here.
-    outer = [node.mem_id for node in (body, body.parent) if node is not None]
+    # The child-walker does not visit its container or that container's ancestors.
+    outer = [node.mem_id for node in (container, container.parent) if node is not None]
     if any(mem_id in excluded for mem_id in outer):
         return
-    every = not area.include or any(mem_id in roots for mem_id in outer)
-    yield from text_blocks(body, excluded, None if every else roots)
+    every = not area.include or container.mem_id in roots
+    yield from text_blocks(container, excluded, None if every else roots)
 
 
 def sentence_count(blocks: Iterable[str]) -> int:
