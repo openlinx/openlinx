@@ -97,6 +97,25 @@ def test_a_taken_id_is_drawn_again(temp_workspace: TempWorkspace) -> None:
     assert crawl.id == "20260927-140312-m2p7"
 
 
+def test_an_id_with_a_writer_claim_file_is_drawn_again(temp_workspace: TempWorkspace) -> None:
+    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
+    workspace.crawls_dir.mkdir(parents=True)
+    lock = workspace.crawls_dir / "20260927-140312-k3f9.lock"
+    lock.write_bytes(b"reserved")
+    clock = FakeClock(start=datetime(2026, 9, 27, 14, 3, 12, 900000, tzinfo=UTC))
+
+    with create_crawl(
+        new_crawl(workspace), clock, Collected(), scripted_choice("k3f9m2p7")
+    ) as crawl:
+        pass
+
+    assert (crawl.id, lock.read_bytes(), lock.with_suffix(".sqlite").exists()) == (
+        "20260927-140312-m2p7",
+        b"reserved",
+        False,
+    )
+
+
 def test_an_id_claimed_after_the_sqlite_existence_check_is_drawn_again(
     temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
