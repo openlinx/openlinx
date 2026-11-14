@@ -74,5 +74,11 @@ def _expires(value: str) -> datetime | None:
 def _max_age(value: str) -> int | None:
     if _MAX_AGE.fullmatch(value) is None:
         return None
-    # RFC 6265 reads a Max-Age of any size; SQLite's INTEGER holds 64 bits.
-    return min(max(int(value), -(2**63)), 2**63 - 1)
+    negative = value.startswith("-")
+    digits = value.removeprefix("-").lstrip("0") or "0"
+    limit = "9223372036854775808" if negative else "9223372036854775807"
+    # Bound significant digits before int's decimal conversion limit can reject them.
+    if len(digits) > len(limit) or (len(digits) == len(limit) and digits > limit):
+        return -(2**63) if negative else 2**63 - 1
+    number = int(digits)
+    return -number if negative else number

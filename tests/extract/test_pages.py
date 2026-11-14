@@ -265,6 +265,35 @@ def test_a_page_lowered_in_flight_has_the_depth_of_its_url(
     ) == [(2, 2)]
 
 
+def test_a_huge_max_age_keeps_every_cookie_row(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/cookie": Page(
+                    body="<p>Cookie</p>",
+                    headers=[
+                        ("Set-Cookie", "before=secret-before; Max-Age=3600"),
+                        ("Set-Cookie", "huge=secret-huge; Max-Age=" + "9" * 5000),
+                        ("Set-Cookie", "after=secret-after; Max-Age=1"),
+                    ],
+                )
+            }
+        )
+    )
+    address = server.url("/cookie")
+
+    crawl_file = crawl_result(address).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.set_cookie_count, cookies.ordinal, cookies.name, cookies.max_age "
+        "FROM pages JOIN cookies USING (url_id) WHERE pages.address = ? ORDER BY cookies.ordinal",
+        [address],
+    ) == [(3, 1, "before", 3600), (3, 2, "huge", 9223372036854775807), (3, 3, "after", 1)]
+
+
 def test_cookie_values_are_not_stored_in_page_data(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime
 
+import pytest
+
 from openlinx.crawl.engine.hooks import UrlResponse, UrlResult
 from openlinx.crawl.pages.directives import NO_DIRECTIVES
 from openlinx.crawl.urls import NormalizedUrl
@@ -103,16 +105,78 @@ def test_cookie_count_matches_the_headers() -> None:
     assert (page.set_cookie_count, first.max_age, second.domain) == (2, 3600, "example.test")
 
 
-def test_a_max_age_beyond_64_bits_is_clamped_and_a_malformed_one_is_null() -> None:
-    rows = _cookies(
-        "a=1; Max-Age=-1",
-        "b=1; Max-Age=1.5",
-        "c=1; Max-Age=+3600",
-        "d=1; Max-Age=99999999999999999999",
-        "e=1; Max-Age=-99999999999999999999",
-    )
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("-1", -1, id="negative"),
+        pytest.param("1.5", None, id="fraction"),
+        pytest.param("+3600", None, id="plus"),
+        pytest.param("99999999999999999999", 9223372036854775807, id="positive-overflow"),
+        pytest.param("-99999999999999999999", -9223372036854775808, id="negative-overflow"),
+        pytest.param("9" * 5000, 9223372036854775807, id="huge-positive"),
+        pytest.param("-" + "9" * 5000, -9223372036854775808, id="huge-negative"),
+        pytest.param("0" * 5000 + "1", 1, id="leading-zero-positive"),
+        pytest.param("-" + "0" * 5000 + "1", -1, id="leading-zero-negative"),
+        pytest.param("0" * 5000, 0, id="zero"),
+        pytest.param("-" + "0" * 5000, 0, id="negative-zero"),
+        pytest.param("9223372036854775807", 9223372036854775807, id="maximum"),
+        pytest.param("-9223372036854775808", -9223372036854775808, id="minimum"),
+        pytest.param("9223372036854775808", 9223372036854775807, id="above-maximum"),
+        pytest.param("-9223372036854775809", -9223372036854775808, id="below-minimum"),
+        pytest.param("1000000000000000000", 1000000000000000000, id="positive-19-digits"),
+        pytest.param("-1000000000000000000", -1000000000000000000, id="negative-19-digits"),
+        pytest.param("9" * 5000 + "x", None, id="huge-malformed"),
+    ],
+)
+def test_a_max_age_beyond_64_bits_is_clamped_and_a_malformed_one_is_null(
+    value: str, expected: int | None
+) -> None:
+    (row,) = _cookies(f"sid=secret; Max-Age={value}")
 
-    assert [row.max_age for row in rows] == [-1, None, None, 2**63 - 1, -(2**63)]
+    assert row.max_age == expected
+
+
+@pytest.mark.parametrize(
+    ("attributes", "expected"),
+    [
+        pytest.param(
+            "Max-Age=3600; mAx-aGe=" + "9" * 5000,
+            9223372036854775807,
+            id="huge-last",
+        ),
+        pytest.param(
+            "Max-Age=" + "9" * 5000 + "; Max-Age=broken",
+            9223372036854775807,
+            id="malformed-last",
+        ),
+        pytest.param(
+            "Max-Age=3600; Max-Age=" + "9" * 5000 + "x",
+            3600,
+            id="huge-malformed-last",
+        ),
+    ],
+)
+def test_a_huge_max_age_keeps_the_last_valid_attribute(attributes: str, expected: int) -> None:
+    (row,) = _cookies(f"sid=secret; {attributes}")
+
+    assert row.max_age == expected
+
+
+def test_a_huge_max_age_keeps_the_whole_cookie_batch() -> None:
+    result = _result(
+        "before=secret-before; Max-Age=3600",
+        "huge=secret-huge; Max-Age=" + "9" * 5000,
+        "after=secret-after; Max-Age=1",
+    )
+    (page,) = page_rows(result)
+
+    assert (
+        page.set_cookie_count,
+        [(row.url_id, row.ordinal, row.name, row.max_age) for row in cookie_rows(result)],
+    ) == (
+        3,
+        [(1, 1, "before", 3600), (1, 2, "huge", 9223372036854775807), (1, 3, "after", 1)],
+    )
 
 
 def test_an_empty_domain_is_null() -> None:
