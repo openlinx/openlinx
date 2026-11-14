@@ -743,6 +743,96 @@ def test_a_crawl_that_reaches_its_url_limit_during_a_network_pause_waits_for_the
     )
 
 
+@pytest.mark.parametrize(
+    ("seed", "scope", "in_scope"),
+    [("http://site.test/", "host", 1), ("http://site.test/blog/", "subfolder", 0)],
+    ids=["in-scope", "outside-section"],
+)
+def test_the_url_limit_waits_for_internal_resources_that_can_return_the_pause_count(
+    temp_workspace: TempWorkspace, seed: str, scope: str, in_scope: int
+) -> None:
+    clock, reporter = FakeClock(), Collected()
+    pages = {
+        seed: FakePage("".join(f'<img src="/p{n}">' for n in range(1, 31))),
+        **{
+            f"/p{n}": FakePage("image", content_type="image/png", delay=0.5 + n / 100)
+            for n in range(1, 31)
+        },
+    }
+
+    result = crawl_result(
+        seed,
+        clock=clock,
+        fetcher=FakeFetcher(clock, pages, outages=[(1, 30)]),
+        reporter=reporter,
+        concurrency=4,
+        max_urls=19,
+        scope=scope,
+    )
+    events = [
+        (name, data.get("outcome", data.get("reason")))
+        for name, data in reporter.events
+        if name in ("crawl_resumed", "stopping")
+    ]
+
+    assert (
+        events,
+        result.counts.fetched,
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, is_internal, in_scope, parsed, count(*) FROM urls "
+            "WHERE url != ? AND fetch_state = 'fetched' GROUP BY 1, 2, 3, 4",
+            [seed],
+        ),
+    ) == (
+        [("crawl_resumed", "outage"), ("stopping", "max_urls")],
+        19,
+        [("fetched", 1, in_scope, 0, 18)],
+    )
+
+
+def test_an_external_check_does_not_extend_the_url_limit_s_wait_for_internal_failures(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, stop, stopped_at = FakeClock(), StopSignal(), []
+    stop.on_first_set(lambda _: stopped_at.append(clock.monotonic()))
+    pages = {
+        "/": FakePage(
+            '<a href="http://other.test/hang">External</a><a href="/down">Down</a>'
+            '<a href="/again">Again</a><a href="/next">Next</a>'
+        ),
+        "/down": FakePage("", fails="dns_error", delay=1),
+        "/again": FakePage("", fails="dns_error"),
+        "http://other.test/hang": FakePage("", delay=3600),
+    }
+    fetcher = FakeFetcher(clock, pages)
+
+    result = crawl_result(
+        "http://site.test/",
+        clock=clock,
+        fetcher=fetcher,
+        stop=stop,
+        concurrency=1,
+        max_urls=4,
+        network_wait=30,
+    )
+
+    assert ("http://other.test/hang", 0) in fetcher.starts
+    assert (
+        result.summary.stop_reason,
+        stopped_at,
+        clock.monotonic(),
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, fetch_error FROM urls WHERE url = 'http://site.test/down'",
+        ),
+        query(
+            result.crawl_file,
+            "SELECT fetch_state, is_internal FROM urls WHERE url = 'http://other.test/hang'",
+        ),
+    ) == ("max_urls", [1], 11, [("error", "dns_error")], [("queued", 0)])
+
+
 def test_the_url_limit_s_wait_for_an_open_count_ends_at_the_network_wait(
     temp_workspace: TempWorkspace,
 ) -> None:

@@ -3,7 +3,7 @@ per what its code names (020-add-crawl-core D10)."""
 
 from collections.abc import Iterable, Sequence
 
-from openlinx.crawl.fetch.politeness import BLOCKING_RUN
+from openlinx.crawl.engine.blocking import BLOCKING_RUN
 from openlinx.crawl.hook_failures import HookFailure
 from openlinx.crawl.pages.preparation import PreparedPage
 from openlinx.crawl.references import DiscoveredLink

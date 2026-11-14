@@ -43,7 +43,7 @@ Design D16 of `023-fix-code-audit` names these formula and blocking-response tab
 | `watchdog_seconds` | [fetch/requester.py](../src/openlinx/crawl/fetch/requester.py) | [test_watchdog.py](../tests/crawl/test_watchdog.py): `test_the_watchdog_is_120_seconds_or_30_more_than_the_request_deadline` |
 | `pause_after` | [engine/pause.py](../src/openlinx/crawl/engine/pause.py) | [test_network_pause.py](../tests/crawl/test_network_pause.py): `test_the_requests_in_a_row_that_pause_the_crawl` |
 | `probe_times` | [engine/pause.py](../src/openlinx/crawl/engine/pause.py) | [test_network_pause.py](../tests/crawl/test_network_pause.py): `test_probes_back_off_to_once_a_minute` |
-| `BlockingRuns` | [fetch/politeness.py](../src/openlinx/crawl/fetch/politeness.py) | [test_blocking.py](../tests/crawl/test_blocking.py): `test_a_host_warns_at_ten_403_or_429_responses_in_a_row` |
+| `BlockingRuns` | [engine/blocking.py](../src/openlinx/crawl/engine/blocking.py) | [test_blocking.py](../tests/crawl/test_blocking.py): `test_a_host_warns_at_ten_403_or_429_responses_in_a_row` |
 
 Their expected values are literal tables, beside the Crawl Service tests of the
 same rules. Timing scenarios use `crawl_result` with `FakeFetcher` and `FakeClock`;
