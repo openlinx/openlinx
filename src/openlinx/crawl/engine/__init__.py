@@ -2,5 +2,5 @@
 
 dispatch: run_crawl. context: CrawlContext. hooks: Hooks, Handler, handler, Pass, PassContext,
 PassWriter, UrlResult, UrlResponse. stop: StopSignal. warning_log: WarningLog.
-pause: pause_after. outcomes: RecordingFailedError.
+pause: pause_after. outcomes: RecordingFailedError. blocking: BlockingRuns, BLOCKING_RUN.
 """

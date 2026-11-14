@@ -76,6 +76,39 @@ def test_a_certificate_from_an_unknown_ca_is_a_tls_error(
     ) == [("error", "tls_error")]
 
 
+def test_a_self_signed_certificate_is_a_tls_error(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    hosts = fixture_tls_hosts(
+        Site(
+            routes={
+                "/": Page(
+                    body='<a href="https://selfsigned.test/">Partner shop</a> '
+                    '<a href="https://site.test/">Secure home</a>'
+                )
+            }
+        ),
+        OTHER,
+    )
+    result = crawl_result(
+        "http://site.test/",
+        resolver=hosts.resolver,
+        trust_anchors=hosts.trust_anchors,
+        retries=0,
+    )
+
+    assert result.summary.state == "completed"
+    assert query(
+        result.crawl_file,
+        "SELECT url, is_internal, fetch_state, fetch_error, status_code, attempt_count "
+        "FROM urls WHERE url LIKE 'https:%' ORDER BY url",
+    ) == [
+        ("https://selfsigned.test/", 0, "error", "tls_error", None, 0),
+        ("https://site.test/", 1, "fetched", None, 200, 1),
+    ]
+    assert hosts.selfsigned.requests == ()
+
+
 def test_a_robots_txt_with_a_bad_certificate_gives_its_urls_tls_error_without_a_request(
     temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
 ) -> None:

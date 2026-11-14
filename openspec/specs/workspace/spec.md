@@ -104,7 +104,7 @@ When the `--workspace` folder does not exist, the Command SHALL fail with the er
 
 Environment variables SHALL NOT select the Workspace, SHALL NOT be a source of settings, and SHALL NOT change a Command's behaviour or output. The only inputs are flags and `openlinx.toml`, plus the operating system's own notion of the home folder and the current folder. There are two exceptions:
 
-- **Proxy variables.** The standard proxy variables `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, in any letter case, SHALL be honoured for fetching. `--proxy` or `[crawl] proxy` overrides them, and `022-add-fetch-policy` owns this behaviour. They are the only variables that `linx commands` lists under `environment`.
+- **Proxy variables.** From v0.1, the standard proxy variables `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, in any letter case, SHALL be honoured for fetching. From v0.2, `--proxy` or `[crawl] proxy` SHALL override them; `022-add-fetch-policy` owns this behaviour. They are the only variables that `linx commands` lists under `environment`.
 - **Detection signals.** Read-only detection signals that host agents set, such as Codex's `CODEX_SANDBOX_NETWORK_DISABLED`, MAY be read to word diagnostics and hints, for example by `linx doctor`. They SHALL NOT change a Command's result, its exit code, the Workspace or any setting.
 
 #### Scenario: A Workspace variable is ignored

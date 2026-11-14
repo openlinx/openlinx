@@ -6,6 +6,7 @@ from functools import partial
 from typing import Literal
 
 from openlinx.aio import first_of
+from openlinx.crawl.engine.blocking import BlockingRuns
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.crawl_warnings import url_limit_reached
 from openlinx.crawl.engine.outcomes import Outcomes
@@ -15,7 +16,7 @@ from openlinx.crawl.engine.seed_chain import SeedChain, end_seed_chain
 from openlinx.crawl.engine.stop import StopGrace
 from openlinx.crawl.engine.tasks import Run, TaskFailure
 from openlinx.crawl.engine.units import unit_of, via_resource
-from openlinx.crawl.fetch.politeness import BlockingRuns, RateGate, RequestLimits, global_cap
+from openlinx.crawl.fetch.politeness import RateGate, RequestLimits, global_cap
 from openlinx.crawl.fetch.requester import Requester, watchdog_seconds
 from openlinx.crawl.robots.loader import RobotsLoader
 from openlinx.crawl.scope import ScopeDecision
@@ -242,11 +243,14 @@ async def _wait_for_the_pause_count(run: Run, running: set[asyncio.Task[None]]) 
     --network-wait from the refusal at most (022 D4)."""
     pause, clock = run.pause, run.context.clock
     ends = clock.monotonic() + run.context.settings.network_wait
-    while pause.counting and running and not _stopping(run):
+    while pause.counting and not _stopping(run):
+        requests = running | run.task_failure.internal_checked_urls
+        if not requests:
+            break
         left = ends - clock.monotonic()
         if left <= 0:
             return
-        await first_of(run.context.stop.wait(), clock.sleep(left), wake_on=running)
+        await first_of(run.context.stop.wait(), clock.sleep(left), wake_on=requests)
     left = ends - clock.monotonic()
     if pause.paused and not _stopping(run) and left > 0:
         await first_of(pause.ended(), clock.sleep(left))
@@ -315,7 +319,9 @@ async def _start(
     # finds after its depth has closed. The chain's last URL closes it before depth 0 ends
     # (022 D3), even a checked one, such as a URL off the Seed's site or its folder.
     if _is_checked_url(queued, decision) and not in_chain:
-        run.task_failure.track(run.task_failure.checked_urls, task)
+        run.task_failure.track(
+            run.task_failure.checked_urls, task, internal_checked=decision.is_internal
+        )
         checked_in_flight.add(queued.id)
         task.add_done_callback(partial(_discard, checked_in_flight, queued.id))
     else:
