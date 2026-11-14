@@ -40,13 +40,13 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | done |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | done |
 | 021 | `021-rename-to-openlinx` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | `linx`, `openlinx` | done |
-| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | first PR in main; change closure remains |
-| 023 | `023-fix-code-audit` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | existing Commands | done and archived on branch; PR #36 awaits merge |
-| 030 | `030-add-page-data` | `page-data` | none (data only) | in progress, min |
-| 040 | `040-add-rules` | `rules` | `rules` | in progress, 15 Rules |
-| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | in progress, min |
-| 026 | `026-add-parse-pool` | `crawl-performance` | none | in progress: the parse pool and its benchmark |
-| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop`, `resume` | planned, min |
+| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | v0.1 complete through group 10; groups 11–14 deferred to v0.2 |
+| 023 | `023-fix-code-audit` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | existing Commands | merged and archived |
+| 030 | `030-add-page-data` | `page-data` | none (data only) | foundation in main; local 4b integrated; whole-change review fixes and acceptance open |
+| 040 | `040-add-rules` | `rules` | `rules` | partial older branch; integration and remaining v0.1 Rules open |
+| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | partial older branch; review fixes and 040 integration open |
+| 026 | `026-add-parse-pool` | `crawl-performance` | none | partial older branch; bounded shutdown and scale proof open |
+| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop`, `resume` | local ownership tasks 0.1–0.6; Commands not implemented |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
 | 085 | `085-add-release` | decided when it is drafted | none (release workflow) | planned, not drafted yet |
 
@@ -68,9 +68,10 @@ widen:                                        ├─► 022-min ─┐
 ```
 
 - **Where the build is:**
-  - **In main:** 000, 010, 015, 017, 018, 020, the crawl core, 021, the rename to OpenLinx, and the first 022 fetch-policy PR (#39), so `linx crawl <url>` crawls a site in the foreground with the fetch policy. The full 022 change still needs closure.
-  - **On branches:** 023, the code audit, is complete and archived on its branch; PR #36 awaits merge. 030-min, the page data, is in progress. 026 (the parse pool), 040 (the Rules) and 050 (the queries) are partly built and continue on their branches.
-  - **Not started:** 060-min (crawl control), 080 (the agent Skill) and 085 (the release).
+  - **In main:** the foundation through 021, the completed and archived 023 audit, 022's v0.1 scope through group 10, and the 030 Page data foundation. 030's deferred-column and Windows cleanup findings C01/C02 are closed by PR #37; PR #41 fixes the pause-count wait. 022 groups 11–14 remain deferred to v0.2.
+  - **Local candidates:** 030's group 4b and Max-Age/Content Area fixes at `9f4354e6`, and 060's ownership tasks 0.1–0.6 at `5fcf25e2`, are integrated with main `741b92f7` and pass local checks. 030's whole-change review found sentence-splitting and cookie Domain fixes still needed; acceptance remains open. 060's control Commands are not implemented, and group 0 still needs its remaining ownership scenarios, review and actual cross-OS CI.
+  - **Older branches:** 026, 040 and 050 contain partial implementations that still need the package rename and current contracts. Bounded worker shutdown, Rule populations and remaining Rules, query review fixes, and the integrated Crawl → Issues proof remain open. [Development state](docs/development-state.md) links verified checkpoints, tasks and dependencies.
+  - **Not started:** 080 (the agent Skill) and 085 (the release).
 - **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts its synthetic site alongside 020 and the rest once 020's slice is in (its first pull request), and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
