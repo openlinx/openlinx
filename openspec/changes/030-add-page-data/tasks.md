@@ -180,8 +180,8 @@ Task 12.4 moved to group 4 as task 4.0.
 
 - [x] 4.6 Drive "Compressed Page sizes" at seam 3+6, using `022-add-fetch-policy`'s gzip fixture support with a stored 46-byte blob. Add `size_bytes`, `transferred_bytes` and `content_encoding`, and extend the test of "Repeated values equal the urls row" to them. Drive with them "Schema lists exactly the Page record columns" (seam 6), which fails only for these three columns and pins the full column set.
 - [x] 4.7 Drive "Uncompressed Page sizes" at seam 3+6.
-- [ ] 4.10 Drive "HTTP redirect with an HTML body" at seam 3+6: `redirect_type` `http_redirect`, and `redirect_url` from `022`'s `urls.redirect_url_id`.
-- [ ] 4.14 Docs: add the size and HTTP redirect concepts to `docs/page-data.md`.
+- [x] 4.10 Drive "HTTP redirect with an HTML body" at seam 3+6: `redirect_type` `http_redirect`, and `redirect_url` from `022`'s `urls.redirect_url_id`.
+- [x] 4.14 Docs: add the size and HTTP redirect concepts to `docs/page-data.md`.
 - [ ] 4.15 Review: run the code-review skill on group 4b's commits and then on the whole change, and refactor with the whole suite green. Before the change is archived, reduce each Risks entry of tests named after no scenario to the test's name and the failure class it guards.
 
 ## 13. (v0.2) SERP pixel widths

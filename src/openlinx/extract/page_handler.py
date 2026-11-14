@@ -124,6 +124,9 @@ class _OutlinkColumns(TypedDict, total=False):
 
 
 def _redirect(result: UrlResult, data: PageData | None) -> _RedirectColumns:
+    response = result.response
+    if response is not None and 300 <= response.status_code < 400:
+        return {"redirect_url": response.redirect_target, "redirect_type": "http_redirect"}
     # 020 reads the Refresh header of a 2xx response and the meta refresh of a prepared one;
     # a refresh of the Page itself, as a live page reloads, is no redirect.
     for link_type in _REFRESH_TYPES:

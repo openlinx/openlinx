@@ -58,6 +58,96 @@ def test_error_page_keeps_response_data(
     ) == [(404, None)]
 
 
+def test_http_redirect_with_an_html_body(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/old">Old</a>'),
+                "/old": Status(
+                    301,
+                    body='<title>Moved</title><meta http-equiv="refresh" content="0; url=/meta">',
+                    headers=[("Location", "/new"), ("Refresh", "0; url=/refresh")],
+                ),
+                "/new": Page(body="<title>New</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.status_code, pages.redirect_type, pages.redirect_url, target.url, "
+        "source.parsed, pages.title_1 FROM pages "
+        "JOIN urls AS source ON source.id = pages.url_id "
+        "JOIN urls AS target ON target.id = source.redirect_url_id WHERE source.url = ?",
+        [server.url("/old")],
+    ) == [(301, "http_redirect", server.url("/new"), server.url("/new"), 0, None)]
+    assert [
+        request.path for request in server.requests if request.path in ("/meta", "/refresh")
+    ] == []
+
+
+@pytest.mark.parametrize(
+    ("status", "headers"),
+    [(301, []), (301, [("Location", "mailto:help@example.test")]), (300, [("Location", "/new")])],
+    ids=["missing-location", "unsupported-location", "non-followable-status"],
+)
+def test_http_redirect_without_a_target(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    status: int,
+    headers: list[tuple[str, str]],
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/old">Old</a>'),
+                "/old": Status(status, body="<title>Moved</title>", headers=headers),
+                "/new": Page(body="<title>New</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.redirect_type, pages.redirect_url, urls.redirect_url_id, "
+        "urls.parsed, pages.title_1 FROM pages JOIN urls ON urls.id = pages.url_id "
+        "WHERE urls.url = ?",
+        [server.url("/old")],
+    ) == [("http_redirect", None, None, 0, None)]
+    assert [request.path for request in server.requests if request.path == "/new"] == []
+
+
+def test_an_http_self_redirect_keeps_its_target(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/account">Account</a>'),
+                "/account": Status(
+                    302, body="<title>Account</title>", headers=[("Location", "/account")]
+                ),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.redirect_type, pages.redirect_url, urls.redirect_url_id = urls.id, "
+        "urls.in_redirect_loop FROM pages JOIN urls ON urls.id = pages.url_id WHERE urls.url = ?",
+        [server.url("/account")],
+    ) == [("http_redirect", server.url("/account"), 1, 1)]
+    assert [request.path for request in server.requests].count("/account") == 1
+
+
 def test_crawl_timestamp_repeats_fetched_at(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock(start=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC))
     fetcher = FakeFetcher(clock, {"/about": FakePage("<p>About</p>")})

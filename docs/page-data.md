@@ -128,11 +128,15 @@ The `X-Robots-Tag` columns are set for every Page, since every response can carr
 
 ## Redirects
 
-`redirect_type` says how a Page sends its visitors elsewhere, and `redirect_url` where, resolved as Link discovery resolves the target:
+`redirect_type` and `redirect_url` describe the first redirect that applies, in this order:
+
+- **`http_redirect`**: every 3xx Page, including one with no target. The Crawl core supplies the normalized target used for `urls.redirect_url_id`; the Page handler copies that same target in the URL's own unit. A missing `Location`, an unsupported target such as `mailto:`, or a status the core does not follow, such as 300, leaves `redirect_url` NULL while the type remains `http_redirect`. An HTTP redirect to the Page's own URL keeps that target; the core records the loop and avoids fetching it again.
 - **`http_refresh`**: a 2xx Page whose `Refresh` header names a URL, such as `Refresh: 0; url=/new`.
-- **`meta_refresh`**: an analysed Page without one, whose first refresh `<meta>` names a URL. Only the first counts, as a browser acts on the first only, so a page that reloads itself every five minutes (`content="300"`) does not redirect even when a later `<meta>` names a URL. `meta_refresh` holds that first `<meta>`'s `content`, with or without a URL.
-- A refresh that names the Page's own URL, as a live page reloads, is no redirect.
-- `javascript_redirect` is filled from v1.1, by JavaScript rendering.
+- **`meta_refresh`**: an analysed Page without an HTTP Refresh redirect, whose first refresh `<meta>` names a URL. Only the first counts, as a browser acts on the first only, so a page that reloads itself every five minutes (`content="300"`) does not redirect even when a later `<meta>` names a URL. `meta_refresh` holds that first `<meta>`'s `content`, with or without a URL.
+
+Refresh targets come from the Crawl core's discovered Links. A Refresh that names the Page's own normalized URL, as a live page reloads, is no redirect; a self-targeting HTTP Refresh can therefore fall through to a meta refresh. Without a redirect both columns are NULL.
+
+`javascript_redirect` is filled from v1.1, by JavaScript rendering.
 
 ## Canonicals
 

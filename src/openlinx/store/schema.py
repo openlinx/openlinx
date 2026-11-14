@@ -604,12 +604,13 @@ pages = public_table(
         Text,
         comment="The URL the Page redirects to: the target of its 3xx response, of its HTTP "
         "Refresh header, or of its first meta refresh; NULL when it does not redirect, or "
-        "when the target is its own URL.",
+        "when the HTTP redirect has no target. A Refresh to its own URL is no redirect.",
     ),
     Column(
         "redirect_type",
         Text,
-        comment="How the Page redirects to redirect_url; NULL when it does not redirect. "
+        comment="How the Page redirects; http_redirect for every 3xx response, even when "
+        "redirect_url is NULL; NULL when it does not redirect. "
         "javascript_redirect is filled from v1.1.",
         info={"values": literal_values(RedirectType)},
     ),
