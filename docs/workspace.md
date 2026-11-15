@@ -85,6 +85,20 @@ replaces that list for one Crawl. Headers are sent only to Internal URLs and the
 robots.txt; stored metadata hides sensitive values while keeping harmless entries.
 See [Custom request headers](crawling.md#custom-request-headers) for validation and examples.
 
+Basic Auth uses `[crawl] auth = "user:password"` or `--auth "user:password"` for one
+Crawl. It is sent preemptively only to Internal URLs and their robots.txt, using the
+exact input's UTF-8 bytes without trimming or normalization. A nonempty value needs a
+colon and refuses ASCII control characters and unencodable Unicode. Invalid Workspace
+values produce `settings_invalid` (exit 3); invalid flag/service values produce
+`invalid_value` (exit 2), without quoting credentials. Nonempty resolved auth conflicts
+with a custom Authorization header, ignoring case, as `invalid_value` (exit 2) for
+every source. Both validations precede writer/network access.
+
+Auth defaults to disabled. An explicit empty value overrides lower-priority credentials
+and records as `null` in config; supplied argv values stay redacted. Enabled auth records
+as `***` in its entirety. See [Basic authentication](crawling.md#basic-authentication)
+for the wire encoding, empty parts and diagnostic masking.
+
 ### Tables and precedence
 
 Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A table must forbid unknown keys and give every setting a one-line description and a default that TOML can write: a string, number, boolean or list of those, or none at all for a setting that is unset. A table of named entries, such as `[rules.<id>]`, describes itself with its entry model's one-line docstring. The template and the error hints depend on these rules, and a test checks every registered table. A setting that mirrors a flag lives in a table the Command reads, usually named after it, under the flag's long name with `-` written as `_`.

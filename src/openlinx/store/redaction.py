@@ -1,5 +1,6 @@
 """Redact secret settings and credentials before recording Crawl data."""
 
+from base64 import b64encode
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -97,10 +98,16 @@ def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy
                     found.add(secret)
         elif isinstance(value, str) and value:
             found.add(value)
-            # A URL's password may be quoted without the rest of the URL.
-            password = _password(value)
+            password = value.partition(":")[2] if setting == "crawl.auth" else _password(value)
             if password:
                 found.add(password)
+            if setting == "crawl.auth":
+                # Match the exact UTF-8 wire bytes without re-raising invalid-input errors.
+                try:
+                    encoded = b64encode(value.encode("utf-8")).decode("ascii")
+                except UnicodeEncodeError:
+                    continue
+                found.update((encoded, f"Basic {encoded}"))
     return SecretValues(tuple(sorted(found, key=len, reverse=True)))
 
 

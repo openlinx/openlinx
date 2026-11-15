@@ -1,5 +1,6 @@
 """Fetch one HTTP hop and return request failures as data."""
 
+from base64 import b64encode
 from collections.abc import AsyncIterator, Callable, Iterable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
@@ -97,6 +98,7 @@ class FetchPolicy:
     timeout_seconds: float
     headers: tuple[tuple[str, str], ...] = ()
     custom_user_agent: bool = False
+    auth: str | None = None
 
 
 def request_headers(policy: FetchPolicy, *, is_internal: bool) -> tuple[tuple[str, str], ...]:
@@ -110,6 +112,9 @@ def request_headers(policy: FetchPolicy, *, is_internal: bool) -> tuple[tuple[st
         headers = (("User-Agent", policy.user_agent), *headers)
     if not any(name.lower() == "accept-encoding" for name, _ in headers):
         headers = (*headers, ("Accept-Encoding", ACCEPT_ENCODING))
+    if is_internal and policy.auth:
+        authorization = "Basic " + b64encode(policy.auth.encode("utf-8")).decode("ascii")
+        headers = (*headers, ("Authorization", authorization))
     # aiohttp merges repeated input names case-sensitively before writing them.
     return tuple((name.lower(), value) for name, value in headers)
 

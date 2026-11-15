@@ -39,6 +39,16 @@ def as_user_agent(user_agent: str) -> str:
     return user_agent
 
 
+def as_auth(auth: str) -> str:
+    if ":" not in auth or any(ord(char) < 32 or ord(char) == 127 for char in auth):
+        raise ValueError("auth needs user:password without ASCII control characters")
+    try:
+        auth.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError("auth must be encodable as UTF-8") from None
+    return auth
+
+
 def as_robots_token(token: str) -> str:
     if _ROBOTS_USER_AGENT.fullmatch(token) is None:
         raise ValueError("a robots user-agent token has letters, '_' and '-' only (RFC 9309)")

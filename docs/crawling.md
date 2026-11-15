@@ -37,6 +37,7 @@ Every crawl setting is an option of `linx crawl` and a key of the `[crawl]` tabl
 | `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 to 50 (see [The hop limit](#the-hop-limit)). |
 | `--user-agent <string>` | `user_agent` | `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
 | `--header "Name: Value"` | `header` | `[]` | A repeatable custom header for Internal URLs and their robots.txt; sensitive values are hidden in records (see [Custom request headers](#custom-request-headers)). |
+| `--auth "user:password"` | `auth` | none | Preemptive Basic Auth for Internal URLs and their robots.txt; the whole value is hidden in records (see [Basic authentication](#basic-authentication)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `openlinx` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -149,7 +150,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | 70 | a bug in the tool ended the Crawl: no result is printed, and the crawl file stays `running` | `internal_error` |
 | 130 | the Crawl was stopped by an interrupt (see [Stopping a Crawl](#stopping-a-crawl)) | `interrupted` |
 
-A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Credentials for a site will be an option of their own (`--auth`, planned for v0.2).
+A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Supply credentials separately with [`--auth`](#basic-authentication).
 
 ### How a Crawl fails
 
@@ -449,6 +450,36 @@ with `setting` = `crawl.header` and boolean `secret` = `true`.
 The same sensitive values are replaced by `***` when hook or transport errors quote them;
 harmless values remain visible. This applies to emitted diagnostics, stored warnings, and
 the failure messages in `urls.fetch_error_message` and `origins.robots_fetch_error_message`.
+
+### Basic authentication
+
+Use `linx crawl https://example.com/ --auth "alice:s3cret"`, or set
+`auth = "alice:s3cret"` under `[crawl]` in the Workspace. Internal requests and their
+robots.txt carry preemptive Basic Auth; External requests receive no generated
+Authorization header. Nonempty resolved auth conflicts with any custom Authorization
+header, ignoring the header name's case. The conflict is refused as `invalid_value`
+(exit 2) before a Crawl file or connection opens, even when both values come from the
+Workspace.
+
+A nonempty value needs a colon. The first colon separates user and password; either
+part may be empty and later colons belong to the password. The exact input is encoded
+as UTF-8 and then Base64, without trimming or Unicode normalization. For example,
+`test:123£` sends `Authorization: Basic dGVzdDoxMjPCow==`. Servers requiring a legacy
+encoding for non-ASCII credentials may be incompatible; the client does not negotiate
+or retry with another encoding.
+
+ASCII control characters (U+0000–U+001F and U+007F), missing colons and strings that
+cannot be strictly encoded as UTF-8 are refused before writer or network access:
+`invalid_value` (exit 2) for flag/service inputs, `settings_invalid` (exit 3) for
+Workspace inputs. Validation diagnostics never quote the credentials.
+
+Omitted auth defaults to disabled. `--auth ""` explicitly disables Workspace auth and
+allows a custom Authorization header. Disabled auth records `null` in config;
+otherwise the entire value records as `***`, even if it resembles a URL. Supplied argv
+values stay redacted, including `--auth=***` for joined inputs and empty values.
+Diagnostic masking hides the raw credentials, a nonempty password, the Base64 payload
+and the full Basic value using the same UTF-8 bytes. `linx commands` describes
+`--auth` with `setting` = `crawl.auth` and boolean `secret` = `true`.
 
 ### Cookies
 

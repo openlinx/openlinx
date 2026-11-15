@@ -3,6 +3,7 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from openlinx.crawl.setting_rules import (
+    as_auth,
     as_headers,
     as_rate,
     as_robots_token,
@@ -70,6 +71,12 @@ class CrawlSettings(BaseModel):
         "repeat entries to send several headers. Sensitive values are hidden in records.",
         json_schema_extra={"secret": "header"},
     )
+    auth: str | None = Field(
+        None,
+        description="Preemptive Basic Auth user:password for Internal URLs and their robots.txt "
+        "only; exact UTF-8 without trimming or normalization. Empty disables authentication.",
+        json_schema_extra={"secret": "whole"},
+    )
     timeout: float = Field(
         20,
         strict=True,
@@ -132,6 +139,11 @@ class CrawlSettings(BaseModel):
     @classmethod
     def _is_a_user_agent(cls, user_agent: str | None) -> str | None:
         return None if user_agent is None else as_user_agent(user_agent)
+
+    @field_validator("auth")
+    @classmethod
+    def _is_auth(cls, auth: str | None) -> str | None:
+        return None if auth is None or auth == "" else as_auth(auth)
 
     @field_validator("robots_user_agent")
     @classmethod

@@ -64,9 +64,9 @@ def test_a_seed_with_userinfo_is_rejected_with_a_hint_about_auth(
 ) -> None:
     error = run_cli("crawl", "https://alice:s3cret@site.test/").stderr_json_lines()[-1]
 
-    assert (error["code"], "--auth" in error["hint"], "s3cret" in error["message"]) == (
+    assert (error["code"], error["hint"], "s3cret" in error["message"]) == (
         "invalid_url",
-        True,
+        "Give the URL without them; use --auth user:password to send credentials.",
         False,
     )
 

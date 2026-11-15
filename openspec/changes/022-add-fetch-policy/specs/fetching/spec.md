@@ -146,6 +146,33 @@ A Seed Redirect Chain Page and the robots requests made to check that Page SHALL
 
 **(v0.2)** `--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `openlinx.toml`. Recorded config and argv hide it as `***`, in both split and joined argv forms; diagnostics SHALL also hide credentials. Nonempty resolved `crawl.auth` together with a custom `Authorization` header, matched without case, SHALL be rejected with error code `invalid_value` and exit code 2 before any network access, regardless of whether either value came from flags or Workspace settings.
 
+A missing or empty `auth` SHALL disable Basic Auth. An explicit empty input SHALL override lower-priority auth. After source precedence is resolved, disabled auth SHALL be recorded as null in config; its supplied argv value SHALL remain redacted. Continuing a Crawl with disabled auth SHALL NOT require fresh auth. A nonempty value SHALL contain a colon and SHALL split at the first colon; either part MAY be empty and subsequent colons SHALL remain in the password. ASCII control characters (U+0000–U+001F and U+007F) and strings that cannot be strictly encoded as UTF-8 SHALL be rejected before writer or network access: `invalid_value` (exit 2) for flag/service input, `settings_invalid` (exit 3) for Workspace input. Validation diagnostics SHALL NOT quote credentials.
+
+The exact supplied `user:password` SHALL be encoded as UTF-8 and then Base64, without trimming or Unicode normalization. The client SHALL NOT negotiate a charset or retry with another encoding. Diagnostic masking SHALL derive the encoded secret forms from those same bytes when strict UTF-8 encoding succeeds; secret collection SHALL NOT propagate encoding errors or use empty strings as masking candidates. This policy may be incompatible with a server requiring a legacy encoding for non-ASCII credentials.
+
+#### Scenario: Non-ASCII credentials use exact UTF-8 bytes
+- **WHEN** a Crawl supplies each of the following `auth` values
+- **THEN** the Internal request has the literal Authorization value below
+
+| auth | Authorization |
+|---|---|
+| `test:123£` | `Basic dGVzdDoxMjPCow==` |
+| `алиса:пароль` | `Basic 0LDQu9C40YHQsDrQv9Cw0YDQvtC70Yw=` |
+| `test:päss` | `Basic dGVzdDpwYcyIc3M=` |
+| `alice:` | `Basic YWxpY2U6` |
+| `:s3cret` | `Basic OnMzY3JldA==` |
+| `:` | `Basic Og==` |
+
+The `test:päss` password contains U+0061 followed by U+0308; those characters SHALL NOT be replaced with U+00E4.
+
+#### Scenario: Malformed credentials are refused before network
+- **WHEN** nonempty auth lacks a colon, contains an ASCII control character, or cannot be strictly encoded as UTF-8
+- **THEN** flag/service input raises `invalid_value` (exit 2), Workspace input raises `settings_invalid` (exit 3), no writer or request opens, and the diagnostic does not quote the supplied value
+
+#### Scenario: Empty auth disables Basic Auth
+- **WHEN** resolved `crawl.auth` is empty
+- **THEN** no Basic Authorization value is generated, the auth/Authorization conflict rule does not reject a custom Authorization header, recorded config contains null for auth, and continuing requires no fresh auth
+
 #### Scenario: Credentials are sent to Internal URLs
 - **WHEN** `linx crawl http://site.test/ --auth "alice:s3cret"` runs
 - **THEN** the request for `http://site.test/` has `Authorization` = `Basic YWxpY2U6czNjcmV0`

@@ -178,6 +178,16 @@ def crawl(
         ),
         OptionMeta(setting="crawl.header"),
     ] = None,
+    auth: Annotated[
+        str | None,
+        typer.Option(
+            "--auth",
+            help="Preemptive Basic Auth user:password for Internal URLs and their robots.txt "
+            "only; exact UTF-8 without trimming or normalization. Empty disables authentication.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.auth"),
+    ] = None,
     timeout: Annotated[
         float,
         typer.Option(

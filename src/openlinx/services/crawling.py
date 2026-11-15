@@ -44,6 +44,7 @@ from openlinx.output.codes import (
     CRAWL_FILE_INVALID,
     INVALID_PATTERN,
     INVALID_URL,
+    INVALID_VALUE,
     OPTION_CONFLICT,
     SEED_OUT_OF_SCOPE,
     SUBFOLDER_IS_ROOT,
@@ -260,12 +261,20 @@ _PROXY_SECRETS: Mapping[str, SecretPolicy] = {f"environment.{key}": True for key
 def _fetch_policy(
     settings: CrawlSettings, proxies: ProxyVariables, *, custom_user_agent: bool
 ) -> FetchPolicy:
+    headers = as_headers(settings.header)
+    if settings.auth and any(name.lower() == "authorization" for name, _ in headers):
+        raise OpenLinxError(
+            INVALID_VALUE,
+            "Basic Auth conflicts with a custom Authorization header.",
+            hint="Use either crawl.auth or an Authorization entry in crawl.header.",
+        )
     return FetchPolicy(
         user_agent=settings.user_agent or DEFAULT_USER_AGENT,
         proxies=proxies,
         timeout_seconds=settings.timeout,
-        headers=as_headers(settings.header),
+        headers=headers,
         custom_user_agent=custom_user_agent,
+        auth=settings.auth,
     )
 
 
@@ -668,7 +677,7 @@ def _invalid_seed(text: str, reason: InvalidUrlReason) -> OpenLinxError:
         return OpenLinxError(
             INVALID_URL,
             "The Seed holds a user name or password, which a crawled URL must not hold.",
-            hint="Give the URL without them; --auth, planned for v0.2, will send credentials.",
+            hint="Give the URL without them; use --auth user:password to send credentials.",
             details=details,
         )
     return OpenLinxError(
