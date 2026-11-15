@@ -81,10 +81,21 @@ def _redact_spans(text: str, spans: list[tuple[int, int]]) -> str:
 def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy]) -> SecretValues:
     """From the config that the recorded one redacts, so both hide the same secrets."""
     found: set[str] = set()
-    for setting in settings:
+    for setting, policy in settings.items():
         table, _, key = setting.partition(".")
         value = config.get(table, {}).get(key)
-        if isinstance(value, str) and value:
+        if policy == "header":
+            entries = value if isinstance(value, list) else [value]
+            for entry in entries:
+                if not isinstance(entry, str):
+                    continue
+                name, colon, content = entry.partition(":")
+                if colon and not _sensitive_header(name):
+                    continue
+                secret = content.strip(" \t") if colon else entry
+                if secret:
+                    found.add(secret)
+        elif isinstance(value, str) and value:
             found.add(value)
             # A URL's password may be quoted without the rest of the URL.
             password = _password(value)
@@ -136,6 +147,13 @@ def _redact_setting(value: Any, policy: SecretPolicy) -> Any:
     return _redact_value(value, policy) if isinstance(value, str) else REDACTED
 
 
+def _sensitive_header(name: str) -> bool:
+    lowered = name.casefold()
+    return lowered == "cookie" or any(
+        part in lowered for part in ("auth", "token", "secret", "key", "password")
+    )
+
+
 def _redact_value(value: str, policy: SecretPolicy) -> str:
     if policy is False:
         return value
@@ -145,11 +163,7 @@ def _redact_value(value: str, policy: SecretPolicy) -> str:
         name, colon, _ = value.partition(":")
         if not colon:
             return REDACTED
-        lowered = name.casefold()
-        sensitive = lowered == "cookie" or any(
-            part in lowered for part in ("auth", "token", "secret", "key", "password")
-        )
-        return f"{name}: {REDACTED}" if sensitive else value
+        return f"{name}: {REDACTED}" if _sensitive_header(name) else value
     try:
         parts = urlsplit(value)
         password = parts.password

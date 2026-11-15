@@ -1520,6 +1520,61 @@ def _raise_extractor_text(tree: LexborHTMLParser, page: PageInput, config: Failu
     return Found(page.url)
 
 
+@pytest.mark.parametrize(
+    ("header", "message", "expected"),
+    [
+        ("X-Token: abc123", "refused abc123; staging", "refused ***; staging"),
+        ("cOoKiE: sid=abc123", "refused sid=abc123; staging", "refused ***; staging"),
+        (
+            "aUtHoRiZaTiOn: Bearer abc123",
+            "refused Bearer abc123; staging",
+            "refused ***; staging",
+        ),
+        ("X-Secret: abc123", "refused abc123; staging", "refused ***; staging"),
+        ("X-Api-Key: abc123", "refused abc123; staging", "refused ***; staging"),
+        ("X-Password: abc123", "refused abc123; staging", "refused ***; staging"),
+        ("x-ToKeN:\t abc123 \t", "refused abc123; staging", "refused ***; staging"),
+        ("X-Env: abc123", "refused abc123; staging", "refused abc123; staging"),
+        ("X-Token:\t ", "nothing supplied; staging", "nothing supplied; staging"),
+    ],
+    ids=["token", "cookie", "auth", "secret", "key", "password", "ows", "harmless", "empty"],
+)
+def test_sensitive_header_values_are_absent_from_failure_diagnostics(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    header: str,
+    message: str,
+    expected: str,
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = Hooks(
+        handlers=(
+            handler(
+                "api",
+                partial(_raise_handler_text, message),
+                _write_seen,
+            ),
+        )
+    )
+    reporter = Collected()
+
+    result = crawl_result(
+        server.url("/"),
+        hooks,
+        reporter=reporter,
+        header=["X-Env: staging", header, "X-Env: audit"],
+        retries=0,
+    )
+
+    assert (
+        [warning.details["error"] for warning in reporter.warnings],
+        [
+            warning["details"]["error"]
+            for warning in json.loads(crawl_row(result.crawl_file)["warnings"])
+        ],
+    ) == ([expected], [expected])
+
+
 @pytest.mark.parametrize("hook", ["handler", "extractor"])
 @pytest.mark.parametrize(
     ("token", "message", "expected"),

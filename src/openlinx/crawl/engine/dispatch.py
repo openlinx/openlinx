@@ -66,6 +66,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         retries=context.settings.retries,
         watchdog_seconds=watchdog_seconds(context.fetch_policy.timeout_seconds),
         stop=context.stop,
+        secrets=context.secrets,
     )
     redispatch = Redispatch()
     robots = RobotsLoader(

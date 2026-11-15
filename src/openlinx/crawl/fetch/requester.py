@@ -4,7 +4,7 @@ import asyncio
 from collections import deque
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Protocol
@@ -16,6 +16,7 @@ from openlinx.crawl.fetch.pause_gate import PauseGate
 from openlinx.crawl.fetch.politeness import RateGate, RequestLimits
 from openlinx.crawl.urls import NormalizedUrl, host_key
 from openlinx.store.records import FetchError
+from openlinx.store.redaction import SecretValues
 
 # DNS, TLS and protocol errors are the name's or server's answer; the watchdog has already
 # waited past --timeout. Only transient failures are retried (022-add-fetch-policy D4).
@@ -105,6 +106,7 @@ class Requester:
         retries: int,
         watchdog_seconds: float,
         stop: Stops,
+        secrets: SecretValues,
     ) -> None:
         self._fetcher = fetcher
         self._limits = limits
@@ -119,6 +121,7 @@ class Requester:
         self._requests = asyncio.Semaphore(cap)
         self._retries = retries
         self._pause_gate = PauseGate()
+        self._secrets = secrets
 
     def close_gate(self) -> None:
         self._pause_gate.close()
@@ -292,7 +295,11 @@ class Requester:
             self._fetcher.fetch(request), self._clock.sleep(self._watchdog_seconds)
         )
         if not fetch.cancelled():
-            return fetch.result()
+            outcome = fetch.result()
+            # Both URL and robots consumers may retain or quote the transport's error text.
+            if isinstance(outcome, FetchFailure):
+                return replace(outcome, message=self._secrets.redact(outcome.message))
+            return outcome
         return FetchFailure(
             fetch_error="watchdog",
             message=f"No response within {self._watchdog_seconds:g} seconds",

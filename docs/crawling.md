@@ -446,6 +446,10 @@ only their names and `***` values. For example, the list above records
 `["X-Env: staging", "X-Token: ***"]`. `linx commands` describes `--header` as repeatable,
 with `setting` = `crawl.header` and boolean `secret` = `true`.
 
+The same sensitive values are replaced by `***` when hook or transport errors quote them;
+harmless values remain visible. This applies to emitted diagnostics, stored warnings, and
+the failure messages in `urls.fetch_error_message` and `origins.robots_fetch_error_message`.
+
 ### Cookies
 
 The Crawl stores no session cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. An explicit Internal-only `Cookie` custom header can supply a cookie. A site that needs a session cookie otherwise shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
