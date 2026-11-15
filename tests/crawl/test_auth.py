@@ -9,8 +9,9 @@ from aiohttp.abc import AbstractResolver, ResolveResult
 
 from openlinx.naming import SETTINGS_FILE_NAME
 from openlinx.output.diagnostics import OpenLinxError
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Redirect, Site
 from tests.support.cli import run_cli
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
@@ -67,6 +68,146 @@ def _assert_internal_auth(fixture_site: StartSite, auth: str, authorization: str
     row = crawl_row(file)
     assert json.loads(row["config"])["crawl"]["auth"] == "***"
     assert json.loads(row["command_argv"])[-2:] == ["--auth", "***"]
+
+
+@pytest.mark.parametrize("custom_authorization", [False, True], ids=["basic-auth", "custom-auth"])
+def test_credentials_never_go_to_external_urls(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts, custom_authorization: bool
+) -> None:
+    hosts = fixture_hosts(
+        Site({"/": Page(body='<a href="http://other.test/page">Other</a>')}),
+        Site({"/page": Page(body="Other")}),
+    )
+    headers = ["X-Env: staging", "X-Token: abc123", "x-env: audit"]
+    if custom_authorization:
+        headers.append("aUtHoRiZaTiOn: Bearer token123")
+
+    result = crawl_result(
+        "http://site.test/",
+        resolver=hosts.resolver,
+        auth=None if custom_authorization else "alice:s3cret",
+        header=headers,
+    )
+
+    assert result.summary.state == "completed"
+    assert [
+        (
+            request.path,
+            request.headers.getall("Authorization", []),
+            request.headers.getall("X-Env", []),
+            request.headers.getall("X-Token", []),
+        )
+        for request in hosts.site.requests
+        if request.path != "/robots.txt"
+    ] == [
+        (
+            "/",
+            ["Bearer token123"] if custom_authorization else ["Basic YWxpY2U6czNjcmV0"],
+            ["staging", "audit"],
+            ["abc123"],
+        )
+    ]
+    assert [
+        (
+            request.path,
+            request.headers.getall("Authorization", []),
+            request.headers.getall("X-Env", []),
+            request.headers.getall("X-Token", []),
+        )
+        for request in hosts.other.requests
+        if request.path != "/robots.txt"
+    ] == [("/page", [], [], [])]
+    assert query(
+        result.crawl_file,
+        "SELECT url, is_internal, status_code, fetch_state FROM urls ORDER BY url",
+    ) == [
+        ("http://other.test/page", 0, 200, "fetched"),
+        ("http://site.test/", 1, 200, "fetched"),
+    ]
+
+
+@pytest.mark.parametrize("redirect_source", ["seed", "ordinary"])
+@pytest.mark.parametrize("custom_authorization", [False, True], ids=["basic-auth", "custom-auth"])
+def test_an_external_url_redirect_never_inherits_credentials(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    redirect_source: str,
+    custom_authorization: bool,
+) -> None:
+    site = (
+        Site({"/": Redirect("http://other.test/page", status=302)})
+        if redirect_source == "seed"
+        else Site(
+            {
+                "/": Page(body='<a href="/jump">Jump</a>'),
+                "/jump": Redirect("http://other.test/page", status=302),
+            }
+        )
+    )
+    hosts = fixture_hosts(site, Site({"/page": Page(body="Other")}))
+    headers = ["X-Env: staging", "X-Token: abc123", "x-env: audit"]
+    if custom_authorization:
+        headers.append("aUtHoRiZaTiOn: Bearer token123")
+
+    result = crawl_result(
+        "http://site.test/",
+        resolver=hosts.resolver,
+        auth=None if custom_authorization else "alice:s3cret",
+        header=headers,
+    )
+
+    assert result.summary.state == "completed"
+    assert [
+        (
+            request.path,
+            request.headers.getall("Authorization", []),
+            request.headers.getall("X-Env", []),
+            request.headers.getall("X-Token", []),
+        )
+        for request in hosts.site.requests
+        if request.path != "/robots.txt"
+    ] == [
+        (
+            path,
+            ["Bearer token123"] if custom_authorization else ["Basic YWxpY2U6czNjcmV0"],
+            ["staging", "audit"],
+            ["abc123"],
+        )
+        for path in (["/"] if redirect_source == "seed" else ["/", "/jump"])
+    ]
+    assert [
+        (
+            request.path,
+            request.headers.getall("Authorization", []),
+            request.headers.getall("X-Env", []),
+            request.headers.getall("X-Token", []),
+        )
+        for request in hosts.other.requests
+        if request.path != "/robots.txt"
+    ] == [("/page", [], [], [])]
+    expected_urls = [
+        ("http://other.test/page", 0, 200, "fetched"),
+        ("http://site.test/", 1, 302 if redirect_source == "seed" else 200, "fetched"),
+    ]
+    if redirect_source == "ordinary":
+        expected_urls.append(("http://site.test/jump", 1, 302, "fetched"))
+    assert (
+        query(
+            result.crawl_file,
+            "SELECT url, is_internal, status_code, fetch_state FROM urls ORDER BY url",
+        )
+        == expected_urls
+    )
+    assert query(
+        result.crawl_file,
+        "SELECT source.url, target.url FROM urls AS source "
+        "JOIN urls AS target ON source.redirect_url_id = target.id",
+    ) == [
+        (
+            "http://site.test/" if redirect_source == "seed" else "http://site.test/jump",
+            "http://other.test/page",
+        )
+    ]
 
 
 @pytest.mark.parametrize("source", ["flags", "settings", "service"])
