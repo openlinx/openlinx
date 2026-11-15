@@ -70,6 +70,64 @@ def _assert_internal_auth(fixture_site: StartSite, auth: str, authorization: str
     assert json.loads(row["command_argv"])[-2:] == ["--auth", "***"]
 
 
+@pytest.mark.parametrize("joined", [False, True], ids=["split", "joined"])
+@pytest.mark.parametrize(
+    "auth", ["alice:s3cret", "https://alice:s3cret@site.test"], ids=["plain", "url-shaped"]
+)
+def test_the_recorded_command_hides_the_password(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, auth: str, joined: bool
+) -> None:
+    server = fixture_site(Site({"/": Page(body="Home")}))
+    flags = [f"--auth={auth}"] if joined else ["--auth", auth]
+
+    result = run_cli(
+        "crawl",
+        server.url("/"),
+        "--header",
+        "X-Env: staging",
+        *flags,
+        "--header=x-env: audit",
+        "--retries=0",
+    )
+
+    assert result.exit_code == 0, result.stderr
+    file = Path(result.json()["crawl_file"])
+    row = crawl_row(file)
+    assert json.loads(row["command_argv"]) == (
+        [
+            "linx",
+            "crawl",
+            server.url("/"),
+            "--header",
+            "X-Env: staging",
+            "--auth=***",
+            "--header=x-env: audit",
+            "--retries=0",
+        ]
+        if joined
+        else [
+            "linx",
+            "crawl",
+            server.url("/"),
+            "--header",
+            "X-Env: staging",
+            "--auth",
+            "***",
+            "--header=x-env: audit",
+            "--retries=0",
+        ]
+    )
+    config = json.loads(row["config"])["crawl"]
+    assert config["auth"] == "***"
+    assert config["header"] == ["X-Env: staging", "x-env: audit"]
+    assert config["retries"] == 0
+    assert query(file, "SELECT fetch_state, status_code FROM urls") == [("fetched", 200)]
+    assert [(request.path, request.headers.getall("X-Env", [])) for request in server.requests] == [
+        ("/robots.txt", ["staging", "audit"]),
+        ("/", ["staging", "audit"]),
+    ]
+
+
 def test_internal_robots_requests_carry_credentials(
     temp_workspace: TempWorkspace, fixture_hosts: StartHosts
 ) -> None:
@@ -94,6 +152,37 @@ def test_internal_robots_requests_carry_credentials(
         ["http://site.test/"],
     ) == [(1, "fetched", 200)]
     assert hosts.other.requests == ()
+
+
+def test_credentials_in_openlinx_toml_are_used(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site({"/": Page(body="Home")}))
+    (temp_workspace.root / SETTINGS_FILE_NAME).write_text(
+        '[crawl]\nauth = "alice:s3cret"\nheader = ["X-Env: staging", "x-env: audit"]\n',
+        encoding="utf-8",
+    )
+
+    result = run_cli("crawl", server.url("/"), "--retries=0")
+
+    assert result.exit_code == 0, result.stderr
+    assert [
+        (request.path, request.headers.getall("Authorization", [])) for request in server.requests
+    ] == [
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/", ["Basic YWxpY2U6czNjcmV0"]),
+    ]
+    assert [(request.path, request.headers.getall("X-Env", [])) for request in server.requests] == [
+        ("/robots.txt", ["staging", "audit"]),
+        ("/", ["staging", "audit"]),
+    ]
+    file = Path(result.json()["crawl_file"])
+    row = crawl_row(file)
+    config = json.loads(row["config"])["crawl"]
+    assert config["auth"] == "***"
+    assert config["header"] == ["X-Env: staging", "x-env: audit"]
+    assert json.loads(row["command_argv"]) == ["linx", "crawl", server.url("/"), "--retries=0"]
+    assert query(file, "SELECT fetch_state, status_code FROM urls") == [("fetched", 200)]
 
 
 def test_a_robots_redirect_drops_credentials_at_an_external_hop(
@@ -272,6 +361,29 @@ def test_an_external_url_redirect_never_inherits_credentials(
             "http://other.test/page",
         )
     ]
+
+
+@pytest.mark.parametrize("auth_source", ["flags", "settings"])
+def test_authentication_conflicts_across_settings_sources(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, auth_source: str
+) -> None:
+    server = fixture_site(Site({"/": Page(body="Home")}))
+    if auth_source == "flags":
+        settings = '[crawl]\nheader = ["X-Env: staging", "aUtHoRiZaTiOn: Bearer abc123"]\n'
+        flags = ["--auth", "alice:s3cret"]
+    else:
+        settings = '[crawl]\nauth = "alice:s3cret"\nheader = ["X-Env: staging"]\n'
+        flags = ["--header", "aUtHoRiZaTiOn: Bearer abc123"]
+    (temp_workspace.root / SETTINGS_FILE_NAME).write_text(settings, encoding="utf-8")
+
+    result = run_cli("crawl", server.url("/"), *flags)
+
+    assert (result.exit_code, [error["code"] for error in result.errors()]) == (
+        2,
+        ["invalid_value"],
+    )
+    assert server.requests == ()
+    assert list(temp_workspace.home.rglob("*.sqlite")) == []
 
 
 @pytest.mark.parametrize("source", ["flags", "settings", "service"])
