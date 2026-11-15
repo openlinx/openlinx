@@ -296,12 +296,32 @@ def test_accept_encoding_overrides_survive_robots_and_page_retries(
         )
     )
 
-    crawl_file = crawled(server.url("/"), "--header", "Accept-Encoding: identity", "--retries", "1")
+    crawl_file = crawled(
+        server.url("/"),
+        "--header",
+        "Accept-Encoding: identity",
+        "--header",
+        "X-Env: staging",
+        "--header",
+        "X-Token: abc123",
+        "--header",
+        "x-env: audit",
+        "--retries",
+        "1",
+    )
 
-    assert [(r.path, r.headers.getall("Accept-Encoding", [])) for r in server.requests] == [
-        ("/robots.txt", ["identity"]),
-        ("/robots.txt", ["identity"]),
-        ("/", ["identity"]),
-        ("/", ["identity"]),
+    assert [
+        (
+            r.path,
+            r.headers.getall("Accept-Encoding", []),
+            r.headers.getall("X-Env", []),
+            r.headers.getall("X-Token", []),
+        )
+        for r in server.requests
+    ] == [
+        ("/robots.txt", ["identity"], ["staging", "audit"], ["abc123"]),
+        ("/robots.txt", ["identity"], ["staging", "audit"], ["abc123"]),
+        ("/", ["identity"], ["staging", "audit"], ["abc123"]),
+        ("/", ["identity"], ["staging", "audit"], ["abc123"]),
     ]
     assert query(crawl_file, "SELECT fetch_state, attempt_count FROM urls") == [("fetched", 2)]

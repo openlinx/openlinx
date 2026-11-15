@@ -5,13 +5,15 @@ from pathlib import Path
 
 import pytest
 
+from openlinx.clock import SystemClock
 from openlinx.naming import SETTINGS_FILE_NAME
+from openlinx.output.reporter import Collected
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Redirect, Robots, Site
+from tests.fixture_site.routes import Page, Redirect, Responses, Robots, Site
 from tests.support.cli import run_cli
 from tests.support.crawling import crawl_result
-from tests.support.crawls import crawl_row
+from tests.support.crawls import crawl_row, query
 from tests.support.workspace import TempWorkspace
 
 
@@ -161,6 +163,56 @@ def test_a_robots_redirect_drops_internal_headers_at_an_external_hop(
         (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
         for request in hosts.other.requests
     ] == [("/robots.txt", [], [])]
+
+
+@pytest.mark.slow
+def test_the_seed_outage_probe_keeps_custom_headers(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/robots.txt": Responses(
+                    (Robots("", hang=True), Robots("User-agent: *\nDisallow:\n"))
+                ),
+                "/": Page(body="Home"),
+            }
+        ),
+        Site({}),
+    )
+    reporter = Collected()
+
+    result = crawl_result(
+        "http://site.test/",
+        resolver=hosts.resolver,
+        reporter=reporter,
+        clock=SystemClock(),
+        timeout=1,
+        retries=0,
+        network_wait=30,
+        header=["X-Env: staging", "X-Token: abc123", "x-env: audit"],
+    )
+
+    assert result.summary.state == "completed"
+    assert [
+        (name, data.get("reason"), data.get("outcome"))
+        for name, data in reporter.events
+        if name in ("crawl_paused", "crawl_resumed")
+    ] == [("crawl_paused", "timeout", None), ("crawl_resumed", None, "outage")]
+    # robots.txt blocks the ordinary Seed request, so the first / is the outage probe.
+    assert [
+        (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["staging", "audit"], ["abc123"]),
+        ("/", ["staging", "audit"], ["abc123"]),
+        ("/robots.txt", ["staging", "audit"], ["abc123"]),
+        ("/", ["staging", "audit"], ["abc123"]),
+    ]
+    assert query(result.crawl_file, "SELECT url, fetch_state, attempt_count FROM urls") == [
+        ("http://site.test/", "fetched", 1)
+    ]
+    assert hosts.other.requests == ()
 
 
 @pytest.mark.parametrize(

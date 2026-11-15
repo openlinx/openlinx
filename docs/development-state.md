@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | Local branch through task 11.4 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides and External/robots header guards implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | Local branch through task 11.5 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides and per-request header guards implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -90,8 +90,12 @@ Command adapter belongs to 060; Page capability population belongs to 030.
 Tasks 11.3–11.4 add wire guards for External Links, Seed redirects, Internal robots
 and robots redirects to External URLs. The guards preserve ordered repeated custom
 headers and were proven with failing mutations; no runtime change was needed.
+Task 11.5 extends those guards to Checked Internal URLs outside the Seed's folder,
+robots and Page retries, and the Seed outage probe. Literal wire logs and stored
+Scope/attempt fields prove the requests' roles; pause/resume events distinguish the
+probe from the ordinary Seed request. Each path was proven with a failing mutation.
 Confirm the actual branch, task marks and checks before continuing.
-Continue with 11.5–11.7's per-hop guards and header diagnostics,
+Continue with 11.6–11.7's header input guards and diagnostics,
 then Basic Auth and fresh-secret continue inputs (11.8–11.14), group review, explicit
 proxy, offered HTTP capability and bounded zstd. Keep 060 frozen at task 0.6.
 
