@@ -45,7 +45,12 @@ A short map for contributors and coding agents. Terms follow [CONTEXT.md](../CON
 
 ## Settings
 
-Settings come only from a Command's flag, then the Workspace's `openlinx.toml`, then the default. Each change registers its own tables:
+Explicit settings take priority over implicit or default values. Among explicit inputs,
+a Command's flag wins over the Workspace's `openlinx.toml`. An omitted flag contributes
+no override. A supplied value remains explicit even when it equals the default;
+determine presence from the input source, not by comparing values. When two inputs
+control the same behaviour, their owning contract defines the tie-breaker within a
+source. Each change registers its own tables:
 - **Ownership:** one table has one owning change, the one that registers it. A later change adds fields to that table's model and never registers a second table for the same concern.
 - **Lazy references:** a table is registered in `default_tables()` of `openlinx.services.settings` by its `"module:Class"` reference, `build_app` adding only the `AppExtra` tables, and imported only when settings load or the template is written, so `--help` loads no table and no pydantic.
 - **Table rules,** checked by a test on every registered table, because the commented template and the error hints rely on them:

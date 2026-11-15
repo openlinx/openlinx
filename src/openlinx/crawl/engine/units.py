@@ -129,7 +129,9 @@ async def _recorded(
             skipped, record_skipped(_skipped_record(skipped, skip_reason, rows)), failed_handlers
         )
     attempted = await run.requester.request_url(
-        queued.url, run.pause.attempts_of(queued, internal=decision.is_internal)
+        queued.url,
+        run.pause.attempts_of(queued, internal=decision.is_internal),
+        is_internal=decision.is_internal,
     )
     if isinstance(attempted, NotStarted) or not run.pause.update_from_request(
         queued, attempted, internal=decision.is_internal

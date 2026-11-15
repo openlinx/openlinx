@@ -1,0 +1,15 @@
+{
+  "name": "--header",
+  "short": null,
+  "type": "string",
+  "choices": null,
+  "default": [],
+  "min": null,
+  "max": null,
+  "required": false,
+  "multiple": true,
+  "global": false,
+  "setting": "crawl.header",
+  "secret": true,
+  "description": "A Name: Value header sent only to Internal URLs and their robots.txt. Repeat for several headers; sensitive values are hidden in records."
+}

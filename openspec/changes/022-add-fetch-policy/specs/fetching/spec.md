@@ -16,7 +16,7 @@ Scenario conventions:
 ## ADDED Requirements
 
 ### Requirement: User agent
-Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` by default, where `<version>` is the tool's version and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` (setting `crawl.user_agent`) SHALL replace it on every request. A value that is empty or only spaces, or holds a character other than visible ASCII, space and tab (RFC 9110's VCHAR, SP and HTAB), SHALL be rejected with exit code 2 and error code `invalid_value`.
+Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` by default, where `<version>` is the tool's version and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` (setting `crawl.user_agent`) SHALL supply its global replacement. From v0.2, an Internal request's custom `User-Agent` SHALL participate in the source precedence below. A value that is empty or only spaces, or holds a character other than visible ASCII, space and tab (RFC 9110's VCHAR, SP and HTAB), SHALL be rejected with exit code 2 and error code `invalid_value` when given by a flag or service input, or `settings_invalid` (exit 3) when given in Workspace settings. The same value validation SHALL apply to a custom `User-Agent`.
 
 #### Scenario: The default user agent identifies the tool
 - **WHEN** `linx crawl {site}/` runs
@@ -35,9 +35,7 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLi
 
 **(v0.2)** `--header "Name: Value"` SHALL add a request header. It SHALL be accepted more than once, and its setting `crawl.header` SHALL be a list of `Name: Value` strings. A value without `:` SHALL be rejected with exit code 2 and error code `invalid_value`. Custom headers SHALL be sent only with requests for Internal URLs and their robots.txt, never with requests for External URLs.
 
-`--header` and `crawl.header` SHALL be declared a header secret while their public secret indicator remains boolean `true`. Recorded config and argv SHALL keep header names, repetitions, harmless values and order, replacing only sensitive values with `***`: `Cookie` and every name containing `auth`, `token`, `secret`, `key` or `password`, matched without case. Both split and `--header=value` argv forms SHALL be redacted. Diagnostics and stored failure messages SHALL NOT reveal sensitive header values.
-
-Internal identity SHALL be decided for each attempt and each redirect hop, including robots.txt redirects, retries and outage probes. A checked Internal URL outside a Seed folder SHALL still receive it. No origin identity header SHALL be copied into a proxy CONNECT request.
+Header input SHALL split at the first `:`; `Name:Value` and `Name: Value` SHALL both be accepted. Names SHALL be nonempty HTTP tokens, compared without case. Values SHALL reject CR, LF and other characters outside visible ASCII, space and tab before dispatch. Invalid flag/service values SHALL raise `invalid_value` (exit 2); invalid Workspace values SHALL raise `settings_invalid` (exit 3). The effective custom list SHALL contain at most one `User-Agent` entry, even when entries have equal values or a dedicated input would override them; duplicates SHALL be rejected before network access with the same source-specific error. Other accepted repeated custom entries SHALL retain their order and repetitions; no generic comma-joining or last-entry-wins rule SHALL be applied. Repeated `Accept-Encoding` lines have list semantics as specified under Compression. There SHALL be no managed-header denylist that rejects `User-Agent` or `Accept-Encoding` merely by name.
 
 #### Scenario: A custom header is sent to Internal URLs
 - **WHEN** `linx crawl {site}/ --header "X-Env: staging"` runs
@@ -50,6 +48,66 @@ Internal identity SHALL be decided for each attempt and each redirect hop, inclu
 #### Scenario: A malformed header is rejected
 - **WHEN** `linx crawl {site}/ --header "NoColon"` runs
 - **THEN** the Command exits with code 2 and its only stderr error has `code` = `invalid_value`
+
+### Requirement: Request header precedence
+**In short:** explicit source priority chooses one User-Agent per request without widening custom headers beyond Internal URLs.
+
+**(v0.2)** Every attempt and redirect hop SHALL resolve its final headers from applicable inputs before transport dispatch. An explicitly supplied input SHALL take priority over an implicit/generated default. Among explicit inputs, CLI inputs (or the service's explicit flag-equivalent inputs) SHALL take priority over Workspace inputs; within the same source level, a dedicated input SHALL take priority over a generic header for the same field. An absent CLI option or its parser default SHALL NOT override an explicit Workspace input. Explicitness SHALL follow input presence, not inequality with the default value. These precedence rules SHALL NOT bypass the separately specified auth/Authorization conflict rejection or widen an input's request scope. A CLI `--header` list SHALL replace the entire Workspace `crawl.header` list, not merge individual names into it. Repeated entries in the selected list SHALL preserve their order.
+
+For `User-Agent`, both the selected custom entry and the dedicated `user_agent` input SHALL contribute candidates with their original source priority. At the same source level an explicitly supplied, non-null dedicated `user_agent` SHALL win. An absent/null dedicated setting or its generated default SHALL NOT have that tie-breaking priority. A lower-priority candidate SHALL NOT survive as an additional User-Agent field. The dedicated input applies globally; the custom candidate applies only to Internal URLs. CLI argument order SHALL NOT affect the winner. An explicit dedicated value equal to the generated default is still explicit. Transport defaults SHALL NOT change these outcomes.
+
+#### Scenario: User-Agent sources and scopes have literal outcomes
+- **GIVEN** tool version `0.1.0.dev0`, whose default is `OpenLinx/0.1.0.dev0 (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, denoted `D` below, and `http://site.test/` links to `http://other.test/page`
+- **WHEN** a separate Crawl runs for each row with the listed `[crawl]` entries and CLI suffix
+- **THEN** every Internal request, including robots.txt, has the Internal value, every External request has the External value, and each has exactly one User-Agent field
+
+| Workspace entries | CLI suffix | Internal | External |
+|---|---|---|---|
+| none | none | `D` | `D` |
+| none | `--header "User-Agent: Header/1"` | `Header/1` | `D` |
+| `header = ["User-Agent: FileHeader/1"]` | none | `FileHeader/1` | `D` |
+| `user_agent = "File/1"` | none | `File/1` | `File/1` |
+| none | `--user-agent Cli/1` | `Cli/1` | `Cli/1` |
+| `user_agent = "File/1"; header = ["User-Agent: FileHeader/1"]` | none | `File/1` | `File/1` |
+| `user_agent = "File/1"` | `--header "uSeR-aGeNt: Header/1"` | `Header/1` | `File/1` |
+| `header = ["User-Agent: FileHeader/1"]` | `--user-agent Cli/1` | `Cli/1` | `Cli/1` |
+| none | `--user-agent Cli/1 --header "User-Agent: Header/1"` | `Cli/1` | `Cli/1` |
+| none | `--header "User-Agent: Header/1" --user-agent Cli/1` | `Cli/1` | `Cli/1` |
+| `user_agent = "File/1"; header = ["User-Agent: FileHeader/1"]` | `--header "User-Agent: Header/1"` | `Header/1` | `File/1` |
+| none | `--header "User-Agent: Header/1" --user-agent "OpenLinx/0.1.0.dev0 (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)"` | `D` | `D` |
+
+Semicolons in the Workspace column separate TOML lines, not literal TOML syntax. `D` is the full literal above, not an implementation-derived expectation; another tested tool version substitutes its independently specified version literal.
+
+#### Scenario: CLI headers replace the Workspace list
+- **GIVEN** `[crawl] header = ["User-Agent: FileHeader/1", "X-Env: file"]`
+- **WHEN** a Crawl uses `--header "X-Env: cli" --header "x-env: audit"`
+- **THEN** Internal requests contain both X-Env values in order `cli`, `audit`, no `file` value, and the default User-Agent; External requests have no X-Env
+
+#### Scenario: Duplicate custom User-Agent fields are refused
+- **WHEN** a Crawl uses `--header "User-Agent: One/1" --header "user-agent: Two/1" --user-agent Dedicated/1`, or the two custom values are both `One/1`
+- **THEN** it exits with code 2 and `invalid_value` before any request
+
+#### Scenario: Duplicate Workspace User-Agent fields are refused
+- **WHEN** `[crawl] header` is `["User-Agent: One/1", "USER-AGENT: Two/1"]` and no CLI header list replaces it
+- **THEN** the Crawl exits with code 3 and `settings_invalid` before any request
+
+### Requirement: Custom header recording and per-hop identity
+**In short:** recording retains the selected custom inputs while each hop applies its own Internal decision.
+
+`--header` and `crawl.header` SHALL be declared a header secret while their public secret indicator remains boolean `true`. Recorded config and argv SHALL keep header names, repetitions, harmless values and order, replacing only sensitive values with `***`: `Cookie` and every name containing `auth`, `token`, `secret`, `key` or `password`, matched without case. Both split and `--header=value` argv forms SHALL be redacted. Diagnostics and stored failure messages SHALL NOT reveal sensitive header values.
+
+A custom User-Agent overridden by the dedicated input SHALL remain in the recorded header list as supplied; precedence SHALL NOT delete or rewrite harmless input. Recording the selected inputs SHALL NOT be treated as sufficient evidence of their original source priority on continue.
+
+Every new Crawl SHALL record the object `request_policy` at the root of `crawl.config`, with boolean `custom_user_agent`: `true` when the selected generic User-Agent wins on Internal requests, otherwise `false`. It SHALL NOT alter `crawl.user_agent` or the selected `crawl.header` list. This is service-owned recorded metadata, not a public setting. A continued Crawl SHALL retain it on every subsequent recording.
+
+Internal identity SHALL be decided for each attempt and each redirect hop, including robots.txt redirects, retries and outage probes. A checked Internal URL outside a Seed folder SHALL still receive it. No origin identity header SHALL be copied into a proxy CONNECT request.
+
+A Seed Redirect Chain Page and the robots requests made to check that Page SHALL use the same current provisional or final Scope context. Each robots redirect target SHALL be classified anew in that context, without inheriting a source boolean. Requests after the Seed chain settles SHALL use final Scope only.
+
+#### Scenario: Provisional Seed identity agrees between a Page and its robots
+- **GIVEN** the Seed `http://www.site.test/` redirects to `http://site.test/`, whose `/robots.txt` redirects to `http://other.test/robots.txt`, and the Crawl uses `--header "X-Env: staging"`
+- **WHEN** the apex Page is dispatched using the Seed chain's provisional Internal decision, before its response settles Scope
+- **THEN** both `http://site.test/robots.txt` and `http://site.test/` receive `X-Env: staging`, but `http://other.test/robots.txt` receives no X-Env; later ordinary requests use the settled Scope
 
 #### Scenario: A cookie header keeps its name and hides its value
 - **WHEN** `linx crawl {site}/ --header "Cookie: session=abc123"` ends
@@ -130,6 +188,45 @@ Internal identity SHALL be decided for each attempt and each redirect hop, inclu
 A continue SHALL NOT send recorded redaction markers as credentials. Required auth, sensitive header values and explicit proxy credentials SHALL be supplied afresh by the caller, or the continue SHALL refuse with `secrets_required` (exit 2) and a hint naming the required flag or Workspace setting, before opening a writer or network connection. Harmless stored header entries, their order, and all unrelated recorded non-secret settings SHALL remain unchanged. Fresh headers SHALL replace the matching sensitive name and occurrence. Resolved auth/header conflicts SHALL use the same validation as a new Crawl. Current process proxy variables SHALL be read again and SHALL NOT cause `secrets_required`.
 
 This contract applies to the existing continue service; the resume Command's flag/provenance and Workspace reread adapter is specified by crawl control.
+
+A continue SHALL preserve the selected Internal and External header policy and explicit literal values, including the cross-source User-Agent winner and the distinction between explicit and default dedicated inputs. A null dedicated User-Agent SHALL still generate the running tool's default; its expanded bytes need not remain identical across tool versions. The default Accept-Encoding likewise follows supported decoder capabilities, while an explicit custom value remains literal. Fresh secrets SHALL NOT acquire a higher priority for unrelated harmless headers. Current Workspace values and resumed argument order SHALL NOT recompute the original harmless precedence. The stored custom list SHALL retain overridden harmless entries, case, order and repetitions; preserving the winner SHALL NOT be implemented by deleting those entries.
+
+At continue service entry, including direct callers, recorded `request_policy` SHALL be validated before opening any writer or network connection. It SHALL be an object with an actual JSON boolean `custom_user_agent`; missing metadata, a non-object, or a missing/non-boolean member SHALL produce `crawl_file_invalid` (exit 6) with `details.file`. A true value SHALL require exactly one valid custom User-Agent entry. No inference from argv, current Workspace inputs or unsupported pre-release files SHALL replace missing metadata.
+
+#### Scenario: The initial Crawl records the selected User-Agent winner
+- **WHEN** a Crawl starts with Workspace `user_agent = "File/1"` and CLI `--header "User-Agent: Header/1"`
+- **THEN** `crawl.config.request_policy` is `{"custom_user_agent": true}`, `crawl.config.crawl.user_agent` is `File/1`, and `crawl.config.crawl.header` is `["User-Agent: Header/1"]`
+- **AND** an otherwise identical Crawl using CLI `--user-agent File/1` records `{"custom_user_agent": false}` while retaining the same settings values; a Crawl with neither input also records `{"custom_user_agent": false}`
+
+#### Scenario: A direct continue refuses invalid request policy metadata
+- **WHEN** the continue service directly receives a Crawl whose request_policy is missing, null, `[]`, or `"false"`, or whose custom_user_agent member is missing, `0`, `1`, `"false"` or null
+- **THEN** it raises `crawl_file_invalid` with exit 6 and `details.file` before any writer or network connection opens
+- **AND** `{"custom_user_agent": true}` with no custom User-Agent or multiple custom User-Agent entries is refused the same way
+
+#### Scenario: Repeated continues preserve the non-secret header winner
+- **GIVEN** a stopped Crawl with `user_agent = "File/1"`, `header = ["User-Agent: Header/1"]` and `request_policy = {"custom_user_agent": true}`
+- **WHEN** the service continues it, it stops again, and the service continues it a second time
+- **THEN** each run uses Internal `User-Agent: Header/1` and External `User-Agent: File/1`, and each recorded request_policy remains `{"custom_user_agent": true}`
+
+#### Scenario: Continue preserves a CLI header over a Workspace dedicated User-Agent
+- **GIVEN** a stopped Crawl started with Workspace `user_agent = "File/1"` and CLI `--header "User-Agent: Header/1" --header "X-Env: staging" --header "X-Token: old123" --header "X-Env: audit"`
+- **WHEN** the continue service receives fresh `X-Token: new123`, while current Workspace `user_agent` is `Changed/1`
+- **THEN** Internal requests use `User-Agent: Header/1`, External requests use `User-Agent: File/1`, both Internal X-Env values remain `staging`, `audit` in order, and stored headers are `["User-Agent: Header/1", "X-Env: staging", "X-Token: ***", "X-Env: audit"]`
+
+#### Scenario: Continue preserves a dedicated winner with the same resolved values
+- **GIVEN** a stopped Crawl started with CLI `--user-agent File/1 --header "User-Agent: Header/1" --header "X-Env: staging" --header "X-Token: old123" --header "X-Env: audit"`, producing the same resolved `crawl.user_agent` and `crawl.header` values as the preceding scenario
+- **WHEN** the continue service receives fresh `X-Token: new123`
+- **THEN** both Internal and External requests use `User-Agent: File/1`, while the stored header list remains `["User-Agent: Header/1", "X-Env: staging", "X-Token: ***", "X-Env: audit"]`
+
+#### Scenario: Service inputs retain their winner without CLI argv evidence
+- **GIVEN** a stopped Crawl was planned by a service with explicit flag-equivalent `header = ["User-Agent: Header/1"]`, Workspace `user_agent = "File/1"`, and diagnostic `command_argv = ["service-crawl"]`
+- **WHEN** the continue service runs it without harmless overrides
+- **THEN** Internal requests use `User-Agent: Header/1` and External requests use `User-Agent: File/1`; the diagnostic argv does not change the winner
+
+#### Scenario: Continue preserves an Internal Accept-Encoding override
+- **GIVEN** a stopped v0.2 Crawl recorded `header = ["Accept-Encoding: identity", "X-Token: ***"]`
+- **WHEN** the continue service receives fresh `X-Token: new123`
+- **THEN** Internal requests send `Accept-Encoding: identity` and External requests send `Accept-Encoding: gzip, deflate, br, zstd`
 
 #### Scenario: Continue refuses a recorded password without a fresh value
 - **WHEN** the continue service receives a stopped Crawl whose recorded `auth` is `***`, without fresh auth
@@ -439,9 +536,11 @@ URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded 
 - **THEN** that URL has `skip_reason` = `url_too_long`
 
 ### Requirement: Compression
-**In short:** offered codings decode incrementally under body and memory bounds; unknown codings retain the unsupported-encoding guard.
+**In short:** request preferences are configurable; supported response codings decode incrementally under unchanged body and memory bounds.
 
-Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`, and offer no other coding. The Crawl SHALL decode those encodings itself, and several of them in the reverse order of the `Content-Encoding` header. A body that fails to decode SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`. A body in a coding that was not offered SHALL be recorded as `fetched`, with `size_bytes` NULL and `parsed` = 0; if it would otherwise have been parsed, it SHALL have `parse_error` = `unsupported_encoding`. For zstd, a stream SHALL support concatenated frames, reject corrupt or incomplete frames as `invalid_response`, and reject windows larger than 8,388,608 bytes, the HTTP content-coding limit. The 20 MiB body cap SHALL apply during decompression, including every intermediate stage of stacked encodings; neither a frame content-size field nor a small compressed body may cause unbounded allocation. These behaviours SHALL agree on Python 3.12, 3.13 and 3.14 on Windows, macOS and Linux. This change adds these columns to `urls`:
+Every request SHALL default to `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`. From v0.2, an explicit custom Accept-Encoding SHALL replace this entire default for Internal requests only, including robots.txt and retries; External requests SHALL retain the default. Header names SHALL be matched without case. An explicit empty field value SHALL be sent as an empty field, not omitted or replaced by a transport default. Values SHALL follow RFC 9110 section 12.5.3, including coding tokens, `identity`, `*`, and qvalues from 0 to 1 with at most three fractional digits. A syntactically valid unsupported coding name SHALL be accepted. Repeated custom Accept-Encoding entries SHALL replace the default as one ordered field-value list while preserving the recorded entries. Malformed values SHALL fail before dispatch using the header input's source-specific error.
+
+Decoder support SHALL be independent of the advertised Accept-Encoding: the Crawl SHALL decode supported response codings (gzip, deflate, br, and zstd from v0.2) even if not advertised or assigned `q=0`. Several supported codings SHALL be decoded in the reverse order of the Content-Encoding header. Advertising a coding SHALL NOT add decoder support. A body that fails to decode SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`. A body with any unsupported Content-Encoding SHALL be recorded as `fetched`, with `size_bytes` NULL and `parsed` = 0; if it would otherwise have been parsed, it SHALL have `parse_error` = `unsupported_encoding`, whether or not the request advertised that coding. No new negotiation-mismatch outcome is introduced. For zstd, a stream SHALL support concatenated frames, reject corrupt or incomplete frames as `invalid_response`, and reject windows larger than 8,388,608 bytes, the HTTP content-coding limit. The 20 MiB body cap SHALL apply during decompression, including every intermediate stage of stacked encodings; neither a frame content-size field nor a small compressed body may cause unbounded allocation. These behaviours SHALL agree on Python 3.12, 3.13 and 3.14 on Windows, macOS and Linux. This change adds these columns to `urls`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
@@ -452,6 +551,36 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Ac
 #### Scenario: Requests accept compressed bodies
 - **WHEN** `linx crawl {site}/` runs
 - **THEN** the request for `/` has `Accept-Encoding` = `gzip, deflate, br, zstd` from v0.2 (`gzip, deflate, br` in v0.1)
+
+#### Scenario: Accept-Encoding overrides have literal Internal and External outcomes
+- **GIVEN** a v0.2 Crawl from `http://site.test/` linking to `http://other.test/page`
+- **WHEN** a separate Crawl runs for each row below
+- **THEN** every Internal request, including robots.txt, has the listed combined Accept-Encoding value, while every External request has `gzip, deflate, br, zstd`
+
+| Workspace entries | CLI suffix | Internal Accept-Encoding |
+|---|---|---|
+| none | none | `gzip, deflate, br, zstd` |
+| none | `--header "Accept-Encoding: identity"` | `identity` |
+| none | `--header "accept-encoding:gzip"` | `gzip` |
+| none | `--header "Accept-Encoding: br;q=1, gzip;q=0.5, identity;q=0"` | `br;q=1, gzip;q=0.5, identity;q=0` |
+| none | `--header "Accept-Encoding: *;q=0.5"` | `*;q=0.5` |
+| none | `--header "Accept-Encoding: x-unknown"` | `x-unknown` |
+| none | `--header "Accept-Encoding:"` | empty field present |
+| `header = ["Accept-Encoding: identity"]` | none | `identity` |
+| `header = ["Accept-Encoding: identity"]` | `--header "Accept-Encoding: gzip"` | `gzip` |
+| none | `--header "Accept-Encoding: gzip" --header "accept-encoding: br;q=0.5"` | `gzip, br;q=0.5` |
+
+#### Scenario: Invalid negotiation syntax is refused before network
+- **WHEN** a Crawl uses `--header "Accept-Encoding: gzip;q=1.1"`, `--header "Accept-Encoding: br;q=0.1234"` or `--header "Accept-Encoding: gzip;level=1"`
+- **THEN** it exits with code 2 and `invalid_value` before any request; each equivalent invalid Workspace-only header exits with code 3 and `settings_invalid`
+
+#### Scenario: A supported response is decoded despite the request preference
+- **WHEN** a Crawl uses `--header "Accept-Encoding: identity, gzip;q=0"` and `/app.js` returns a gzip body decoding to the five ASCII bytes `hello`, with `Content-Encoding: gzip`
+- **THEN** `/app.js` has `fetch_state` = `fetched`, `content_encoding` = `gzip`, `size_bytes` = 5 and `body_truncated` = 0
+
+#### Scenario: Advertising an unsupported coding does not install a decoder
+- **WHEN** a Crawl uses `--header "Accept-Encoding: x-unknown"` and `/unknown.html` returns an HTML response with `Content-Encoding: x-unknown`
+- **THEN** `/unknown.html` has `fetch_state` = `fetched`, `parsed` = 0, `parse_error` = `unsupported_encoding` and `size_bytes` NULL
 
 #### Scenario: A compressed Resource records both sizes
 - **WHEN** `/app.js` returns a 10,000-byte script as a 2,500-byte gzip body with `Content-Encoding: gzip`, and `/` holds `<script src="/app.js">`
@@ -466,8 +595,10 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Ac
 - **THEN** `{site}/broken.js` has `fetch_state` = `error` and `fetch_error` = `invalid_response`
 
 #### Scenario: A body in an encoding that was not offered is not parsed
-- **WHEN** `/` links to `/unknown.html`, an HTML page that returns an unoffered body with `Content-Encoding: x-unknown`
+- **WHEN** `/` links to `/unknown.html`, an HTML page that returns an unsupported body with `Content-Encoding: x-unknown`, and no custom Accept-Encoding is given
 - **THEN** `{site}/unknown.html` has `fetch_state` = `fetched`, `parsed` = 0, `parse_error` = `unsupported_encoding` and `size_bytes` NULL
+
+This retained v0.1 scenario exercises an unsupported coding. From v0.2, an unadvertised but supported coding follows "A supported response is decoded despite the request preference" instead.
 
 #### Scenario: A zstd Resource records both sizes
 - **WHEN** `/app.js` returns the 14-byte zstd frame `28b52ffd200529000068656c6c6f` decoding to `hello`, and `/` holds `<script src="/app.js">`

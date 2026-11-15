@@ -127,21 +127,26 @@ class Requester:
         self._pause_gate.open()
 
     async def request_url(
-        self, url: NormalizedUrl, on_attempt: Callable[[FetchResult | FetchFailure], None]
+        self,
+        url: NormalizedUrl,
+        on_attempt: Callable[[FetchResult | FetchFailure], None],
+        *,
+        is_internal: bool,
     ) -> Attempted | NotStarted:
         """A URL's own request, with its retries. The URL limit counts the first attempt, with
         the slots held, so the count is exact; a retry is the same URL. After a stop, none
         starts. `on_attempt` hears each attempt's outcome as it ends, so the network pause
         counts a URL before its retries (022-add-fetch-policy D4)."""
+        request = Request(url, is_internal=is_internal)
         async with self._gated_slots(url, self._new_requests) as passed:
             # Refused with its turn under --rate already taken, and never given back: after a
             # stop or at the limit, no request starts again.
             if not passed or not self._limits.start_request():
                 return NotStarted()
             self._starts.append(self._clock.monotonic())
-            outcome = await self._send(url)
+            outcome = await self._send(request)
             on_attempt(outcome)
-        retried = await self._retried(url, outcome, on_attempt, ends_at_gate=True)
+        retried = await self._retried(request, outcome, on_attempt, ends_at_gate=True)
         if isinstance(retried, NotStarted):
             # Given back unrecorded, so a continue requests it.
             self.give_back()
@@ -163,32 +168,34 @@ class Requester:
         return round(len(self._starts) / seconds, 3) if seconds > 0 else 0.0
 
     async def request_robots_txt(
-        self, url: NormalizedUrl
+        self, url: NormalizedUrl, *, is_internal: bool
     ) -> FetchResult | FetchFailure | NotStarted:
         """One hop of an origin's robots.txt, with its retries, which the URL limit never
         counts. After a stop, none starts. A retry waits at the network
         pause's gate: robots.txt is no URL of the pause's count, and its origin's URLs wait for
         its verdict (022-add-fetch-policy D4)."""
+        request = Request(url, is_internal=is_internal)
         async with self._gated_slots(url, self._new_requests) as passed:
             if not passed:
                 return NotStarted()
-            outcome = await self._send(url)
-        retried = await self._retried(url, outcome, _unheard, ends_at_gate=False)
+            outcome = await self._send(request)
+        retried = await self._retried(request, outcome, _unheard, ends_at_gate=False)
         return retried if isinstance(retried, NotStarted) else retried.outcome
 
-    async def request_probe(self, url: NormalizedUrl) -> ProbeResult:
+    async def request_probe(self, url: NormalizedUrl, *, is_internal: bool) -> ProbeResult:
         """A probe of the network pause: through the host's slot, its turn and the global cap,
         but never the pause's gate or the URL limit (020-add-crawl-core D16)."""
+        request = Request(url, is_internal=is_internal)
         async with self._slots(url, _Never()) as passed:
             if not passed:
                 raise RuntimeError("A probe cannot be refused by its never-set stop")
             started = self._clock.monotonic()
-            outcome = await self._send(url)
+            outcome = await self._send(request)
             return ProbeResult(outcome, self._clock.monotonic() - started)
 
     async def _retried(
         self,
-        url: NormalizedUrl,
+        request: Request,
         outcome: FetchResult | FetchFailure,
         on_attempt: Callable[[FetchResult | FetchFailure], None],
         *,
@@ -196,6 +203,7 @@ class Requester:
     ) -> Attempted | NotStarted:
         """The URL limit's stop refuses new URLs only, so the retries go on within its grace;
         any other stop ends a due retry, and the URL is not recorded (022-add-fetch-policy D4)."""
+        url = request.url
         attempts = 1
         while True:
             wait, pause = retry_wait(outcome, attempts, self._clock.now())
@@ -214,7 +222,7 @@ class Requester:
                     return NotStarted()
                 if not passed:
                     return Attempted(outcome, attempts, gated=True)
-                outcome = await self._send(url)
+                outcome = await self._send(request)
                 on_attempt(outcome)
             attempts += 1
         return Attempted(outcome, attempts)
@@ -275,13 +283,13 @@ class Requester:
             semaphore = self._hosts[host] = asyncio.Semaphore(self._concurrency)
         return semaphore
 
-    async def _send(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
+    async def _send(self, request: Request) -> FetchResult | FetchFailure:
         # Each attempt races its own watchdog on the Crawl's Clock, from when it started, which
         # its row keeps as the Fetcher's would.
         started_at = self._clock.now()
         # Both have ended before the slots are given back.
         fetch = await first_of(
-            self._fetcher.fetch(Request(url)), self._clock.sleep(self._watchdog_seconds)
+            self._fetcher.fetch(request), self._clock.sleep(self._watchdog_seconds)
         )
         if not fetch.cancelled():
             return fetch.result()

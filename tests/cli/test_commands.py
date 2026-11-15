@@ -109,6 +109,14 @@ def test_a_secret_option_without_a_setting() -> None:
     assert (option["setting"], option["secret"]) == (None, True)
 
 
+def test_the_custom_header_option_describes_its_setting_and_secret_policy() -> None:
+    option = _options(run_cli("commands").json(), "crawl")["--header"]
+    expected = json.loads((CONTRACT / "crawl-header.json").read_text(encoding="utf-8"))
+
+    assert option == expected
+    assert type(option["secret"]) is bool
+
+
 def test_bounds_of_an_option() -> None:
     options = _options(run_cli("commands").json(), "crawl")
 

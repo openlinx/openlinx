@@ -9,6 +9,7 @@ _ROBOTS_USER_AGENT = re.compile(r"[a-zA-Z_-]+")
 # which the RFC treats as obsolete and servers and log pipelines misread; CR or LF would end
 # the header, or start another one.
 _HEADER_VALUE = re.compile(r"[\t\x20-\x7e]+")
+_HEADER_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
 
 
 def as_rate(rate: float) -> float:
@@ -39,3 +40,22 @@ def as_robots_token(token: str) -> str:
     if _ROBOTS_USER_AGENT.fullmatch(token) is None:
         raise ValueError("a robots user-agent token has letters, '_' and '-' only (RFC 9309)")
     return token
+
+
+def as_header(header: str) -> tuple[str, str]:
+    name, colon, value = header.partition(":")
+    if not colon or _HEADER_NAME.fullmatch(name) is None:
+        raise ValueError("a header needs a token name followed by ':' and a value")
+    if value and _HEADER_VALUE.fullmatch(value) is None:
+        raise ValueError("a header value has visible ASCII characters, spaces and tabs only")
+    value = value.strip(" \t")
+    if name.lower() == "user-agent":
+        as_user_agent(value)
+    return name, value
+
+
+def as_headers(headers: list[str]) -> tuple[tuple[str, str], ...]:
+    parsed = tuple(as_header(header) for header in headers)
+    if sum(name.lower() == "user-agent" for name, _ in parsed) > 1:
+        raise ValueError("custom headers allow only one User-Agent entry")
+    return parsed

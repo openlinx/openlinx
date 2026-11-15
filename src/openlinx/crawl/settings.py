@@ -2,7 +2,13 @@
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from openlinx.crawl.setting_rules import as_rate, as_robots_token, as_timeout, as_user_agent
+from openlinx.crawl.setting_rules import (
+    as_headers,
+    as_rate,
+    as_robots_token,
+    as_timeout,
+    as_user_agent,
+)
 from openlinx.naming import DEFAULT_ROBOTS_TOKEN
 from openlinx.store.records import ScopeKind
 
@@ -57,6 +63,12 @@ class CrawlSettings(BaseModel):
         description="The User-Agent request header of every request, robots.txt's included: "
         "visible ASCII characters, spaces and tabs only. The tool's name, version and project "
         "URL when unset.",
+    )
+    header: list[str] = Field(
+        [],
+        description="Custom Name: Value headers for Internal URLs and their robots.txt only; "
+        "repeat entries to send several headers. Sensitive values are hidden in records.",
+        json_schema_extra={"secret": "header"},
     )
     timeout: float = Field(
         20,
@@ -125,3 +137,9 @@ class CrawlSettings(BaseModel):
     @classmethod
     def _is_a_robots_token(cls, token: str) -> str:
         return as_robots_token(token)
+
+    @field_validator("header")
+    @classmethod
+    def _are_headers(cls, headers: list[str]) -> list[str]:
+        as_headers(headers)
+        return headers

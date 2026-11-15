@@ -14,6 +14,7 @@ from openlinx.clock import SystemClock
 from openlinx.crawl.fetch.fetcher import (
     AiohttpFetcher,
     FetchFailure,
+    FetchPolicy,
     FetchResult,
     Request,
     fetch_error_of,
@@ -42,7 +43,11 @@ async def test_a_host_that_dns_cannot_encode_is_a_dns_error() -> None:
     connector = aiohttp.TCPConnector(resolver=_Unencodable())
 
     async with aiohttp.ClientSession(connector=connector) as session:
-        result = await AiohttpFetcher(session, SystemClock(), ProxyVariables()).fetch(Request(url))
+        result = await AiohttpFetcher(
+            session,
+            SystemClock(),
+            FetchPolicy(user_agent="Test/1", proxies=ProxyVariables(), timeout_seconds=20),
+        ).fetch(Request(url, is_internal=True))
 
     assert (type(result), getattr(result, "fetch_error", None)) == (FetchFailure, "dns_error")
 
@@ -62,7 +67,11 @@ async def test_the_fetcher_never_holds_a_cookie_value(fixture_site: StartSite) -
     assert isinstance(url, str)
 
     async with aiohttp.ClientSession() as session:
-        result = await AiohttpFetcher(session, SystemClock(), ProxyVariables()).fetch(Request(url))
+        result = await AiohttpFetcher(
+            session,
+            SystemClock(),
+            FetchPolicy(user_agent="Test/1", proxies=ProxyVariables(), timeout_seconds=20),
+        ).fetch(Request(url, is_internal=True))
 
     assert isinstance(result, FetchResult)
     assert [value for name, value in result.headers if name == "Set-Cookie"] == [

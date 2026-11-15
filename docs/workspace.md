@@ -79,9 +79,22 @@ Diagnostics on stderr:
 
 ## Settings: `openlinx.toml`
 
+Custom request headers use the `[crawl]` list `header`, for example
+`header = ["X-Env: staging", "X-Token: abc123"]`. The repeatable `--header` option
+replaces that list for one Crawl. Headers are sent only to Internal URLs and their
+robots.txt; stored metadata hides sensitive values while keeping harmless entries.
+See [Custom request headers](crawling.md#custom-request-headers) for validation and examples.
+
 ### Tables and precedence
 
 Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A table must forbid unknown keys and give every setting a one-line description and a default that TOML can write: a string, number, boolean or list of those, or none at all for a setting that is unset. A table of named entries, such as `[rules.<id>]`, describes itself with its entry model's one-line docstring. The template and the error hints depend on these rules, and a test checks every registered table. A setting that mirrors a flag lives in a table the Command reads, usually named after it, under the flag's long name with `-` written as `_`.
+
+Explicit input wins over implicit or default values. An omitted flag contributes no
+override; a supplied value equal to the default remains explicit. Within one source,
+the owning contract resolves competing inputs: for request User-Agent, an explicit
+dedicated `user_agent` wins over a generic header. Custom headers remain Internal-only;
+the dedicated value applies globally. The reserved config metadata name `request_policy`
+is not a settings table and cannot be registered by an extension.
 
 Each setting takes the first value it finds:
 1. its flag on the command line

@@ -36,6 +36,7 @@ Every crawl setting is an option of `linx crawl` and a key of the `[crawl]` tabl
 | `--retries <n>` | `retries` | `2` | How many times, 0 to 10, a request that timed out, could not connect or got a 429 or 5xx status is tried again (see [Timeouts and retries](#timeouts-and-retries)). |
 | `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 to 50 (see [The hop limit](#the-hop-limit)). |
 | `--user-agent <string>` | `user_agent` | `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
+| `--header "Name: Value"` | `header` | `[]` | A repeatable custom header for Internal URLs and their robots.txt; sensitive values are hidden in records (see [Custom request headers](#custom-request-headers)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `openlinx` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -402,11 +403,52 @@ An agent reads it to know what a Crawl covered without parsing its command line.
 
 ### The User-Agent header
 
-Every request, robots.txt's included, carries the header `User-Agent: OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, where the version is the tool's and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` replaces it on every request. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null; the default it stood for follows from `crawl.tool_version`. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+By default, every request, robots.txt's included, carries the header `User-Agent: OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, where the version is the tool's and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` supplies its global replacement, subject to [custom header precedence](#custom-request-headers): a CLI custom User-Agent wins on Internal requests over a Workspace dedicated value. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null; the default it stood for follows from `crawl.tool_version`. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+
+### Custom request headers
+
+Use `linx crawl https://example.com/ --header "X-Env: staging"` to add a header to
+Internal requests. Repeat `--header` for several entries, or set a list in the Workspace:
+
+```toml
+[crawl]
+header = ["X-Env: staging", "X-Token: abc123"]
+```
+
+Each entry needs a token name, a colon and a value containing visible ASCII characters,
+spaces or tabs. Empty values are allowed except for User-Agent. Invalid names, CR, LF and other control characters
+are refused before any request: `invalid_value` (exit 2) for flags, `settings_invalid`
+(exit 3) for the settings file. A checked Internal URL outside the Seed folder still
+receives these headers; External requests do not. Each robots.txt redirect is classified
+again, and retries and outage probes retain the correct Internal identity.
+
+Explicit inputs win over implicit/default values. Among explicit inputs, CLI wins over
+Workspace settings. The CLI header list replaces the entire Workspace list. Within one
+source, an explicitly supplied dedicated `--user-agent` / `user_agent` wins over a custom
+User-Agent, independently of argument order. An omitted option contributes no override;
+a supplied literal equal to the default is still explicit. A generated default never
+wins over a header-only User-Agent. The dedicated value is global; a custom User-Agent
+applies only to Internal URLs. For example, Workspace `user_agent = "File/1"` with CLI
+`--header "User-Agent: Header/1"` sends Header/1 internally and File/1 externally.
+Each request carries exactly one User-Agent. Multiple custom User-Agent entries are
+refused case-insensitively, even if equal or overridden by a dedicated value. Other
+accepted repeated entries keep their order. Neither User-Agent nor Accept-Encoding is
+a reserved custom name.
+
+While a Seed Redirect Chain is open, its Page and robots lookup share provisional Scope;
+each robots redirect target is classified again. Once the chain settles, ordinary requests
+use final Scope. A continue preserves the chosen User-Agent policy and harmless inputs;
+see [request policy metadata](crawl-store.md#what-a-crawl-records-about-itself).
+
+Recorded config and argv keep names, order, repeated entries and harmless values. `Cookie`
+and names containing `auth`, `token`, `secret`, `key` or `password`, ignoring case, retain
+only their names and `***` values. For example, the list above records
+`["X-Env: staging", "X-Token: ***"]`. `linx commands` describes `--header` as repeatable,
+with `setting` = `crawl.header` and boolean `secret` = `true`.
 
 ### Cookies
 
-The Crawl keeps no cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. A site that needs a session cookie shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
+The Crawl stores no session cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. An explicit Internal-only `Cookie` custom header can supply a cookie. A site that needs a session cookie otherwise shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
 
 ### Response headers
 

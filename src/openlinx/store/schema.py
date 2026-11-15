@@ -178,7 +178,8 @@ crawl = public_table(
         "config",
         Json,
         nullable=False,
-        comment="The resolved settings as an object of tables and keys, secrets redacted.",
+        comment="The resolved settings and service-owned request_policy metadata, "
+        "secrets redacted.",
     ),
     Column(
         "tool_version",

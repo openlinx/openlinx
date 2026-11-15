@@ -68,7 +68,12 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         stop=context.stop,
     )
     redispatch = Redispatch()
-    robots = RobotsLoader(requester, context.writer, context.settings.robots_user_agent)
+    robots = RobotsLoader(
+        requester,
+        context.writer,
+        context.settings.robots_user_agent,
+        lambda url: seed_chain.decide(url, in_chain=seed_chain.is_open).is_internal,
+    )
     task_failure = TaskFailure(context.stop)
     # The tasks that run beside the URLs' own: the network pause's probing, the progress events.
     side_tasks: set[asyncio.Task[None]] = set()
@@ -90,6 +95,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         concurrency=concurrency,
         network_wait=context.settings.network_wait,
         seed=seed,
+        is_internal=lambda url: seed_chain.scope.decide(url).is_internal,
         crawl_id=context.crawl_file.id,
         seed_answered=await context.writer.run_async(seed_answered(seed)),
         stop=context.stop,

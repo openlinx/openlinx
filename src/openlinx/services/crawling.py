@@ -29,6 +29,7 @@ from openlinx.crawl.fetch.fetcher import (
 from openlinx.crawl.fetch.proxy import SECRET_KEYS, ProxyVariables
 from openlinx.crawl.pages.preparation import PageExecutor
 from openlinx.crawl.scope import ScopeDecision, ScopeRules, scope_rules
+from openlinx.crawl.setting_rules import as_headers
 from openlinx.crawl.settings import CrawlSettings
 from openlinx.crawl.urls import (
     InvalidUrl,
@@ -40,6 +41,7 @@ from openlinx.crawl.urls import (
     url_path,
 )
 from openlinx.output.codes import (
+    CRAWL_FILE_INVALID,
     INVALID_PATTERN,
     INVALID_URL,
     OPTION_CONFLICT,
@@ -198,6 +200,12 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         tables = default_tables()
     settings = load_settings(workspace, tables, flags)
     crawl_settings = settings.table(CrawlSettings)
+    parsed_headers = as_headers(crawl_settings.header)
+    supplied = flags.get("crawl", {})
+    custom_user_agent = any(name.lower() == "user-agent" for name, _ in parsed_headers) and (
+        crawl_settings.user_agent is None
+        or ("header" in supplied and supplied.get("user_agent") is None)
+    )
     strip_params = strip_params_pattern(crawl_settings.strip_params)
     seed = _seed(request.seed, strip_params)
     scope = scope_rules(
@@ -221,7 +229,11 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         command_argv=request.command_argv,
         cwd=request.cwd,
         # Every registered table, resolved.
-        config={**settings.root.model_dump(mode="json"), **_environment(proxies)},
+        config={
+            **settings.root.model_dump(mode="json"),
+            **_environment(proxies),
+            "request_policy": {"custom_user_agent": custom_user_agent},
+        },
         scope=scope.to_json(),
         secret_names=SecretNames(
             request.secret_flags, {**tables.secret_settings(), **_PROXY_SECRETS}
@@ -235,7 +247,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         settings=crawl_settings,
         scope=scope,
         strip_params=strip_params,
-        fetch_policy=_fetch_policy(crawl_settings, proxies),
+        fetch_policy=_fetch_policy(crawl_settings, proxies, custom_user_agent=custom_user_agent),
         new_crawl=new_crawl,
         loaded=settings,
     )
@@ -245,11 +257,15 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
 _PROXY_SECRETS: Mapping[str, SecretPolicy] = {f"environment.{key}": True for key in SECRET_KEYS}
 
 
-def _fetch_policy(settings: CrawlSettings, proxies: ProxyVariables) -> FetchPolicy:
+def _fetch_policy(
+    settings: CrawlSettings, proxies: ProxyVariables, *, custom_user_agent: bool
+) -> FetchPolicy:
     return FetchPolicy(
         user_agent=settings.user_agent or DEFAULT_USER_AGENT,
         proxies=proxies,
         timeout_seconds=settings.timeout,
+        headers=as_headers(settings.header),
+        custom_user_agent=custom_user_agent,
     )
 
 
@@ -333,6 +349,7 @@ def continue_crawl(
     """Continue a stopped or failed Crawl from its file alone; the keyword arguments are
     start_crawl's, including a fresh stop flag for each run."""
     recorded = read_recorded(crawl_file.path)
+    custom_user_agent = _recorded_user_agent(recorded.config, crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
     given = overrides.given()
@@ -356,7 +373,7 @@ def continue_crawl(
         strip_params=strip_params,
         crawl_mode=recorded.crawl_mode,
         seed_count=len(recorded.seeds),
-        fetch_policy=_fetch_policy(settings, proxies),
+        fetch_policy=_fetch_policy(settings, proxies, custom_user_agent=custom_user_agent),
         # The recorded config holds no secret; the continue's own proxy variables may.
         secrets=secret_values(environment, _PROXY_SECRETS),
     )
@@ -378,6 +395,26 @@ def continue_crawl(
         stop=stop or StopSignal(),
     )
     return _crawled(crawl)
+
+
+def _recorded_user_agent(config: Mapping[str, Any], path: Path) -> bool:
+    try:
+        policy = config.get("request_policy")
+        if not isinstance(policy, dict) or type(policy.get("custom_user_agent")) is not bool:
+            raise ValueError("request_policy needs a boolean custom_user_agent")
+        custom: bool = policy["custom_user_agent"]
+        if custom:
+            settings = CrawlSettings.model_validate(config.get("crawl"))
+            if sum(name.lower() == "user-agent" for name, _ in as_headers(settings.header)) != 1:
+                raise ValueError("custom_user_agent needs one valid custom User-Agent")
+        return custom
+    except ValueError as error:
+        raise OpenLinxError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} has invalid request policy metadata.",
+            hint="Crawl again with this tool to record its request policy.",
+            details={"file": str(path)},
+        ) from error
 
 
 def _crawled(crawl: "_Crawl") -> CrawlResult:

@@ -23,10 +23,17 @@ _REDIRECT_HOPS = 5
 
 
 class RobotsLoader:
-    def __init__(self, requester: Requester, writer: CrawlWriter, token: str) -> None:
+    def __init__(
+        self,
+        requester: Requester,
+        writer: CrawlWriter,
+        token: str,
+        is_internal: Callable[[NormalizedUrl], bool],
+    ) -> None:
         self._requester = requester
         self._writer = writer
         self._token = token
+        self._is_internal = is_internal
         self._origins: dict[str, asyncio.Task[OriginRobots | NotStarted]] = {}
         # The URL that first asked for each origin's robots.txt.
         self._first_urls: dict[str, NormalizedUrl] = {}
@@ -83,7 +90,7 @@ class RobotsLoader:
 
     async def _load(self, robots_url: NormalizedUrl) -> OriginRobots | NotStarted:
         url = robots_url
-        response = await self._requester.request_robots_txt(url)
+        response = await self._requester.request_robots_txt(url, is_internal=self._is_internal(url))
         redirect: FetchResult | None = None
         # Up to five hops, as RFC 9309 asks; a longer chain ends on a 3xx, which is missing.
         for _ in range(_REDIRECT_HOPS):
@@ -93,7 +100,9 @@ class RobotsLoader:
             if target is None:
                 break
             redirect, url = response, target
-            response = await self._requester.request_robots_txt(url)
+            response = await self._requester.request_robots_txt(
+                url, is_internal=self._is_internal(url)
+            )
         if isinstance(response, NotStarted):
             # A stop: nothing is recorded, and the origin's URLs stay queued.
             return response

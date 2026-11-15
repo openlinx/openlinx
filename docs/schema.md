@@ -84,7 +84,7 @@ The Crawl's metadata, in exactly one row.
 | `command_argv` | TEXT | no | | `json` | | The command line as an array that starts with the command name, secrets redacted. |
 | `cwd` | TEXT | no | | | | The absolute folder the Command ran in. |
 | `settings_file` | TEXT | yes | | | | The absolute path of the settings file that was read, or NULL without one. |
-| `config` | TEXT | no | | `json` | | The resolved settings as an object of tables and keys, secrets redacted. |
+| `config` | TEXT | no | | `json` | | The resolved settings and service-owned request_policy metadata, secrets redacted. |
 | `tool_version` | TEXT | no | | | | The version of the tool that created the Crawl. |
 | `schema_version` | INTEGER | no | | | | The schema version of this file, also stored as SQLite's user_version. |
 | `journal_mode` | TEXT | no | | | `wal`, `delete` | The SQLite journal mode the file was created with. |

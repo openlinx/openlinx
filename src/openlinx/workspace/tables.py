@@ -22,6 +22,8 @@ class SettingsTables:
         self._references: dict[str, str] = {}
 
     def register(self, name: str, reference: str) -> None:
+        if name == "request_policy":
+            raise TypeError("Settings table [request_policy] is reserved for Crawl metadata.")
         if name in self._references:
             raise TypeError(f"Settings table [{name}] is registered twice.")
         self._references[name] = reference

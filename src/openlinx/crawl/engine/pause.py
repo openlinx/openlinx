@@ -125,6 +125,7 @@ class NetworkPause:
         concurrency: int,
         network_wait: int,
         seed: NormalizedUrl,
+        is_internal: Callable[[NormalizedUrl], bool],
         crawl_id: str,
         seed_answered: bool,
         stop: StopSignal,
@@ -140,6 +141,7 @@ class NetworkPause:
         self._limit = pause_after(concurrency)
         self._network_wait = network_wait
         self._seed = seed
+        self._is_internal = is_internal
         self._crawl_id = crawl_id
         self._stop = stop
         self._requester = requester
@@ -374,7 +376,9 @@ class NetworkPause:
         return True
 
     async def _probe_once(self) -> ProbeResult | None:
-        probe = await self._requester.request_probe(self._seed)
+        probe = await self._requester.request_probe(
+            self._seed, is_internal=self._is_internal(self._seed)
+        )
         return None if isinstance(probe.outcome, FetchFailure) else probe
 
 

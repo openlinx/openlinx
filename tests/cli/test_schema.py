@@ -215,3 +215,9 @@ def test_default_limit_of_schema() -> None:
 @pytest.mark.usefixtures("indexed_table")
 def test_a_reference_names_its_target_column() -> None:
     assert columns_of("indexed_rows")["found_on_row_id"]["references"] == "indexed_rows.id"
+
+
+def test_config_describes_settings_and_service_owned_request_policy() -> None:
+    assert columns_of("crawl")["config"]["description"] == (
+        "The resolved settings and service-owned request_policy metadata, secrets redacted."
+    )

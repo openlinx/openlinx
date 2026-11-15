@@ -79,7 +79,20 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 
 - **Counts are not recorded while a Crawl runs.** No column that the Crawl writes holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree. A value derived from the stored rows, such as a score, is stored only by a pass that runs after the Crawl, in a derived column.
 - **`started_at`** is the same instant as the time in the crawl id, read once when the Crawl is created.
-- **`settings_file`** is the `openlinx.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `openlinx.toml` changes later.
+- **`settings_file`** is the `openlinx.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key and service-owned request policy metadata, so the file says how it was made even when `openlinx.toml` changes later.
+- **Request policy metadata:** every Crawl planned by the Crawl Service records
+  `"request_policy": {"custom_user_agent": true}` or `false` at the root of `config`,
+  beside settings tables. True selects the custom User-Agent for Internal requests;
+  false selects the dedicated/default User-Agent. External requests always use the
+  dedicated/default value. The selected `crawl.header` list and `crawl.user_agent` stay
+  unchanged, including harmless entries overridden at dispatch. A null dedicated value
+  generates the running tool's default, including its current version. `request_policy`
+  is reserved against settings-table registration; it is not a setting or SQL column.
+  A direct continue validates this object and its strict boolean before opening a writer
+  or Fetcher; true requires exactly one valid custom User-Agent. Missing, malformed or
+  inconsistent metadata is `crawl_file_invalid` (exit 6, `details.file`); older pre-release
+  files without it must be crawled again. Every continue preserves the recorded winner,
+  without reconstructing source priority from argv or current Workspace settings.
 - **The environment stamp** (`python_version` and `platform`) helps when a crawl file is attached to a bug report.
 
 ## Secrets are never recorded

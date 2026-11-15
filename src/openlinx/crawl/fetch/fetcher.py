@@ -43,6 +43,7 @@ def _received_header(name: bytes, value: bytes) -> tuple[str, str]:
 @dataclass(frozen=True, slots=True)
 class Request:
     url: NormalizedUrl
+    is_internal: bool
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -94,6 +95,23 @@ class FetchPolicy:
     proxies: ProxyVariables
     # The request watchdog outlasts this deadline, so it does not cut the Fetcher short.
     timeout_seconds: float
+    headers: tuple[tuple[str, str], ...] = ()
+    custom_user_agent: bool = False
+
+
+def request_headers(policy: FetchPolicy, *, is_internal: bool) -> tuple[tuple[str, str], ...]:
+    custom = policy.headers if is_internal else ()
+    headers = tuple(
+        (name, value)
+        for name, value in custom
+        if name.lower() != "user-agent" or policy.custom_user_agent
+    )
+    if not (is_internal and policy.custom_user_agent):
+        headers = (("User-Agent", policy.user_agent), *headers)
+    if not any(name.lower() == "accept-encoding" for name, _ in headers):
+        headers = (*headers, ("Accept-Encoding", ACCEPT_ENCODING))
+    # aiohttp merges repeated input names case-sensitively before writing them.
+    return tuple((name.lower(), value) for name, value in headers)
 
 
 # Opens the Crawl's Fetcher: tests bind the DNS resolver hook or a fake Fetcher into one.
@@ -101,20 +119,23 @@ type FetcherFactory = Callable[[FetchPolicy, Clock], AbstractAsyncContextManager
 
 
 class AiohttpFetcher:
-    def __init__(
-        self, session: aiohttp.ClientSession, clock: Clock, proxies: ProxyVariables
-    ) -> None:
+    def __init__(self, session: aiohttp.ClientSession, clock: Clock, policy: FetchPolicy) -> None:
         self._session = session
         self._clock = clock
-        self._proxies = proxies
+        self._policy = policy
 
     async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         # As given: yarl would decode a %2F in the query and request another URL than recorded.
         url = yarl.URL(request.url, encoded=True)
         fetched_at, started = self._clock.now(), self._clock.monotonic()
         try:
-            proxy = self._proxies.for_url(request.url)
-            async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
+            proxy = self._policy.proxies.for_url(request.url)
+            async with self._session.get(
+                url,
+                allow_redirects=False,
+                proxy=proxy,
+                headers=request_headers(self._policy, is_internal=request.is_internal),
+            ) as response:
                 headers = tuple(
                     _received_header(name, value) for name, value in response.raw_headers
                 )
@@ -178,14 +199,10 @@ async def aiohttp_fetcher(
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
         timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
-        headers={
-            "User-Agent": policy.user_agent,
-            # The codings this tool decodes itself, never aiohttp's own list.
-            "Accept-Encoding": ACCEPT_ENCODING,
-        },
+        skip_auto_headers={"User-Agent", "Accept-Encoding"},
         # No cookie session: a cookie set by one response would change what later ones return.
         cookie_jar=aiohttp.DummyCookieJar(),
         # read_body decodes, so it measures the body both as transferred and as decoded.
         auto_decompress=False,
     ) as session:
-        yield AiohttpFetcher(session, clock, policy.proxies)
+        yield AiohttpFetcher(session, clock, policy)
