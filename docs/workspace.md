@@ -102,6 +102,14 @@ Continuing a Crawl with recorded enabled auth requires fresh input through the
 service; it never replays `***` or reloads Workspace settings. Recorded `null` needs
 no fresh auth. See [Continuing a Crawl](crawling.md#continuing-a-crawl).
 
+For a continue, `CrawlOverrides.header` supplies only fresh values for recorded sensitive
+headers, matched by case-insensitive name and occurrence. Missing values produce
+`secrets_required` (exit 2); harmless entries, unmatched/extra sensitive entries,
+malformed headers and the reserved trimmed value `***` produce `invalid_value`
+(exit 2, `details.key = "crawl.header"`). Empty values are explicit valid headers.
+These checks precede writer/network access. Stored harmless bytes, order, User-Agent
+policy and other settings remain intact; current Workspace values do not replace them.
+
 ### Tables and precedence
 
 Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A table must forbid unknown keys and give every setting a one-line description and a default that TOML can write: a string, number, boolean or list of those, or none at all for a setting that is unset. A table of named entries, such as `[rules.<id>]`, describes itself with its entry model's one-line docstring. The template and the error hints depend on these rules, and a test checks every registered table. A setting that mirrors a flag lives in a table the Command reads, usually named after it, under the flag's long name with `-` written as `_`.

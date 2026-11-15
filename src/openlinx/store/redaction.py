@@ -91,7 +91,7 @@ def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy
                 if not isinstance(entry, str):
                     continue
                 name, colon, content = entry.partition(":")
-                if colon and not _sensitive_header(name):
+                if colon and not is_sensitive_header(name):
                     continue
                 secret = content.strip(" \t") if colon else entry
                 if secret:
@@ -154,7 +154,7 @@ def _redact_setting(value: Any, policy: SecretPolicy) -> Any:
     return _redact_value(value, policy) if isinstance(value, str) else REDACTED
 
 
-def _sensitive_header(name: str) -> bool:
+def is_sensitive_header(name: str) -> bool:
     lowered = name.casefold()
     return lowered == "cookie" or any(
         part in lowered for part in ("auth", "token", "secret", "key", "password")
@@ -170,7 +170,7 @@ def _redact_value(value: str, policy: SecretPolicy) -> str:
         name, colon, _ = value.partition(":")
         if not colon:
             return REDACTED
-        return f"{name}: {REDACTED}" if _sensitive_header(name) else value
+        return f"{name}: {REDACTED}" if is_sensitive_header(name) else value
     try:
         parts = urlsplit(value)
         password = parts.password

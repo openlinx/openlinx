@@ -223,6 +223,24 @@ later continue. Fresh credentials are masked in diagnostics and recorded as `***
 again, so each continue with enabled auth needs fresh input. The service retains
 stored non-secret settings without reloading the current Workspace configuration.
 
+`CrawlOverrides.header` accepts a tuple of fresh `Name: Value` entries for recorded
+sensitive headers. It restores each case-insensitive name's occurrences in order;
+fresh name case is used only for matching. Recorded name case and positions stay
+unchanged, and harmless entries keep their exact stored bytes. KEEP or an empty tuple
+supplies no fresh values. Every recorded sensitive occurrence needs a fresh entry;
+otherwise the service refuses as `secrets_required` (exit 2), with a `--header` hint,
+before writer or network access.
+
+This input cannot replace the whole header list: harmless entries, unknown sensitive
+names and extra occurrences are refused as `invalid_value` (exit 2), with
+`details.key = "crawl.header"`. Malformed entries and a value that trims to `***` are
+refused the same way, without quoting the input. That marker is reserved only for
+fresh-secret restoration; starting a Crawl keeps the normal header rules. An explicit
+empty sensitive value is valid and sends an empty header. Fresh values are masked in
+diagnostics and recorded again as `Name: ***`. Restoring secrets preserves the recorded
+Internal User-Agent winner, global dedicated User-Agent and literal Accept-Encoding
+entries, and revalidates the auth/Authorization conflict before opening resources.
+
 A continue fetches through the proxy variables of its own process, not the start's, and records them in `crawl.config`'s `environment` table in place of the start's, redacted the same way (see [Proxy variables](#proxy-variables)).
 
 ### When one URL fails

@@ -54,6 +54,7 @@ from openlinx.output.diagnostics import Diagnostic, OpenLinxError
 from openlinx.output.events import timestamp_text
 from openlinx.output.reporter import Reporter
 from openlinx.services.crawl_failures import NETWORK_FAILURES, interrupted, write_failed
+from openlinx.services.crawl_secrets import restored_headers
 from openlinx.services.crawls import create_crawl
 from openlinx.services.hooks import default_page_executor
 from openlinx.services.interrupts import interrupts_stop
@@ -131,17 +132,19 @@ KEEP = _Override.KEEP
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CrawlOverrides:
-    """Settings a continue may change, including fresh auth that recording cannot retain.
+    """Continue settings and fresh credentials that recording cannot retain.
 
     KEEP preserves recorded values, except enabled auth needs fresh input; None or empty
-    auth disables it. The planned resume Command also requires that the URL limit can only
-    be raised (060 D8).
+    auth disables it. Header entries restore only recorded sensitive name/occurrence slots;
+    they cannot override harmless headers. The planned resume Command also requires that the
+    URL limit can only be raised (060 D8).
     """
 
     max_urls: int | Literal[_Override.KEEP] | None = KEEP
     concurrency: int | Literal[_Override.KEEP] = KEEP
     rate: float | Literal[_Override.KEEP] | None = KEEP
     auth: str | Literal[_Override.KEEP] | None = KEEP
+    header: tuple[str, ...] | Literal[_Override.KEEP] = KEEP
 
     def given(self) -> dict[str, Any]:
         values = {field.name: getattr(self, field.name) for field in fields(self)}
@@ -376,8 +379,11 @@ def continue_crawl(
             "Continuing this Crawl requires fresh Basic Auth credentials.",
             hint="Supply fresh credentials through --auth or crawl.auth.",
         )
+    headers = restored_headers(recorded.config["crawl"].get("header", []), given.pop("header", ()))
     try:
-        settings = CrawlSettings.model_validate({**recorded.config["crawl"], **given})
+        settings = CrawlSettings.model_validate(
+            {**recorded.config["crawl"], **given, "header": headers}
+        )
     # Only an override can be refused: the recorded values passed when the Crawl started.
     except ValidationError as error:
         refused = refused_given_value(error, {"crawl": given}, table="crawl")
