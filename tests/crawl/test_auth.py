@@ -72,10 +72,20 @@ def _assert_internal_auth(fixture_site: StartSite, auth: str, authorization: str
 
 @pytest.mark.parametrize("joined", [False, True], ids=["split", "joined"])
 @pytest.mark.parametrize(
-    "auth", ["alice:s3cret", "https://alice:s3cret@site.test"], ids=["plain", "url-shaped"]
+    ("auth", "authorization"),
+    [
+        ("alice:s3cret", "Basic YWxpY2U6czNjcmV0"),
+        ("https://alice:s3cret@site.test", "Basic aHR0cHM6Ly9hbGljZTpzM2NyZXRAc2l0ZS50ZXN0"),
+        ("--header=X-Env: credential", "Basic LS1oZWFkZXI9WC1FbnY6IGNyZWRlbnRpYWw="),
+    ],
+    ids=["plain", "url-shaped", "flag-shaped"],
 )
 def test_the_recorded_command_hides_the_password(
-    temp_workspace: TempWorkspace, fixture_site: StartSite, auth: str, joined: bool
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    auth: str,
+    authorization: str,
+    joined: bool,
 ) -> None:
     server = fixture_site(Site({"/": Page(body="Home")}))
     flags = [f"--auth={auth}"] if joined else ["--auth", auth]
@@ -91,6 +101,9 @@ def test_the_recorded_command_hides_the_password(
     )
 
     assert result.exit_code == 0, result.stderr
+    assert [
+        (request.path, request.headers.getall("Authorization", [])) for request in server.requests
+    ] == [("/robots.txt", [authorization]), ("/", [authorization])]
     file = Path(result.json()["crawl_file"])
     row = crawl_row(file)
     assert json.loads(row["command_argv"]) == (

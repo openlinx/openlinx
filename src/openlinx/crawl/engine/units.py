@@ -3,6 +3,8 @@
 from dataclasses import replace
 from typing import Any
 
+import msgspec
+
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.crawl_warnings import (
     blocked_seed,
@@ -234,6 +236,11 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
         )
     else:
         page = await context.pages.prepare(url, response) if prepared else None
+    if page is not None and page.parse_error_message is not None:
+        # Preparation can quote a response's reflected secret; both records and warnings use it.
+        page = msgspec.structs.replace(
+            page, parse_error_message=context.secrets.redact(page.parse_error_message)
+        )
     parsed = page is not None and page.parsed
     # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
     # preparation.

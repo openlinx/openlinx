@@ -2,14 +2,14 @@
 
 import json
 import sqlite3
-from contextlib import AbstractAsyncContextManager, closing
+from contextlib import closing, nullcontext
 from functools import partial
 from typing import Any
 
 import pytest
 
-from openlinx.clock import Clock, SystemClock
-from openlinx.crawl.fetch.fetcher import Fetcher, FetchPolicy, aiohttp_fetcher
+from openlinx.clock import SystemClock
+from openlinx.crawl.fetch.fetcher import aiohttp_fetcher
 from openlinx.naming import SETTINGS_FILE_NAME
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import Collected
@@ -31,6 +31,7 @@ from tests.fixture_site.server import ServerHandle
 from tests.support.cli import CliResult, run_cli
 from tests.support.crawling import continued, crawl_result
 from tests.support.crawls import crawl_row, sha256_of
+from tests.support.permissions import read_only_file
 from tests.support.workspace import TempWorkspace
 
 _DEFAULT = "OpenLinx/0.1.0.dev0 (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)"
@@ -430,12 +431,7 @@ def test_service_inputs_retain_their_winner_without_cli_argv_evidence(
     assert config["crawl"]["header"] == ["User-Agent: Header/1"]
 
 
-def _must_not_open_fetcher(
-    policy: FetchPolicy, clock: Clock
-) -> AbstractAsyncContextManager[Fetcher]:
-    raise AssertionError("invalid metadata must be refused before the Fetcher opens")
-
-
+@pytest.mark.parametrize("read_only", [False, True], ids=["writable", "read-only"])
 @pytest.mark.parametrize(
     ("policy", "headers"),
     [
@@ -463,10 +459,16 @@ def _must_not_open_fetcher(
     ],
 )
 def test_a_direct_continue_refuses_invalid_request_policy_metadata(
-    temp_workspace: TempWorkspace, fixture_site: StartSite, policy: Any, headers: list[str]
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    policy: Any,
+    headers: list[str],
+    read_only: bool,
 ) -> None:
     server = fixture_site(Site({"/": Page(body='<a href="/next">Next</a>')}))
     stopped = crawl_result(server.url("/"), max_urls=1)
+    assert stopped.summary.state == "stopped"
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
     config = json.loads(crawl_row(stopped.crawl_file)["config"])
     if policy == "missing":
         config.pop("request_policy", None)
@@ -477,24 +479,33 @@ def test_a_direct_continue_refuses_invalid_request_policy_metadata(
     with closing(sqlite3.connect(stopped.crawl_file)) as connection:
         connection.execute("UPDATE crawl SET config = ?", (json.dumps(config),))
         connection.commit()
+    # A read can create SQLite's WAL sidecars after the editing connection removed them.
+    assert json.loads(crawl_row(stopped.crawl_file)["config"]) == config
     before = sha256_of(stopped.crawl_file)
+    files = {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()}
+    reporter = Collected()
 
-    with pytest.raises(OpenLinxError) as caught:
+    with (
+        read_only_file(stopped.crawl_file) if read_only else nullcontext(),
+        pytest.raises(OpenLinxError) as caught,
+    ):
         continue_crawl(
             CrawlFile(stopped.crawl_id, stopped.crawl_file),
             CrawlOverrides(max_urls=None),
             SystemClock(),
-            Collected(),
+            reporter,
             default_hooks(),
-            fetchers=_must_not_open_fetcher,
         )
 
-    assert (caught.value.code, dict(caught.value.diagnostic.details)) == (
+    assert (caught.value.code, caught.value.exit_code, dict(caught.value.diagnostic.details)) == (
         "crawl_file_invalid",
+        6,
         {"file": str(stopped.crawl_file)},
     )
+    assert reporter.events == []
     assert sha256_of(stopped.crawl_file) == before
-    assert len(server.requests) == 2
+    assert {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()} == files
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
 
 
 def test_request_policy_cannot_be_registered_as_a_settings_table() -> None:

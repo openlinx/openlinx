@@ -120,6 +120,54 @@ def test_declared_secret_forms_record_their_literal_shape(
     assert json.loads(row["config"]) == {"example": {"value": expected}}
 
 
+@pytest.mark.parametrize(
+    ("policy", "value", "expected_first", "expected_repeated"),
+    [
+        (True, "alice:s3cret", "***", "***"),
+        ("whole", "alice:s3cret", "***", "***"),
+        ("header", "X-Env: staging", "***", "X-Env: staging"),
+        ("url", "http://ann:s3cret@proxy.test", "***", "http://ann:***@proxy.test"),
+        (False, "alice:s3cret", "--token", "alice:s3cret"),
+    ],
+)
+def test_a_flag_shaped_value_does_not_hide_the_following_harmless_argument(
+    temp_workspace: TempWorkspace,
+    policy: SecretPolicy,
+    value: str,
+    expected_first: str,
+    expected_repeated: str,
+) -> None:
+    crawl = create_any_crawl(
+        temp_workspace,
+        command_argv=[
+            "linx",
+            "crawl",
+            "--value",
+            "--token",
+            "harmless",
+            "--token",
+            "s3cret",
+            "--value",
+            value,
+            f"--value={value}",
+        ],
+        secret_names=SecretNames(flags={"--value": policy, "--token": "whole"}),
+    )
+
+    assert json.loads(crawl_row(crawl.path)["command_argv"]) == [
+        "linx",
+        "crawl",
+        "--value",
+        expected_first,
+        "harmless",
+        "--token",
+        "***",
+        "--value",
+        expected_repeated,
+        f"--value={expected_repeated}",
+    ]
+
+
 @pytest.mark.parametrize("policy", [True, "whole", "header", "url"])
 def test_unset_secret_forms_remain_unset(
     temp_workspace: TempWorkspace, policy: SecretPolicy

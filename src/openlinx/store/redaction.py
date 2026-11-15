@@ -124,12 +124,18 @@ def redact(argv: Sequence[str], config: Mapping[str, Any], secrets: SecretNames)
 
 def _redact_argv(argv: Sequence[str], flags: Mapping[str, SecretPolicy]) -> list[str]:
     redacted = list(argv)
+    value_policy: SecretPolicy | None = None
     for index, argument in enumerate(argv):
+        # A split value may look like another option; consume it exactly once.
+        if value_policy is not None:
+            redacted[index] = _redact_value(argument, value_policy)
+            value_policy = None
+            continue
         flag, joined, value = argument.partition("=")
         if joined and flag in flags:
             redacted[index] = f"{flag}={_redact_value(value, flags[flag])}"
-        elif index > 0 and argv[index - 1] in flags:
-            redacted[index] = _redact_value(argument, flags[argv[index - 1]])
+        elif argument in flags:
+            value_policy = flags[argument]
     return redacted
 
 
