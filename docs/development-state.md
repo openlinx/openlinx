@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | Local branch through task 11.11 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides, header guards, failure-message masking and Basic Auth with per-request identity and settings-source guards implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | Local branch through task 11.12 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides, header guards, failure-message masking and Basic Auth with per-request identity, settings-source and diagnostic guards implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -108,7 +108,7 @@ quoting credentials. Explicit empty auth overrides Workspace credentials and rec
 as null. Literal wire cases and failing mutations cover Unicode, empty parts,
 whitespace, validation, conflict detection and secret metadata. A DNS-boundary
 regression guards the new credential's plaintext and encoded forms in stored errors;
-the complete diagnostic matrix remains in task 11.12.
+task 11.12 extends it to the complete diagnostic matrix.
 Task 11.9 guards Basic Auth and custom Authorization on External Links and on both
 Seed and ordinary Internal redirects to an External target. Literal HTTP logs and
 stored classification/redirect links establish that each target was requested without
@@ -125,15 +125,21 @@ Workspace credentials are verified on the wire; auth/Authorization conflicts acr
 both flag/Workspace directions fail before HTTP or Crawl-file creation. Failing
 mutations prove recording, Workspace loading and conflict rejection; no runtime
 change was needed.
+Task 11.12 guards raw credentials, nonempty passwords, Base64 payloads and full Basic
+values in emitted/result/stored hook diagnostics and URL/robots transport failures.
+ASCII, non-ASCII and decomposed Unicode use literal expectations; a direct HTTP
+protocol failure separately proves the URL path. Harmless context stays visible.
+Nine failing mutations prove the masking paths, individual secret forms and exact
+UTF-8 encoding; no runtime change was needed.
 Confirm the actual branch, task marks and checks before continuing.
-Continue with Basic Auth diagnostic guards and fresh-secret continue inputs
-(11.12–11.14), group review, explicit
+Continue with fresh-secret continue inputs
+(11.13–11.14), group review, explicit
 proxy, offered HTTP capability and bounded zstd. Keep 060 frozen at task 0.6.
 
 Fresh-secret restoration on continue remains unimplemented; tasks 11.13–11.14 own
-that contract, including a guard that disabled auth needs no fresh value. Full Basic
-Auth diagnostic coverage belongs to 11.12. The encoding and disabled-auth semantics
-are explicit in the owning plan's D1/D8 and fetching specification.
+that contract, including a guard that disabled auth needs no fresh value. The encoding
+and disabled-auth semantics are explicit in the owning plan's D1/D8 and fetching
+specification.
 
 The [comment review and test quality plan](test-organization-plan.md) separates
 comment review, test-contract corrections and file organization. Review preparation

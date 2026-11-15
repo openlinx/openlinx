@@ -499,25 +499,46 @@ def test_empty_auth_disables_basic_auth(
 
 
 class QuotingAuthResolver(AbstractResolver):
+    def __init__(self, message: str) -> None:
+        self._message = message
+
     async def resolve(
         self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
     ) -> list[ResolveResult]:
-        raise OSError(
-            None,
-            "refused test:123£ / 123£ / dGVzdDoxMjPCow== / Basic dGVzdDoxMjPCow==; staging",
-        )
+        raise OSError(None, self._message)
 
     async def close(self) -> None:
         pass
 
 
+@pytest.mark.parametrize(
+    ("auth", "password", "payload", "authorization"),
+    [
+        ("alice:s3cret", "s3cret", "YWxpY2U6czNjcmV0", "Basic YWxpY2U6czNjcmV0"),
+        ("test:123£", "123£", "dGVzdDoxMjPCow==", "Basic dGVzdDoxMjPCow=="),
+        (
+            "алиса:пароль",
+            "пароль",
+            "0LDQu9C40YHQsDrQv9Cw0YDQvtC70Yw=",
+            "Basic 0LDQu9C40YHQsDrQv9Cw0YDQvtC70Yw=",
+        ),
+        ("test:pa\u0308ss", "pa\u0308ss", "dGVzdDpwYcyIc3M=", "Basic dGVzdDpwYcyIc3M="),
+    ],
+    ids=["ascii", "pound", "cyrillic", "decomposed"],
+)
 def test_transport_failures_hide_exact_utf8_credentials_and_their_wire_forms(
     temp_workspace: TempWorkspace,
+    auth: str,
+    password: str,
+    payload: str,
+    authorization: str,
 ) -> None:
     result = crawl_result(
         "http://site.test/",
-        auth="test:123£",
-        resolver=QuotingAuthResolver(),
+        auth=auth,
+        resolver=QuotingAuthResolver(
+            f"refused {auth} / {password} / {payload} / {authorization}; staging"
+        ),
         retries=0,
         network_wait=0,
     )
@@ -531,3 +552,5 @@ def test_transport_failures_hide_exact_utf8_credentials_and_their_wire_forms(
     for code, message in messages:
         assert code == "dns_error"
         assert "refused *** / *** / *** / ***; staging" in message
+        for secret in (auth, password, payload, authorization):
+            assert secret not in message
