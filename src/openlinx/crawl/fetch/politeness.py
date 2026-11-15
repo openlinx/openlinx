@@ -1,4 +1,4 @@
-"""Politeness: request limits, the URL limit and --rate (020-add-crawl-core D7)."""
+"""Apply host timing, concurrency and URL limits before requests start."""
 
 import asyncio
 
@@ -57,12 +57,12 @@ def global_cap(concurrency: int) -> int:
 
 
 class RequestLimits:
-    """The bound on URL tasks and the URL limit, --max-urls, which counts every request it
-    lets start; the Requester holds the hosts' slots and the global cap.
+    """The bound on URL tasks and the URL limit, --max-urls, which counts every request it lets
+    start; the Requester holds the hosts' slots and the global cap.
 
     A task holds its permit until its unit is submitted, so `backlog` is how far page
-    preparation may fall behind the requests before fetching waits (design D7, 026 D2).
-    """
+    preparation may fall behind the requests before fetching waits (020-add-crawl-core D7;
+    026-add-parse-pool D2)."""
 
     def __init__(
         self, cap: int, backlog: int = 0, max_urls: int | None = None, *, started: int = 0
@@ -85,7 +85,7 @@ class RequestLimits:
         """Uncounts a request whose URL is requested again and counts then: one that ended
         without a response during a network pause and was not recorded, or one that an outage
         re-queues. Room it frees takes back a refusal, so a URL refused at the limit is
-        requested after all (design D16)."""
+        requested after all."""
         self._started -= 1
         if self._refused is not None and self._started < self._refused:
             self._refused = None

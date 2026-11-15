@@ -1,4 +1,4 @@
-"""Requests, each through the Requester (020-add-crawl-core D7, D8).
+"""Make requests through the Requester, which owns admission and retry policy.
 
 fetcher: Fetcher, FetcherFactory, FetchPolicy, Request, FetchResult, FetchFailure,
 aiohttp_fetcher, header_values, joined_header, DEFAULT_USER_AGENT, REQUEST_DEADLINE_SECONDS.

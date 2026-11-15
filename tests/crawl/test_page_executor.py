@@ -1,4 +1,4 @@
-"""The page executor's lifecycle, through the Crawl Service (020-add-crawl-core D9; seam 3)."""
+"""Verify the Page executor lifecycle through the Crawl Service."""
 
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -30,7 +30,7 @@ class RecordingExecutor:
         self.events: list[str] = []
         self._settings: PageSettings | None = None
 
-    # Properties, as 026's pool may expose them: the Protocol only reads them.
+    # Properties satisfy the executor Protocol, which only reads them.
     @property
     def backlog(self) -> int:
         return 0
@@ -125,7 +125,7 @@ def test_the_page_executor_closes_when_the_start_event_fails(
 
 
 class CrashingExecutor:
-    """Prepares nothing, as 026's pool reports a worker that ended while it held a Page."""
+    """Prepare nothing, simulating a parse worker that ended while it held a Page."""
 
     backlog = 0
     workers = 0

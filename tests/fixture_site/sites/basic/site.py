@@ -1,4 +1,4 @@
-"""The basic site: one page at / (design D9 of 000-scaffold-project)."""
+"""Serve a basic fixture site with one Page at the root path."""
 
 from pathlib import Path
 

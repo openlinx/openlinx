@@ -1,5 +1,4 @@
-"""Route options: headers, content_type, delay, hang, reset_after, endless bodies, after
-(design D9 of 000)."""
+"""Verify fixture-route headers, delays, hangs, resets and streaming options."""
 
 import asyncio
 import time

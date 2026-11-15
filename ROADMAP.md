@@ -40,13 +40,13 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | done |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | done |
 | 021 | `021-rename-to-openlinx` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | `linx`, `openlinx` | done |
-| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | v0.1 complete through group 10; groups 11–14 deferred to v0.2 |
+| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | v0.1 complete through group 10; v0.2 groups 11–14 planning active, runtime open |
 | 023 | `023-fix-code-audit` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | existing Commands | merged and archived |
-| 030 | `030-add-page-data` | `page-data` | none (data only) | foundation in main; local 4b integrated; whole-change review fixes and acceptance open |
+| 030 | `030-add-page-data` | `page-data` | none (data only) | foundation in main; local 4b and review fixes complete; whole-change acceptance open |
 | 040 | `040-add-rules` | `rules` | `rules` | partial older branch; integration and remaining v0.1 Rules open |
 | 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | partial older branch; review fixes and 040 integration open |
 | 026 | `026-add-parse-pool` | `crawl-performance` | none | partial older branch; bounded shutdown and scale proof open |
-| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop`, `resume` | local ownership tasks 0.1–0.6; Commands not implemented |
+| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop`, `resume` | local ownership frozen at task 0.6 (`5fcf25e2`); Commands not implemented |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
 | 085 | `085-add-release` | decided when it is drafted | none (release workflow) | planned, not drafted yet |
 
@@ -68,8 +68,8 @@ widen:                                        ├─► 022-min ─┐
 ```
 
 - **Where the build is:**
-  - **In main:** the foundation through 021, the completed and archived 023 audit, 022's v0.1 scope through group 10, and the 030 Page data foundation. 030's deferred-column and Windows cleanup findings C01/C02 are closed by PR #37; PR #41 fixes the pause-count wait. 022 groups 11–14 remain deferred to v0.2.
-  - **Local candidates:** 030's group 4b and Max-Age/Content Area fixes at `9f4354e6`, and 060's ownership tasks 0.1–0.6 at `5fcf25e2`, are integrated with main `741b92f7` and pass local checks. 030's whole-change review found sentence-splitting and cookie Domain fixes still needed; acceptance remains open. 060's control Commands are not implemented, and group 0 still needs its remaining ownership scenarios, review and actual cross-OS CI.
+  - **In main:** the foundation through 021, the completed and archived 023 audit, 022's v0.1 scope through group 10, and the 030 Page data foundation. 030's deferred-column and Windows cleanup findings C01/C02 are closed by PR #37; PR #41 fixes the pause-count wait.
+  - **Local integration:** 030 at `c31c717e` includes group 4b, Max-Age/Content Area fixes and the completed sentence-splitting and cookie Domain review fixes; whole-change acceptance remains open. 022's plan at `e069ad43` covers groups 11–14, with runtime implementation and the real Python/OS matrix still open. The platform runner fix at `30ca0c46` is integrated locally and checks all three type targets on every host. 060 stays frozen at `5fcf25e2` after task 0.6; its control Commands, remaining ownership scenarios, review and actual cross-OS CI remain open.
   - **Older branches:** 026, 040 and 050 contain partial implementations that still need the package rename and current contracts. Bounded worker shutdown, Rule populations and remaining Rules, query review fixes, and the integrated Crawl → Issues proof remain open. [Development state](docs/development-state.md) links verified checkpoints, tasks and dependencies.
   - **Not started:** 080 (the agent Skill) and 085 (the release).
 - **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
@@ -177,7 +177,7 @@ If a change needs something another change owns, it depends on that change inste
   - The `response_headers` table, where cookie values are always stored as `***`. No cookies are sent.
   - The standard proxy variables `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are honoured, the one exception 022 adds to the no-environment-variables rule, and listed under `environment` in `linx commands`, with proxy passwords redacted.
   - HTTPS, virtual hosts and gzip on the fixture site (trustme).
-  - **(v0.2)** HTTP version per origin via ALPN (`http_1_1` / `http_2`), the `--proxy` flag (and `[crawl] proxy`), basic auth and custom headers.
+  - **(v0.2, groups 11–14: plan active; runtime open)** Custom headers and basic auth for Internal URLs, safe secret recording and fresh continue inputs, the `--proxy` flag (and `[crawl] proxy`), bounded offered HTTP capability per origin via ALPN (`http_1_1` / `http_2`) while requests stay HTTP/1.1, and bounded zstd decoding. Task 14.8 requires actual Python 3.12–3.14 runs on Windows, macOS and Linux.
   - **(v0.2)** Bot-challenge detection, with the hostile-site work: a bot-protection or WAF challenge page, recognised by the headers, cookies and body markers of the common CDNs and WAFs, marks its URL `blocked`, never a Page with a missing title or H1. It detects and classifies; it never evades.
   - **(v0.2)** With that detection, an External URL that answers 403 or a challenge is checked again with a browser-like request before it counts as broken. External URLs are already checked with GET, never HEAD.
   - **(v0.2)** Web Bot Auth, opt-in: requests are signed per RFC 9421 (Ed25519, with the public key served from a key directory), so a site owner behind a bot gatekeeper can verify the crawler and allow it. With no key configured, requests go out unsigned.

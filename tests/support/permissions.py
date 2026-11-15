@@ -1,4 +1,4 @@
-"""Real folders and files without write permission (015-add-crawl-store)."""
+"""Create real folders and files without write permission for boundary tests."""
 
 import os
 import stat

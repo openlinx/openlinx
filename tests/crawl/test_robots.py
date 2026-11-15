@@ -1,4 +1,4 @@
-"""The robots.txt reader (020-add-crawl-core D6; seam 4)."""
+"""Verify robots.txt parsing through pure logic."""
 
 import gc
 from types import BuiltinFunctionType, FunctionType, ModuleType

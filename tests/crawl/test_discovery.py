@@ -1,4 +1,4 @@
-"""The URLs that a Page links to, as the engine records them (020-add-crawl-core D1, D5; seam 4)."""
+"""Verify Page Links combine into one discovery record per target URL."""
 
 import pytest
 

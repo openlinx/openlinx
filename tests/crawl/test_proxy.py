@@ -1,4 +1,4 @@
-"""The proxy variables (022-add-fetch-policy, fetching; seam 3)."""
+"""Verify proxy environment variables through HTTP requests."""
 
 import json
 import socket
@@ -85,7 +85,7 @@ def test_a_proxy_password_from_a_variable_is_redacted(
     proxy = fixture_proxy(hosts.resolver)
     with_password = proxy.url.replace("http://", "http://u:pw@")
     monkeypatch.setenv("HTTP_PROXY", with_password)
-    # A proxy URL without a password is recorded as *** too, as 015 records a secret.
+    # Proxy settings are secret even without a password, so the whole URL is recorded as ***.
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.corp:3128")
     monkeypatch.setenv("NO_PROXY", "intranet.local")
 

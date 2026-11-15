@@ -1,4 +1,4 @@
-"""`Status` routes (design D9 of 000-scaffold-project)."""
+"""Verify Status routes in the fixture server."""
 
 import http.client
 from urllib.parse import urlsplit

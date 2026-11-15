@@ -1,4 +1,4 @@
-"""The proxy of each request, from the proxy variables (022-add-fetch-policy D1)."""
+"""Resolve each request's proxy from the captured proxy environment variables."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

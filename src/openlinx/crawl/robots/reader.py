@@ -1,4 +1,4 @@
-"""The robots.txt reader: Protego over the file's first 512,000 bytes (020-add-crawl-core D6)."""
+"""Parse the first 512,000 bytes of robots.txt with Protego."""
 
 from dataclasses import dataclass
 
@@ -16,7 +16,7 @@ _LONGEST_DELAY_MS = 2**63 - 1
 @dataclass(frozen=True, slots=True)
 class RobotsTxt:
     """The rules of one origin's robots.txt, read for one robots user-agent token; its text
-    goes to the store, not into the run's memo of origins (design D6)."""
+    goes to the store, not into the run's memo of origins (020-add-crawl-core D6)."""
 
     _rules: Protego
     _token: str
@@ -55,7 +55,7 @@ class OriginRobots:
 
     @property
     def origin_error(self) -> FetchError | None:
-        """Why the origin gave no response at all, so its URLs are errors (design D6)."""
+        """Why the origin gave no response at all, so its URLs are errors."""
         return self.fetch_error if self.failed_redirect is None else None
 
     @property

@@ -1,4 +1,4 @@
-"""The commented settings file init writes (design D2 of 010-add-workspace-and-cli-contract)."""
+"""Generate the commented settings file written by init."""
 
 import json
 from typing import Any

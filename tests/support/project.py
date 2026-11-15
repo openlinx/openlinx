@@ -1,4 +1,4 @@
-"""What the tests read from pyproject.toml (010-add-workspace-and-cli-contract)."""
+"""Read project metadata from pyproject.toml for test assertions."""
 
 import tomllib
 from pathlib import Path

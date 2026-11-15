@@ -1,4 +1,4 @@
-"""Where a response redirects to (022-add-fetch-policy D2; pure logic)."""
+"""Verify redirect target selection through pure logic."""
 
 import pytest
 

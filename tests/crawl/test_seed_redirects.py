@@ -1,4 +1,4 @@
-"""A Seed's Redirect Chain and the Scope (022-add-fetch-policy, fetching; seam 3+6)."""
+"""Verify the Seed's Redirect Chain determines the final Scope."""
 
 import json
 from pathlib import Path

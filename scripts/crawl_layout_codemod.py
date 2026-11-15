@@ -1,4 +1,4 @@
-"""Rewrites a tree's imports for the crawl package layout (020-add-crawl-core design D19).
+"""Rewrite imports from the former crawl modules to their package locations.
 
 Every branch that merges the layout move runs it once on its own tree, then lets ruff sort the
 imports and wrap the lines:

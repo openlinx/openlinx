@@ -1,4 +1,4 @@
-"""The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
+"""Declare the complete public crawl-file schema and its constraints."""
 
 from collections.abc import Iterable
 from typing import Any, Literal, get_args, get_origin
@@ -56,7 +56,7 @@ def literal_values(alias: Any) -> list[str]:
     return [item for member in get_args(value) for item in literal_values(member)]
 
 
-# Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
+# Version 1 lasts until post-v0.1 schema changes introduce migrations (015-add-crawl-store D5).
 SCHEMA_VERSION = 1
 CRAWL_MODES = literal_values(CrawlMode)
 CRAWL_STATES = literal_values(CrawlState)
@@ -604,12 +604,13 @@ pages = public_table(
         Text,
         comment="The URL the Page redirects to: the target of its 3xx response, of its HTTP "
         "Refresh header, or of its first meta refresh; NULL when it does not redirect, or "
-        "when the target is its own URL.",
+        "when the HTTP redirect has no target. A Refresh to its own URL is no redirect.",
     ),
     Column(
         "redirect_type",
         Text,
-        comment="How the Page redirects to redirect_url; NULL when it does not redirect. "
+        comment="How the Page redirects; http_redirect for every 3xx response, even when "
+        "redirect_url is NULL; NULL when it does not redirect. "
         "javascript_redirect is filled from v1.1.",
         info={"values": literal_values(RedirectType)},
     ),
@@ -913,6 +914,24 @@ pages = public_table(
         Text,
         comment="The target of the first link element whose rel is alternate with a media "
         "attribute and no hreflang; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "size_bytes",
+        Integer,
+        comment="The Page's body size after content decoding, equal to urls.size_bytes; NULL "
+        "for a body larger than 20 MiB, or for a coding that was not offered.",
+    ),
+    Column(
+        "transferred_bytes",
+        Integer,
+        comment="The Page's body size as transferred, before decoding, equal to "
+        "urls.transferred_bytes.",
+    ),
+    Column(
+        "content_encoding",
+        Text,
+        comment="The Content-Encoding header of the Page's response as received, equal to "
+        "urls.content_encoding; NULL without the header.",
     ),
     Column(
         "word_count",
@@ -1305,7 +1324,7 @@ links = public_table(
     "HTML, or in the Link and Refresh headers of an in-Scope 2xx response.",
     change=30,
 )
-# The layout and these indexes are provisional until the links benchmark chooses (design D4).
+# This layout and its indexes await the Link layout benchmark (030-add-page-data D4).
 Index(
     "links_target",
     links.c.target_url_id,

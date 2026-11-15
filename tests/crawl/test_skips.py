@@ -1,4 +1,4 @@
-"""The skips decided at dispatch (020-add-crawl-core D5, crawling; seam 3+6)."""
+"""Verify dispatch-time skips through HTTP and stored results."""
 
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite

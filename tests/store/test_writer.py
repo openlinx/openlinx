@@ -1,4 +1,4 @@
-"""The transactional writer (015-add-crawl-store, 017-speed-up-crawl-writer, crawl-store)."""
+"""Verify transactional batching, failure isolation and replay through the writer API."""
 
 import asyncio
 import sqlite3

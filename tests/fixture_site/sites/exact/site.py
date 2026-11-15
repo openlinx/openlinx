@@ -1,5 +1,4 @@
-"""Files whose exact bytes matter: mixed line endings, windows-1251 and precompressed bodies
-(design D9 of 000)."""
+"""Serve exact response bytes for line-ending, charset and compression tests."""
 
 from pathlib import Path
 

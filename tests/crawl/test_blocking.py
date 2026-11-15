@@ -1,4 +1,4 @@
-"""The run of 403 and 429 responses behind the blocking warning (020-add-crawl-core D7)."""
+"""Verify consecutive 403 and 429 responses trigger blocking warnings."""
 
 import pytest
 

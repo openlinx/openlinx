@@ -1,4 +1,4 @@
-"""The Links of the HTTP Link and Refresh headers (020-add-crawl-core D5; RFC 8288)."""
+"""Discover Links from HTTP Link and Refresh headers, including RFC 8288 Link syntax."""
 
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -27,7 +27,7 @@ def header_links(
     is_internal: Callable[[NormalizedUrl], bool],
     strip_params: re.Pattern[str] | None,
 ) -> list[DiscoveredLink]:
-    """In the order received, numbered from 1: they come before the document's (design D5)."""
+    """In the order received, numbered from 1: they come before the document's."""
     return [
         link
         for link, _ in header_links_with_parameters(

@@ -1,8 +1,9 @@
-"""A Page's cookies from its Set-Cookie headers, without their values (030-add-page-data D14)."""
+"""Extract cookie metadata from Set-Cookie headers without retaining values."""
 
 import re
 from collections.abc import Callable, Sequence
 from datetime import datetime
+from ipaddress import IPv6Address
 from typing import get_args
 
 from openlinx.extract.dates import internet_date
@@ -56,7 +57,14 @@ def _domain(value: str) -> str | None:
     # that is no host name or IP address matches no host (RFC 6265 5.1.3), such as the rest of
     # a header that a proxy folded, which holds the next cookie's value.
     domain = value.lower().removeprefix(".")
-    return domain if _HOST_NAME.fullmatch(domain) else None
+    if _HOST_NAME.fullmatch(domain):
+        return domain
+    try:
+        address = IPv6Address(domain)
+    except ValueError:
+        return None
+    # A scope suffix is an interface identifier, not part of a cookie's host address.
+    return domain if address.scope_id is None else None
 
 
 def _path(value: str | None) -> str | None:
@@ -74,5 +82,11 @@ def _expires(value: str) -> datetime | None:
 def _max_age(value: str) -> int | None:
     if _MAX_AGE.fullmatch(value) is None:
         return None
-    # RFC 6265 reads a Max-Age of any size; SQLite's INTEGER holds 64 bits.
-    return min(max(int(value), -(2**63)), 2**63 - 1)
+    negative = value.startswith("-")
+    digits = value.removeprefix("-").lstrip("0") or "0"
+    limit = "9223372036854775808" if negative else "9223372036854775807"
+    # Bound significant digits before int's decimal conversion limit can reject them.
+    if len(digits) > len(limit) or (len(digits) == len(limit) and digits > limit):
+        return -(2**63) if negative else 2**63 - 1
+    number = int(digits)
+    return -number if negative else number

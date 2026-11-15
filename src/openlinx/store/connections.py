@@ -1,4 +1,4 @@
-"""One engine per crawl-file operation (015-add-crawl-store D2; 017-speed-up-crawl-writer D8)."""
+"""Own one database engine per crawl-file operation."""
 
 import sqlite3
 import time
@@ -120,7 +120,8 @@ def opening(
         event.listen(engine, "connect", _own_transactions)
         event.listen(engine, "connect", _synchronous_for_the_journal)
         event.listen(engine, "begin", _begin_immediate)
-    # Only the writer's: creating the file and reading it keep SQLite's defaults (design D8).
+    # Only the writer's: creating the file and reading it keep SQLite's defaults
+    # (017-speed-up-crawl-writer D8).
     if role == "write":
         event.listen(engine, "connect", _writer_settings)
     # Disposed at once, so no handle outlives the operation: Windows could not delete the file.

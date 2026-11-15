@@ -1,4 +1,4 @@
-"""The rows of the Page data tables, loading no sqlalchemy (030-add-page-data D1, D16)."""
+"""Define Page data rows without loading SQLAlchemy."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -54,7 +54,7 @@ class PageRow:
     http_version: HttpVersion | None = None
     crawl_timestamp: datetime
     # The fields default to NULL, in column order. From the Page extractor: NULL for a Page that
-    # is not analysed or whose Page extractor failed (D2): the titles, meta elements, headings,
+    # is not analysed or whose Page extractor failed: the titles, meta elements, headings,
     # meta_refresh, and the counts from word_count on. The columns of later releases stay NULL.
     title_1: str | None = None
     title_1_length: int | None = None
@@ -103,6 +103,9 @@ class PageRow:
     http_rel_prev_1: str | None = None
     amphtml_link_element: str | None = None
     mobile_alternate_link: str | None = None
+    size_bytes: int | None = None
+    transferred_bytes: int | None = None
+    content_encoding: str | None = None
     word_count: int | None = None
     sentence_count: int | None = None
     average_words_per_sentence: float | None = None

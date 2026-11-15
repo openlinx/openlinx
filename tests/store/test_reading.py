@@ -1,4 +1,4 @@
-"""Reading a Crawl (015-add-crawl-store, crawl-store)."""
+"""Verify read-only access to Crawl data."""
 
 import shutil
 import sqlite3

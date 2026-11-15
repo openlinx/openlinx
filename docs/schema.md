@@ -197,8 +197,8 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `indexability_status` | TEXT | yes | | | `blocked_by_robots_txt`, `redirected`, `client_error`, `server_error`, `noindex`, `canonicalised` | The first reason in the Indexability order that makes the Page non_indexable: robots.txt, then the status class, then noindex, then a refresh redirect, then a canonical to another URL; NULL when the Page is indexable. |
 | `response_time_ms` | INTEGER | no | | | | Time from sending the request to receiving the whole body, equal to urls.response_time_ms. |
 | `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent, another text or a leap second. |
-| `redirect_url` | TEXT | yes | | | | The URL the Page redirects to: the target of its 3xx response, of its HTTP Refresh header, or of its first meta refresh; NULL when it does not redirect, or when the target is its own URL. |
-| `redirect_type` | TEXT | yes | | | `http_redirect`, `http_refresh`, `meta_refresh`, `javascript_redirect` | How the Page redirects to redirect_url; NULL when it does not redirect. javascript_redirect is filled from v1.1. |
+| `redirect_url` | TEXT | yes | | | | The URL the Page redirects to: the target of its 3xx response, of its HTTP Refresh header, or of its first meta refresh; NULL when it does not redirect, or when the HTTP redirect has no target. A Refresh to its own URL is no redirect. |
+| `redirect_type` | TEXT | yes | | | `http_redirect`, `http_refresh`, `meta_refresh`, `javascript_redirect` | How the Page redirects; http_redirect for every 3xx response, even when redirect_url is NULL; NULL when it does not redirect. javascript_redirect is filled from v1.1. |
 | `set_cookie_count` | INTEGER | no | | | | The number of Set-Cookie headers of the Page's response, equal to its rows in cookies. |
 | `js_cookie_count` | INTEGER | yes | | | | Filled from v1.1. The number of cookies the Page's scripts set, measured with JavaScript rendering. |
 | `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the requests to the Page's origin use, equal to origins.http_version. |
@@ -248,6 +248,9 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `http_rel_prev_1` | TEXT | yes | | | | The target of the first pagination Link header entry whose rel names prev or previous; NULL without one, or when the Page is not analysed. |
 | `amphtml_link_element` | TEXT | yes | | | | The target of the first amphtml link element; NULL without one, or when the Page is not analysed. |
 | `mobile_alternate_link` | TEXT | yes | | | | The target of the first link element whose rel is alternate with a media attribute and no hreflang; NULL without one, or when the Page is not analysed. |
+| `size_bytes` | INTEGER | yes | | | | The Page's body size after content decoding, equal to urls.size_bytes; NULL for a body larger than 20 MiB, or for a coding that was not offered. |
+| `transferred_bytes` | INTEGER | yes | | | | The Page's body size as transferred, before decoding, equal to urls.transferred_bytes. |
+| `content_encoding` | TEXT | yes | | | | The Content-Encoding header of the Page's response as received, equal to urls.content_encoding; NULL without the header. |
 | `word_count` | INTEGER | yes | | | | The number of words in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `sentence_count` | INTEGER | yes | | | | The number of sentences in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |
 | `average_words_per_sentence` | REAL | yes | | | | word_count divided by sentence_count, rounded half up to 2 decimals; NULL when sentence_count is 0, or the Page is not analysed or its Page extractor failed. |

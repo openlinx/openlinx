@@ -1,4 +1,4 @@
-"""The robots directives parser (020-add-crawl-core D6; seam 4)."""
+"""Verify robots directive parsing through pure logic."""
 
 from hypothesis import given
 from hypothesis import strategies as st

@@ -1,4 +1,4 @@
-"""The units of openlinx.store.crawls that a Crawl runs (020-add-crawl-core D10, D14; seam 2)."""
+"""Verify Crawl metadata units through the store API."""
 
 import json
 from datetime import UTC, datetime

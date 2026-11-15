@@ -1,4 +1,4 @@
-"""Initialising without the CLI (010-add-workspace-and-cli-contract, workspace)."""
+"""Verify Workspace initialization through the service API without the CLI."""
 
 from openlinx.output.reporter import Collected
 from openlinx.services.workspace import InitRequest, init_workspace

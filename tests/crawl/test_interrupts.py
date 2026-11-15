@@ -1,4 +1,4 @@
-"""Stopping a Crawl with an interrupt (020-add-crawl-core D10, D16)."""
+"""Verify interrupts stop a Crawl and preserve resumable data."""
 
 import asyncio
 import json
@@ -190,7 +190,7 @@ def test_a_second_interrupt_ends_the_process_at_once(
     stdout, stderr = _rest(process)
     took = time.monotonic() - second_at
 
-    # Nothing is written after it: the file stays running, which 060 reports as interrupted.
+    # Nothing is written after a second interrupt, so the file retains its running state.
     errors = [line for line in stderr.splitlines() if json.loads(line).get("level") == "error"]
     assert (
         process.returncode,
@@ -554,7 +554,7 @@ def test_a_requested_stop_ends_the_crawl_stopped_after_its_passes(
         "/a": FakePage("<p>A</p>", delay=5),
         "/b": FakePage("<p>B</p>"),
     }
-    # 060's stop command sets the flag the Crawl Service was given, as this does mid-crawl.
+    # A caller's stop Command sets this same service flag while the Crawl is running.
     fetcher = FakeFetcher(clock, pages, on_start={"/b": lambda: stop.set("requested")})
 
     result = crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher, stop=stop)

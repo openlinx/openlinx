@@ -1,4 +1,4 @@
-"""`linx crawl` over the Crawl Service (020-add-crawl-core D10, D11)."""
+"""Adapt the Crawl Service to the crawl Command."""
 
 from pathlib import Path
 from typing import Annotated, Any

@@ -1,4 +1,4 @@
-"""The forward proxy of the proxy scenarios (022-add-fetch-policy D9)."""
+"""Verify the local forward proxy used by HTTP proxy scenarios."""
 
 import asyncio
 

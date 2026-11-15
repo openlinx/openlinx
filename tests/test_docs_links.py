@@ -1,4 +1,4 @@
-"""Relative links and their heading anchors in the contributor docs resolve (000, 023 D15)."""
+"""Verify relative links and heading anchors in contributor documentation resolve."""
 
 import re
 from pathlib import Path

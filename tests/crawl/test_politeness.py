@@ -1,5 +1,4 @@
-"""Politeness limits (020-add-crawl-core D7; seam 4, and fake timing through the Crawl
-Service)."""
+"""Verify request limits through pure logic and virtual-clock service runs."""
 
 import pytest
 

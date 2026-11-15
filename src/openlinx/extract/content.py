@@ -1,4 +1,4 @@
-"""Content Area text: its counts, its hash and Text Ratio (030-add-page-data D7, D8, D10, D13)."""
+"""Measure Content Area text, its hash and Text Ratio."""
 
 import hashlib
 import math
@@ -30,26 +30,28 @@ _WORD = re.compile(f"{_ONE_CHARACTER_WORD}|{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_
 _TERMINATORS = ".!?\u2026\u3002\uff01\uff1f"
 # A run of terminators ends a sentence before whitespace or the block's end, or wherever it
 # holds a full-width one, which needs no space after it.
+# Try only the start of a run: retrying every suffix after a failed match is quadratic.
 _SENTENCE_END = re.compile(
-    f"[{_TERMINATORS}]*[\u3002\uff01\uff1f][{_TERMINATORS}]*|[{_TERMINATORS}]+(?=\\s|$)"
+    f"(?<![{_TERMINATORS}])"
+    f"(?:[{_TERMINATORS}]*[\u3002\uff01\uff1f][{_TERMINATORS}]*|[{_TERMINATORS}]+(?=\\s|$))"
 )
 
 
 def content_blocks(tree: LexborHTMLParser, area: ContentArea) -> Iterator[str]:
     """The Content Area text, block by block, in document order."""
-    body = tree.body
-    if body is None:
+    container = tree.root if area.include else tree.body
+    if container is None:
         return
     # Each selector on its own: one selector list would let a selector that leaves a comment
     # or a string open swallow the ones after it.
     excluded = {node.mem_id for selector in area.exclude for node in tree.css(selector)}
     roots = {node.mem_id for selector in area.include for node in tree.css(selector)}
-    # The walk starts inside <body>, so <body> and <html> are looked at here.
-    outer = [node.mem_id for node in (body, body.parent) if node is not None]
+    # The child-walker does not visit its container or that container's ancestors.
+    outer = [node.mem_id for node in (container, container.parent) if node is not None]
     if any(mem_id in excluded for mem_id in outer):
         return
-    every = not area.include or any(mem_id in roots for mem_id in outer)
-    yield from text_blocks(body, excluded, None if every else roots)
+    every = not area.include or container.mem_id in roots
+    yield from text_blocks(container, excluded, None if every else roots)
 
 
 def sentence_count(blocks: Iterable[str]) -> int:
@@ -71,7 +73,7 @@ def average_words_per_sentence(words: int, sentences: int) -> float | None:
 
 def content_hash(blocks: Iterable[str], words: int) -> str | None:
     # Without words, empty shells would all be Exact Duplicates of each other. No Unicode
-    # normalisation: its tables differ between interpreters (D10).
+    # normalisation: its tables differ between interpreters (030-add-page-data D10).
     if words == 0:
         return None
     return hashlib.sha256(normalized(joined(blocks)).encode()).hexdigest()

@@ -1,4 +1,4 @@
-"""The [content_area] settings table (030-add-page-data D13)."""
+"""Define the content_area settings table for the Page extractor."""
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from selectolax.lexbor import SelectolaxError

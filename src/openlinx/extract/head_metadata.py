@@ -1,4 +1,4 @@
-"""The titles, meta elements and declared language of a Page's HTML (030-add-page-data D1, D7)."""
+"""Extract titles, meta elements and declared language from a Page's HTML."""
 
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
@@ -27,7 +27,7 @@ def meta_contents(metas: list[LexborNode], name: str) -> list[str]:
 
 
 def meta_refresh(metas: list[LexborNode]) -> str | None:
-    # http-equiv compared as 020 compares it for its meta_refresh Link: lowercased, not trimmed.
+    # Match Link discovery: http-equiv is lowercased but not trimmed for a meta_refresh Link.
     for node in metas:
         if (node.attributes.get("http-equiv") or "").lower() == "refresh":
             return normalized(node.attributes.get("content") or "")

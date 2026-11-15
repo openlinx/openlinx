@@ -1,4 +1,4 @@
-"""The row writers of the pages and cookies tables (030-add-page-data D1)."""
+"""Write Page and cookie rows within their URL's recording unit."""
 
 from collections.abc import Sequence
 from dataclasses import fields

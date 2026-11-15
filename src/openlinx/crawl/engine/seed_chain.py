@@ -1,4 +1,4 @@
-"""A Seed's Redirect Chain, and the Scope while it is open (022-add-fetch-policy D3)."""
+"""Resolve the Seed's Redirect Chain before fixing the Crawl's final Scope."""
 
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.crawl_warnings import seed_redirected_out_of_scope
@@ -57,7 +57,7 @@ class SeedChain:
 async def end_seed_chain(context: CrawlContext, chain: SeedChain, *, responded: bool) -> None:
     """Ends the Seed's Redirect Chain on the URL it ended on: its URLs are decided again
     against the Scope it ended in, which the Crawl records when it widened, and page
-    preparation starts with that Scope (022-add-fetch-policy D3). It is the one entry of three
+    preparation starts with that Scope. It is the one entry of three
     triggers: the chain's last response, before its own Page is prepared; a URL of the chain
     decided without a response; and, after depth 0, a chain that no URL decided."""
     # Before any await, so no second trigger can pass while this one reads the store.

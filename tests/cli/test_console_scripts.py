@@ -1,4 +1,4 @@
-"""The two console scripts, linx and openlinx (021-rename-to-openlinx design D1 and D4)."""
+"""Verify both console entry points preserve the invoked command name."""
 
 import json
 import shutil

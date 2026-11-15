@@ -1,4 +1,4 @@
-"""Resolved settings: settings file and flags (design D2 of 010-add-workspace-and-cli-contract)."""
+"""Resolve settings from registered tables, the settings file and flag overrides."""
 
 import difflib
 import re

@@ -1,5 +1,4 @@
-"""The display form of a Page's address, and its path and query (030-add-page-data, the Address
-columns)."""
+"""Derive the display address, path and query of a Page's URL."""
 
 import re
 from contextlib import suppress

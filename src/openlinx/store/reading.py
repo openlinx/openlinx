@@ -1,4 +1,4 @@
-"""Reading crawl files read-only, one engine per operation (design D2 of 015-add-crawl-store)."""
+"""Read Crawl files through a read-only engine scoped to each operation."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -28,7 +28,7 @@ def reading(path: Path) -> Iterator[Connection]:
 
 
 def _check_schema_version(connection: Connection, path: Path) -> None:
-    # Read before any declared table: a newer file may have changed them (design D5).
+    # Read before any declared table: a newer file may have changed them.
     version: int = connection.exec_driver_sql("PRAGMA user_version").scalar_one()
     if version > SCHEMA_VERSION:
         raise OpenLinxError(

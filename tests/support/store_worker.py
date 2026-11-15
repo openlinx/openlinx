@@ -1,4 +1,4 @@
-"""A writer in its own process, run and killed by durability tests (015-add-crawl-store)."""
+"""Run a writer in a child process that durability tests can kill."""
 
 import os
 import subprocess

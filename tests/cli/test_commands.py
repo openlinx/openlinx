@@ -1,4 +1,4 @@
-"""`linx commands` (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify the commands Command describes the registered CLI contracts."""
 
 import json
 import os

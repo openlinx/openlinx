@@ -1,4 +1,4 @@
-"""The structured-data counts and types of a Page's HTML (030-add-page-data D20)."""
+"""Count structured data items and collect their types from a Page's HTML."""
 
 from collections.abc import Iterator
 from dataclasses import dataclass

@@ -1,4 +1,4 @@
-"""The origins table's units: each URL's origin, in its unit (020-add-crawl-core D14, D18)."""
+"""Record each URL's origin within the same recording unit."""
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any

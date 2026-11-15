@@ -1,4 +1,4 @@
-"""The URL of a meta refresh or a Refresh header, as HTML reads it (020-add-crawl-core D5)."""
+"""Read redirect URLs from meta refresh elements and Refresh headers using HTML rules."""
 
 _WHITESPACE = "\t\n\x0c\r "
 _DIGITS = "0123456789"

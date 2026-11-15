@@ -1,4 +1,4 @@
-"""A URL's unit: its final state, as its handlers see it, and its record (020-add-crawl-core D5)."""
+"""Build each URL's recording unit from its final state and handler rows."""
 
 from dataclasses import replace
 from typing import Any
@@ -56,7 +56,7 @@ async def unit_of(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> Recor
     """The URL's final state as its handlers see it, which a fallback unit keeps part of,
     and the unit that records it with their rows; or None when a stop or the URL limit keeps a
     new request from starting, which leaves it queued. `decision` is taken once, at dispatch,
-    so a URL found on several Pages is recorded once (design D1)."""
+    so a URL found on several Pages is recorded once (020-add-crawl-core D1)."""
     # The Seed's Redirect Chain is depth 0: a redirect target keeps its source's depth.
     in_chain = run.seed_chain.holds(queued)
     recorded = await _recorded(run, queued, decision, in_chain)
@@ -78,7 +78,7 @@ async def _recorded(
     blocked = None
     if skip_reason is None:
         # A verdict already requested decides the URL before the limit, which guards only a
-        # new request (design D6).
+        # new request.
         if not robots.requested(queued.url) and run.limits.refuse_if_full():
             return None
         # Before the URL's own host slot, which the robots.txt request of its origin takes.
@@ -102,7 +102,7 @@ async def _recorded(
         run.pause.update_from_robots_txt(queued, origin_error, internal=decision.is_internal)
         if origin_error is not None:
             # The origin cannot be reached: the URL gets the error without a request of
-            # its own (design D6).
+            # its own.
             message = (
                 f"The robots.txt request of {url_origin(queued.url)} got no HTTP response, "
                 f"so the URL was not requested: {origin_robots.fetch_error_message}"
@@ -121,7 +121,7 @@ async def _recorded(
     decided = replace(dispatched, blocked_by_robots_txt=blocked)
     if skip_reason is not None:
         skipped = replace(decided, fetch_state="skipped", skip_reason=skip_reason)
-        # Not final: a shorter path re-queues it, and its handlers see it then (D5).
+        # Not final: a shorter path re-queues it, and its handlers see it then.
         rows, failed_handlers = (
             ((), None) if skip_reason == "max_depth" else _handler_rows(context, skipped)
         )
@@ -166,7 +166,7 @@ def _robots_verdict(
     in_chain: bool,
 ) -> tuple[SkipReason | None, bool | None, tuple[Diagnostic, ...]]:
     """robots.txt's skip of a URL that would be requested, its blocked_by_robots_txt, NULL
-    while the rules are unknown, and the warnings for the caller to give (design D6)."""
+    while the rules are unknown, and the warnings for the caller to give."""
     ignore = settings.ignore_robots
     warnings: tuple[Diagnostic, ...] = ()
     if origin_robots.state == "unreachable":
@@ -194,7 +194,7 @@ def _skip_reason(
     if decision.skip_reason is not None:
         return decision.skip_reason
     # A followed Page's Resources are requested one deeper than the limit, no deeper: what
-    # a Checked URL that was HTML links to is two deeper (design D5).
+    # a Checked URL that was HTML links to is two deeper (020-add-crawl-core D5).
     if max_depth is not None and queued.crawl_depth > max_depth + via_resource(queued):
         return "max_depth"
     if not (decision.is_internal or context.settings.check_external):
@@ -211,19 +211,19 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
         # Before any preparation: the chain's last response may be a Page of the wider Scope.
         await end_seed_chain(run.context, run.seed_chain, responded=True)
     scope = run.seed_chain.scope
-    # An External URL or one outside the Scope is a Checked URL, never parsed (design D5).
+    # An External URL or one outside the Scope is a Checked URL, never parsed.
     followed = decided.in_scope and 200 <= response.status_code < 300
     prepared = followed and is_html_type(content_type)
     content_encoding = joined_header(response.headers, "Content-Encoding")
     decoded = is_decodable(content_encoding)
     if prepared and response.body_truncated:
-        # A Page cut at the cap would be parsed as another, shorter one (022 design D1).
+        # A Page cut at the cap would be parsed as another, shorter one (022-add-fetch-policy D1).
         page: PreparedPage | None = PreparedPage(
             parse_error="body_too_large",
             parse_error_message=f"The body is larger than {BODY_LIMIT // 1024 // 1024} MiB.",
         )
     elif prepared and not decoded:
-        # A server that ignored the offered codings: its bytes are no text to parse (D1).
+        # A server that ignored the offered codings: its bytes are no text to parse.
         page = PreparedPage(
             parse_error="unsupported_encoding",
             parse_error_message=f"The body is in {content_encoding}, which no request offers.",
@@ -232,14 +232,14 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
         page = await context.pages.prepare(url, response) if prepared else None
     parsed = page is not None and page.parsed
     # The Link and Refresh headers of an in-Scope 2xx response count, whatever became of its
-    # preparation (design D9).
+    # preparation.
     links = response_links(url, response, scope, context.strip_params) if followed else ()
     if page is not None:
         links += page.html_links
     if page is not None and page.parsed:
         directives = page.directives
     else:
-        # The X-Robots-Tag applies to any response, a PDF's or a failed Page's (D9).
+        # The X-Robots-Tag applies to any response, a PDF's or a failed Page's.
         directives = response_directives(response, context.settings.robots_user_agent)
     discovered = discovered_urls(links, scope)
     # The Page the Seed's Redirect Chain ends on, the Seed's own when it answered at once.
@@ -260,7 +260,7 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
         response_time_ms=response.response_time_ms,
         body_truncated=response.body_truncated,
         content_encoding=content_encoding,
-        # Measured on the decoded body, unless the cap cut it or it was kept as received (D1).
+        # Measured on the decoded body, unless the cap cut it or it was kept as received.
         size_bytes=len(response.body) if decoded and not response.body_truncated else None,
         transferred_bytes=response.transferred_bytes,
         directives=directives,
@@ -384,13 +384,13 @@ def _handler_rows(
     for handler in context.hooks.handlers:
         try:
             batch = _rows_of(handler, result)
-        # A handler is later changes' code: its failure costs only its rows (design D16).
+        # A handler is extension code: its failure costs only its rows (020-add-crawl-core D16).
         except Exception as error:
             failed.append(hook_failure(handler.name, handler.handle, error))
             continue
         if batch is not None:
             rows.append(batch)
-    # One count per URL, however many of its handlers failed (design D16).
+    # One count per URL, however many of its handlers failed.
     return tuple(rows), handler_failure(result.url, failed, context.secrets) if failed else None
 
 

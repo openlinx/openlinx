@@ -1,4 +1,4 @@
-"""robots.txt over HTTP (020-add-crawl-core D6, crawling; seam 3 and 3+6)."""
+"""Verify robots.txt handling through HTTP and stored results."""
 
 from pathlib import Path
 

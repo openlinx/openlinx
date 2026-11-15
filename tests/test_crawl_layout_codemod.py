@@ -1,4 +1,4 @@
-"""The codemod of the crawl package layout (020-add-crawl-core design D19)."""
+"""Verify import migration from former crawl modules to package locations."""
 
 import importlib.util
 from pathlib import Path

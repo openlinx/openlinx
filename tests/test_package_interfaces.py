@@ -1,4 +1,4 @@
-"""Guard: package interfaces list cross-package imports from src (023 D13)."""
+"""Guard package interface lists against actual cross-package imports."""
 
 import ast
 import re

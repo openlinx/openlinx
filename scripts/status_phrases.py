@@ -1,5 +1,6 @@
-"""Writes src/openlinx/extract/status_phrases.py: the reason phrase of each status code in the IANA
-HTTP Status Code Registry (030-add-page-data D19), from scripts/http-status-codes-1.csv.
+"""Generate HTTP status phrases from the checked-in IANA registry snapshot.
+
+Writes src/openlinx/extract/status_phrases.py from scripts/http-status-codes-1.csv.
 
 To refresh: save https://www.iana.org/assignments/http-status-codes/http-status-codes-1.csv over
 the snapshot with LF line endings, then give the registry's "Last Updated" date.

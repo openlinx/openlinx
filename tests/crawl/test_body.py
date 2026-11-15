@@ -1,4 +1,4 @@
-"""Reading a response body up to its cap (022-add-fetch-policy D1; Pure)."""
+"""Verify bounded response-body reading and decompression through pure logic."""
 
 import asyncio
 import gzip

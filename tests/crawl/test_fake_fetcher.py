@@ -1,4 +1,4 @@
-"""The fake Fetcher of the timing scenarios (020-add-crawl-core D15, 022-add-fetch-policy D9)."""
+"""Verify the timing-test Fetcher double's scripted outcomes."""
 
 import asyncio
 

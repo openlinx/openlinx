@@ -1,4 +1,4 @@
-"""The response_headers table's writer (022-add-fetch-policy D7)."""
+"""Write the response headers from a URL's last request attempt."""
 
 from collections.abc import Sequence
 

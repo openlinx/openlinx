@@ -1,4 +1,4 @@
-"""Fixtures for the CLI tests (010-add-workspace-and-cli-contract)."""
+"""Provide fixtures for CLI contract tests."""
 
 from pathlib import Path
 

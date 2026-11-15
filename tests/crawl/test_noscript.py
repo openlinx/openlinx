@@ -1,4 +1,4 @@
-"""`<noscript>` read as a browser that runs scripts reads it (020-add-crawl-core D5; seam 4)."""
+"""Verify noscript parsing follows the HTML rules for a browser with scripting enabled."""
 
 from datetime import UTC, datetime
 

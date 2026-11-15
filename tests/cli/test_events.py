@@ -1,4 +1,4 @@
-"""Progress events (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify CLI progress event output."""
 
 import json
 

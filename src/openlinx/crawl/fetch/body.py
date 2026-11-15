@@ -1,4 +1,4 @@
-"""The one body reader: a response body read and decoded up to its cap (022-add-fetch-policy D1)."""
+"""Read and decode response bodies within the configured size cap."""
 
 import zlib
 from collections.abc import AsyncIterable, Sequence
@@ -55,7 +55,7 @@ class _Zlib:
                 self._head = data
                 return b""
             self._head = None
-            # "deflate" means the zlib format, but some servers send raw deflate (design D1).
+            # Some servers send raw deflate instead of the zlib format (022-add-fetch-policy D1).
             if not _is_zlib_header(data):
                 self._inflate = zlib.decompressobj(-zlib.MAX_WBITS)
         if self._inflate.eof:

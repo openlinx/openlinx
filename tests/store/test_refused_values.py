@@ -1,4 +1,4 @@
-"""The file refuses bad values (018-add-schema-conventions, crawl-store)."""
+"""Verify the crawl-file schema refuses invalid values."""
 
 import pytest
 from sqlalchemy import update

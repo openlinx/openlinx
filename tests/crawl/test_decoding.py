@@ -1,4 +1,4 @@
-"""HTML decoding (020-add-crawl-core, crawling; design D5)."""
+"""Verify HTML decoding from response bytes and charset declarations."""
 
 import pytest
 from hypothesis import given

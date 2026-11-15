@@ -1,4 +1,4 @@
-"""The product name and names made from it (design D11 of 010-add-workspace-and-cli-contract)."""
+"""Define the product name and derive user-visible names from it."""
 
 from pathlib import PurePath
 
@@ -20,7 +20,7 @@ GLOBAL_DATA_DIR = f"~/{DATA_DIR_NAME}"
 
 def invoked_command(program: str) -> str:
     """The console script that `program`, a process's argv[0], names; COMMAND_NAME when it runs
-    some other way, such as `python -m` (design D4 of 021-rename-to-openlinx)."""
+    some other way, such as `python -m`."""
     # Windows may start the script as OPENLINX.EXE, whatever case PATHEXT gives.
     name = PurePath(program).name.lower().removesuffix(".exe")
     return name if name in (COMMAND_NAME, PACKAGE_NAME) else COMMAND_NAME

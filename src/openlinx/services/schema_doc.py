@@ -1,4 +1,4 @@
-"""Reading the table sections of the schema reference (018-add-schema-conventions D4)."""
+"""Read table descriptions from the public schema reference."""
 
 import re
 from typing import Any

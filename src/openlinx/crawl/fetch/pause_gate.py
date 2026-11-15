@@ -1,4 +1,4 @@
-"""The network pause owns request admission separately from slots (022 design D4)."""
+"""Gate request admission during network pauses independently of concurrency slots."""
 
 import asyncio
 
@@ -25,7 +25,7 @@ class PauseGate:
     async def pass_request(self, *, ends_at_gate: bool) -> bool:
         """Those that waited at the gate wake a loop turn or more after it opens: a request
         that comes since then goes behind them, so requests reach the host's slot in the order
-        they were dispatched (design D1). False for one that `ends_at_gate` at a closed one."""
+        they were dispatched. False for one that `ends_at_gate` at a closed one."""
         while self._at_gate and (not ends_at_gate or self._open.is_set()):
             await self._gate_drained.wait()
         if self._open.is_set():

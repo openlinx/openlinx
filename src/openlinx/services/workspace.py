@@ -1,4 +1,4 @@
-"""The Workspace service behind `linx init` (design D9 of 010-add-workspace-and-cli-contract)."""
+"""Create Workspaces for the init Command."""
 
 from dataclasses import dataclass
 from pathlib import Path

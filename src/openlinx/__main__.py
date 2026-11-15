@@ -1,4 +1,4 @@
-"""`python -m openlinx` runs the console script's app (design D7 of 000-scaffold-project)."""
+"""Run the console app when the package is invoked with `python -m`."""
 
 from openlinx.cli.app import main
 

@@ -1,4 +1,4 @@
-"""The app factory and the console script (design D8 of 010-add-workspace-and-cli-contract)."""
+"""Build the CLI app and expose its console entry point."""
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field

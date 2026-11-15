@@ -1,4 +1,4 @@
-"""Creating a Workspace's files (design D1 of 010-add-workspace-and-cli-contract)."""
+"""Create the files that define a Workspace."""
 
 import errno
 from collections.abc import Iterator

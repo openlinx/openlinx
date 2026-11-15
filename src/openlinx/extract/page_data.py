@@ -1,4 +1,4 @@
-"""The Page extractor: the columns a Page's HTML gives (030-add-page-data D1, D7, D10, D20)."""
+"""Extract Page data columns from HTML in one preparation pass."""
 
 import msgspec
 from selectolax.lexbor import LexborHTMLParser

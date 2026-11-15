@@ -1,4 +1,4 @@
-"""Progress events (020-add-crawl-core D10, crawling; fake timing)."""
+"""Verify Crawl progress events with virtual time."""
 
 from pathlib import Path
 from typing import Any

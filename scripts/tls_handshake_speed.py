@@ -1,4 +1,4 @@
-"""Measures TLS handshake time with truststore and with certifi's bundle (022-add-fetch-policy D5).
+"""Measure TLS handshake time with truststore and with certifi's bundle.
 
 A one-off measurement against public hosts, never a test and never part of the gate:
 

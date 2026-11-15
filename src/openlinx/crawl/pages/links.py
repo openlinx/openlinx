@@ -1,4 +1,4 @@
-"""Link discovery selects the sources declared by the Link type table (020 D5; 023 D12)."""
+"""Discover HTML Links from the sources declared by the Link type table."""
 
 import re
 from collections.abc import Callable, Container, Iterable, Iterator, Mapping
@@ -90,7 +90,7 @@ _SRCSET_CANDIDATE = re.compile(
 
 
 def parse_html(text: str) -> LexborHTMLParser:
-    """As a browser that runs scripts parses it (design D5)."""
+    """As a browser that runs scripts parses it."""
     return LexborHTMLParser(text, scripting=True)
 
 
@@ -129,7 +129,7 @@ def links_in_tree(
     follow_nofollow: bool,
     first_ordinal: int = 1,
 ) -> list[DiscoveredLink]:
-    """The Links of a parsed document, for page preparation, which parses once (design D9)."""
+    """The Links of a parsed document, for page preparation, which parses once."""
     codec = query_codec(encoding)
     links: list[DiscoveredLink] = []
     for reference in link_references(tree):
@@ -206,7 +206,8 @@ class LocatedLink:
 def locate_links(
     tree: LexborHTMLParser, links: Iterable[DiscoveredLink], *, expected_total: int
 ) -> Mapping[int, LocatedLink]:
-    """Locate HTML Links after checking the original Page's count and order (023 D11).
+    """Locate HTML Links only after validating the full Page's count and order
+    (023-fix-code-audit D11).
 
     Pass expected_total from the original PageInput.links, before filtering. A Link the
     tree does not hold raises RuntimeError too.

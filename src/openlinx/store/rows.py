@@ -1,4 +1,4 @@
-"""Handler rows, each written by its table's store module (020-add-crawl-core D9, D14)."""
+"""Pair handler rows with the store function that writes their table."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from sqlalchemy import Connection
 
-# One call per handler and URL, so a writer runs one executemany, 017's fast path (D9).
+# One call per handler and URL lets the writer use one executemany for all its rows.
 type RowWriter[R] = Callable[[Connection, Sequence[R]], None]
 
 

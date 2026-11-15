@@ -1,4 +1,4 @@
-"""What `linx crawl` reports about robots.txt (020-add-crawl-core D6, crawling; seam 1)."""
+"""Verify the crawl Command reports robots.txt decisions."""
 
 import json
 from pathlib import Path

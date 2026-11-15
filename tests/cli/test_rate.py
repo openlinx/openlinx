@@ -1,4 +1,4 @@
-"""The rate limit at the CLI (020-add-crawl-core D7, crawling; seam 1)."""
+"""Verify the rate limit through the CLI."""
 
 import json
 from pathlib import Path

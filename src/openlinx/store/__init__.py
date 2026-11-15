@@ -1,1 +1,1 @@
-"""Crawl store tables, writer and migrations: 015-add-crawl-store; later changes add tables."""
+"""Declare, write and read the public Crawl store."""

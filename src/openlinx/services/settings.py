@@ -1,5 +1,4 @@
-"""The tool's settings tables, by reference, so nothing loads until the settings do
-(023-fix-code-audit D9)."""
+"""Register settings by import reference to keep model loading off the CLI startup path."""
 
 from openlinx.workspace.tables import SettingsTables
 

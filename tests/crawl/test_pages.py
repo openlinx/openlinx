@@ -1,4 +1,4 @@
-"""Which responses are HTML (020-add-crawl-core D5; seam 4)."""
+"""Verify which responses qualify as HTML."""
 
 import pytest
 

@@ -1,4 +1,4 @@
-"""Interrupts stop a foreground Crawl through its stop flag (020-add-crawl-core D10)."""
+"""Translate process interrupts into the foreground Crawl's stop signal."""
 
 import asyncio
 import os
@@ -37,7 +37,7 @@ def interrupts_stop(loop: asyncio.AbstractEventLoop, stop: StopSignal) -> Iterat
         interrupts += 1
         if interrupts > 1:
             # The second ends the process at once and writes nothing; the last committed unit
-            # keeps the file consistent, and it stays running (design D10).
+            # keeps the file consistent, and it stays running.
             os._exit(ExitCode.INTERRUPTED)
         # It runs between two bytecodes of the main thread, which may hold the stderr lock, so
         # it only schedules the stop, which writes the stopping event on the loop.

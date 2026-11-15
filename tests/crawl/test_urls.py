@@ -1,4 +1,4 @@
-"""URL normalisation (020-add-crawl-core, crawling)."""
+"""Verify URL normalization through pure logic."""
 
 import re
 from urllib.parse import urlsplit

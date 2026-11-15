@@ -1,4 +1,4 @@
-"""The row writer of openlinx.store.links (030-add-page-data D4; seam 2)."""
+"""Verify Link row writing and inlink units through the store API."""
 
 from dataclasses import fields
 from datetime import UTC, datetime

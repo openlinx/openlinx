@@ -1,4 +1,4 @@
-"""The URL limit over HTTP (020-add-crawl-core D7, crawling; seam 3 and 3+6)."""
+"""Verify the URL limit through HTTP and stored results."""
 
 import json
 

@@ -1,4 +1,4 @@
-"""`Redirect` routes and redirect chains (design D9 of 000-scaffold-project)."""
+"""Verify Redirect routes and redirect chains in the fixture server."""
 
 import aiohttp
 import pytest

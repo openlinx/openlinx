@@ -1,4 +1,4 @@
-"""Crawl State transitions (020-add-crawl-core D12; seam 4)."""
+"""Verify allowed and refused Crawl State transitions."""
 
 from itertools import product
 from typing import get_args

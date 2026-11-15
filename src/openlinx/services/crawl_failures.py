@@ -1,4 +1,4 @@
-"""The errors that a failed Crawl ends with (020-add-crawl-core D16)."""
+"""Map Crawl failures and stop reasons to user-facing diagnostics."""
 
 from collections.abc import Callable, Mapping
 
@@ -86,7 +86,7 @@ def write_failed(crawl_file: CrawlFile, cause: BaseException | None) -> OpenLinx
 
 
 def interrupted(crawl_file: CrawlFile) -> OpenLinxError:
-    # 010's own text names Ctrl+C, which is wrong for Ctrl+Break and SIGTERM, and no way on.
+    # The generic interruption text names Ctrl+C; Crawls also handle Ctrl+Break and SIGTERM.
     return OpenLinxError(
         INTERRUPTED,
         "The Crawl stopped on an interrupt; what it recorded is kept.",

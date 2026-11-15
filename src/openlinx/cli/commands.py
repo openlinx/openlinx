@@ -1,4 +1,4 @@
-"""`linx commands`, the self-description (design D7 of 010-add-workspace-and-cli-contract)."""
+"""Describe the registered Commands and their output contracts."""
 
 import inspect
 from collections.abc import Callable
@@ -28,7 +28,7 @@ TYPE_NAMES = {
     "float range": "number",
 }
 
-# The only variables the tool honours: the OS's proxy settings, which 022 applies to fetching.
+# Only the proxy environment variables affect requests; other configuration uses settings.
 ENVIRONMENT: list[dict[str, Any]] = [
     {
         "names": ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"],

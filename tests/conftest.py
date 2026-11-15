@@ -1,4 +1,4 @@
-"""Plugins, hypothesis profiles, test loop (designs D5, D13 and D15 of 000-scaffold-project)."""
+"""Configure pytest plugins, Hypothesis profiles and the shared test event loop."""
 
 import asyncio
 import os

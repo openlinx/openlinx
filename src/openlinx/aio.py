@@ -1,5 +1,4 @@
-"""The one event-loop factory for production and tests (design D15 of 000-scaffold-project),
-and the one race of a task against what ends it early."""
+"""Share event-loop creation and cancellation-safe races between production and tests."""
 
 import asyncio
 import sys

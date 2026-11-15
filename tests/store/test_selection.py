@@ -1,4 +1,4 @@
-"""Selecting a Crawl with --crawl (015-add-crawl-store, crawl-store)."""
+"""Verify Crawl selection through the store API."""
 
 import shutil
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""The registry of settings tables (design D2 of 010-add-workspace-and-cli-contract)."""
+"""Register and validate settings tables without eager model imports."""
 
 import importlib
 import math
@@ -61,13 +61,15 @@ def keyed_entry(table: Any) -> Any:
 
 
 def check_table(name: str, table: Table) -> None:
-    """Raises TypeError unless the table follows the table rules of design D2."""
+    """Require flat, described settings with TOML defaults so templates and error hints can
+    use every table; keyed tables also need an entry docstring."""
     entry = keyed_entry(table)
     if entry is None:
         _check_model(name, table)
     else:
         # Literal entries (`<name> = <value>`) have no docstring to describe the table in the
-        # template, so they wait for the change that needs them (050's [segments]).
+        # template, so they wait for the change that needs them (050-add-query-and-segments,
+        # [segments]).
         if not isinstance(entry, type) or not hasattr(entry, "model_fields"):
             raise TypeError(f"Settings table [{name}] needs a table model for its entries.")
         _check_model(f"{name}.<name>", entry)

@@ -1,4 +1,4 @@
-"""An extractor's own config (020-add-crawl-core D9; seam 4)."""
+"""Verify extractor configuration and immutable preparation records."""
 
 import json
 import pickle
@@ -53,7 +53,7 @@ def test_an_extractor_gets_its_own_config() -> None:
 def test_an_extractor_and_its_config_survive_the_trip_to_a_worker_process() -> None:
     greeting = extractor("greeting", _greet, Greeting("hi"))
 
-    # Our own bytes, as 026's pool sends them, never data from outside.
+    # Our own pickled bytes, as a parse worker sends them, never data from outside.
     assert pickle.loads(pickle.dumps(greeting)) == greeting  # noqa: S301
 
 
@@ -121,7 +121,7 @@ def test_the_default_page_settings_pickle() -> None:
     )
 
     try:
-        # Our own bytes, as 026's pool sends them, never data from outside.
+        # Our own pickled bytes, as a parse worker sends them, never data from outside.
         restored = pickle.loads(pickle.dumps(settings))  # noqa: S301
     except (pickle.PicklingError, AttributeError, TypeError) as error:
         pytest.fail(

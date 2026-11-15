@@ -1,4 +1,4 @@
-"""`fixture_site` fixtures: start a site, stop it afterwards (design D9 of 000-scaffold-project)."""
+"""Start fixture sites for tests and stop them during teardown."""
 
 import ssl
 from collections.abc import Iterator, Mapping

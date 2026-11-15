@@ -1,4 +1,4 @@
-"""Internal and External URLs over HTTP (020-add-crawl-core, crawling; seam 3+6)."""
+"""Verify Internal and External URL handling over HTTP and stored rows."""
 
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site

@@ -1,4 +1,4 @@
-"""`Responses` routes: a path answering each request in turn (022-add-fetch-policy D9)."""
+"""Verify Responses routes answer successive requests in their declared order."""
 
 import http.client
 from urllib.parse import urlsplit

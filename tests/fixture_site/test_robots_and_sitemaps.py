@@ -1,4 +1,4 @@
-"""`Robots`, `Sitemap` and `SitemapIndex` routes (design D9 of 000-scaffold-project)."""
+"""Verify robots.txt and sitemap routes in the fixture server."""
 
 import aiohttp
 

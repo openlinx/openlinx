@@ -1,5 +1,4 @@
-"""The frontier: one request per URL, an end, the order, and what a kill keeps
-(020-add-crawl-core D1; seam 3, and seam 1 for the kill)."""
+"""Verify frontier order, URL deduplication and data retained after a process kill."""
 
 import time
 from pathlib import Path

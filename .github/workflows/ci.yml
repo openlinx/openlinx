@@ -1,4 +1,4 @@
-# Every gate on every OS and Python version (design D10 of 000-scaffold-project).
+# Run every gate on each supported OS and Python version.
 name: CI
 
 on:

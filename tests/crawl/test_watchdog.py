@@ -1,4 +1,4 @@
-"""The watchdog, a backstop behind the Fetcher's own deadline (020-add-crawl-core D16)."""
+"""Verify the request watchdog remains a backstop behind the Fetcher's deadline."""
 
 import pytest
 

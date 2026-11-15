@@ -1,4 +1,4 @@
-"""Scope over HTTP and Section Crawls (020-add-crawl-core D4, crawling; seam 3+6)."""
+"""Verify Scope and Section Crawls through HTTP and stored results."""
 
 import json
 

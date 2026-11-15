@@ -1,4 +1,4 @@
-"""The units of openlinx.store.urls (020-add-crawl-core D1, D2, D14; seam 2)."""
+"""Verify frontier and URL recording units through the store API."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace

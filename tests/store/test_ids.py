@@ -1,4 +1,4 @@
-"""Crawl ids (015-add-crawl-store, crawl-store)."""
+"""Verify Crawl id generation and validation."""
 
 import re
 import secrets

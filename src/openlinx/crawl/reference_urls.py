@@ -1,4 +1,4 @@
-"""Pure reference URL resolution, independent of Link policy (023 D12; 020 D5, D19)."""
+"""Resolve reference URLs independently of Link policy."""
 
 import re
 from urllib.parse import urljoin
