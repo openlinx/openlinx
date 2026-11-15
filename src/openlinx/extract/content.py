@@ -30,8 +30,10 @@ _WORD = re.compile(f"{_ONE_CHARACTER_WORD}|{_WORD_CHARACTER}+(?:{_JOINER}{_WORD_
 _TERMINATORS = ".!?\u2026\u3002\uff01\uff1f"
 # A run of terminators ends a sentence before whitespace or the block's end, or wherever it
 # holds a full-width one, which needs no space after it.
+# Try only the start of a run: retrying every suffix after a failed match is quadratic.
 _SENTENCE_END = re.compile(
-    f"[{_TERMINATORS}]*[\u3002\uff01\uff1f][{_TERMINATORS}]*|[{_TERMINATORS}]+(?=\\s|$)"
+    f"(?<![{_TERMINATORS}])"
+    f"(?:[{_TERMINATORS}]*[\u3002\uff01\uff1f][{_TERMINATORS}]*|[{_TERMINATORS}]+(?=\\s|$))"
 )
 
 

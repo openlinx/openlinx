@@ -1,9 +1,13 @@
 """The Content Area and its counts (030-add-page-data, page-data; seam 4)."""
 
+import subprocess
+
 import pytest
 
 from openlinx.extract.content_area import ContentArea
+from tests.support.cli import PROCESS_TIMEOUT, REPO_ROOT
 from tests.support.page_data import FIXTURE_A, page_row
+from tests.support.processes import python_command
 
 
 def test_default_content_area_leaves_out_navigation() -> None:
@@ -251,6 +255,27 @@ def test_a_terminator_before_a_unicode_space_ends_a_sentence() -> None:
     row = page_row("<p>Free shipping.&nbsp;Order today!　Read the terms.</p>")
 
     assert row.sentence_count == 3
+
+
+@pytest.mark.slow
+def test_a_long_terminator_run_does_not_stall_page_preparation() -> None:
+    # A failed boundary match must not restart at every terminator. The existing process
+    # watchdog bounds a stall; this is not a comparison of machine-dependent timings.
+    command = python_command(
+        "-c",
+        "from tests.support.page_data import page_row\n"
+        "row = page_row('<p>' + '.' * 100_000 + 'x</p>')\n"
+        "assert (row.word_count, row.sentence_count, row.average_words_per_sentence) "
+        "== (1, 1, 1.0)",
+    )
+    subprocess.run(
+        command.argv,
+        cwd=REPO_ROOT,
+        env=command.env,
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=True,
+    )
 
 
 def test_text_ratio_of_a_small_document() -> None:
