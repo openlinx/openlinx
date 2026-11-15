@@ -221,6 +221,62 @@ def test_a_domain_is_a_host_name_or_an_ip_address() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("domain", "expected"),
+    [
+        ("2001:db8::1", "2001:db8::1"),
+        ("2001:DB8:0:0:0:0:0:1", "2001:db8:0:0:0:0:0:1"),
+        (".2001:DB8::1", "2001:db8::1"),
+        ("::1", "::1"),
+        ("::FFFF:192.0.2.10", "::ffff:192.0.2.10"),
+    ],
+)
+def test_an_ipv6_domain_is_lowercased_without_rewriting_the_address(
+    domain: str, expected: str
+) -> None:
+    (row,) = _cookies(f"sid=SECRET; Domain={domain}")
+
+    assert row.domain == expected
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [
+        "2001:db8::gg",
+        "2001::db8::1",
+        "[2001:db8::1]",
+        "[2001:db8::1]:443",
+        "2001:db8::1, sid=SECRET",
+        "fe80::1%SECRET",
+        "fe80::1%eth0, sid=SECRET",
+    ],
+)
+def test_a_malformed_or_folded_ipv6_domain_stores_no_secret(domain: str) -> None:
+    (row,) = _cookies(f"a=SECRET; Domain={domain}")
+
+    assert row.domain is None
+    assert "secret" not in repr(row).lower()
+
+
+@pytest.mark.parametrize(
+    ("attributes", "expected"),
+    [
+        ("Domain=example.test; Domain=2001:DB8::1", "2001:db8::1"),
+        ("Domain=2001:DB8::1; Domain=", "2001:db8::1"),
+        ("Domain=2001:DB8::1; Domain=broken::address", "2001:db8::1"),
+        ("Domain=2001:DB8::1; Domain=fe80::1%SECRET", "2001:db8::1"),
+        ("Domain=2001:DB8::1; Domain=2001:db8::2, sid=SECRET", "2001:db8::1"),
+        ("Domain=2001:DB8::1; Domain=.Shop.Example.test", "shop.example.test"),
+    ],
+)
+def test_repeated_domains_keep_the_last_valid_host_name_or_ipv6_address(
+    attributes: str, expected: str
+) -> None:
+    (row,) = _cookies(f"sid=SECRET; {attributes}")
+
+    assert row.domain == expected
+
+
 def test_expires_reads_two_digit_years_as_rfc_6265_does() -> None:
     rows = _cookies(
         "a=1; Expires=Wed, 21-Oct-15 07:28:00 GMT",
