@@ -81,7 +81,8 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 - **`started_at`** is the same instant as the time in the crawl id, read once when the Crawl is created.
 - **`settings_file`** is the `openlinx.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key and service-owned request policy metadata, so the file says how it was made even when `openlinx.toml` changes later.
 - **Request policy metadata:** every Crawl planned by the Crawl Service records
-  `"request_policy": {"custom_user_agent": true}` or `false` at the root of `config`,
+  `"request_policy": {"custom_user_agent": true}` or
+  `"request_policy": {"custom_user_agent": false}` at the root of `config`,
   beside settings tables. True selects the custom User-Agent for Internal requests;
   false selects the dedicated/default User-Agent. External requests always use the
   dedicated/default value. The selected `crawl.header` list and `crawl.user_agent` stay

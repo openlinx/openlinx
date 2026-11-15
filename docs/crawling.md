@@ -206,13 +206,19 @@ The `urls` table is the queue, and nothing else is: a URL leaves `queued` only i
 
 ### Continuing a Crawl
 
-The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file alone; `060`'s `linx resume` calls it, and adds `interrupted` Crawls. A continue:
+The Crawl Service continues a `stopped` or `failed` Crawl using its recorded settings and
+fresh secret inputs. The `linx resume` Command, including support for `interrupted` Crawls,
+is planned in `060` and is not implemented yet. A continue:
 
 1. builds the Crawl from the file: the `[crawl]` settings from `crawl.config`, the Scope from `crawl.scope` and the Seed from `seeds`, none of them decided again
 2. in one unit, sets `crawl.state` back to `running` with `stop_reason` NULL, writes the settings it runs with into `crawl.config`, and queues again every `error` URL and every URL skipped as `robots_unreachable`, since those outcomes are usually transient
 3. runs as a new Crawl would: it requests only `queued` URLs, so no URL fetched before is requested again, and it runs the post-crawl passes again when it ends
 
-Of the settings on this page, a continue may change the URL limit, to a higher one or none, `--concurrency` and `--rate`, as `060`'s resume options allow. The URL limit counts over the Crawl's whole life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see [Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as `seed_unreachable` again.
+Of the settings on this page, a continue may change the URL limit, to a higher one or none,
+concurrency and rate through `CrawlOverrides`. The URL limit counts over the Crawl's whole
+life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see
+[Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as
+`seed_unreachable` again.
 
 A Crawl with enabled Basic Auth records `***`, so a continue needs fresh credentials.
 The service accepts them through `CrawlOverrides.auth`; omitting that input refuses
@@ -431,7 +437,7 @@ An agent reads it to know what a Crawl covered without parsing its command line.
 
 ### The User-Agent header
 
-By default, every request, robots.txt's included, carries the header `User-Agent: OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, where the version is the tool's and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` supplies its global replacement, subject to [custom header precedence](#custom-request-headers): a CLI custom User-Agent wins on Internal requests over a Workspace dedicated value. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null; the default it stood for follows from `crawl.tool_version`. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+By default, every request, robots.txt's included, carries the header `User-Agent: OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, where the version is the tool's and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` supplies its global replacement, subject to [custom header precedence](#custom-request-headers): a CLI custom User-Agent wins on Internal requests over a Workspace dedicated value. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null. Each run generates the default from the running tool's version; `crawl.tool_version` identifies the version that created the Crawl, so a continue with a newer tool can send a newer default. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
 
 ### Custom request headers
 
@@ -487,6 +493,10 @@ Authorization header. Nonempty resolved auth conflicts with any custom Authoriza
 header, ignoring the header name's case. The conflict is refused as `invalid_value`
 (exit 2) before a Crawl file or connection opens, even when both values come from the
 Workspace.
+
+Each URL and robots.txt redirect hop uses its own Internal decision, so an External
+target receives neither Basic Auth nor custom headers from the source. Checked Internal
+URLs outside the Seed folder, retries and the Seed's outage probes still receive both.
 
 A nonempty value needs a colon. The first colon separates user and password; either
 part may be empty and later colons belong to the password. The exact input is encoded
