@@ -328,7 +328,7 @@ urls = public_table(
         "size_bytes",
         Integer,
         comment="The body size after content decoding; NULL without a response, for a body "
-        "larger than 20 MiB, or for a coding that was not offered.",
+        "larger than 20 MiB, or for an unsupported coding.",
     ),
     Column(
         "transferred_bytes",
@@ -920,7 +920,7 @@ pages = public_table(
         "size_bytes",
         Integer,
         comment="The Page's body size after content decoding, equal to urls.size_bytes; NULL "
-        "for a body larger than 20 MiB, or for a coding that was not offered.",
+        "for a body larger than 20 MiB, or for an unsupported coding.",
     ),
     Column(
         "transferred_bytes",

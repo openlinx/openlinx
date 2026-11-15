@@ -8,8 +8,8 @@ from typing import Protocol
 import brotli
 
 BODY_LIMIT = 20 * 1024 * 1024
-# The codings every request offers, and the only ones decoded.
-OFFERED_CODINGS = ("gzip", "deflate", "br")
+# Decoder capabilities do not depend on a request's Accept-Encoding preference.
+SUPPORTED_CODINGS = ("gzip", "deflate", "br")
 _GZIP_MAGIC = b"\x1f\x8b"
 
 
@@ -19,7 +19,7 @@ class BodyDecodingError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Body:
-    # Decoded, unless its coding was not offered: then as received.
+    # Decoded, unless its coding is unsupported: then as received.
     data: bytes
     # Larger than the cap, as transferred or as decoded, so not read in full.
     truncated: bool
@@ -155,7 +155,7 @@ def codings(content_encoding: str | None) -> list[str]:
 
 
 def is_decodable(content_encoding: str | None) -> bool:
-    return all(coding in OFFERED_CODINGS for coding in codings(content_encoding))
+    return all(coding in SUPPORTED_CODINGS for coding in codings(content_encoding))
 
 
 def _decoder(content_encoding: str | None) -> _Decoder | None:
@@ -174,8 +174,8 @@ async def read_body(
     chunks: AsyncIterable[bytes], coding: str | None, limit: int = BODY_LIMIT
 ) -> Body:
     """The body that `chunks` stream in the Content-Encoding `coding`, decoded, cut at `limit`
-    bytes as transferred and as decoded; reading stops at the cap. A coding that was not
-    offered is kept as received; BodyDecodingError for one that fails to decode."""
+    bytes as transferred and as decoded; reading stops at the cap. An unsupported coding is
+    kept as received; BodyDecodingError for one that fails to decode."""
     decoder = _decoder(coding) if is_decodable(coding) else None
     parts: list[bytes] = []
     size = transferred = 0

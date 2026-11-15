@@ -123,7 +123,7 @@ One row for each distinct normalised URL of the Crawl; the frontier is its queue
 | `fetch_error_message` | TEXT | yes | | | | Human-readable detail of fetch_error. |
 | `content_type` | TEXT | yes | | | | The Content-Type response header as received; NULL without a response or without the header. |
 | `content_encoding` | TEXT | yes | | | | The Content-Encoding response header as received; NULL without a response or without the header. |
-| `size_bytes` | INTEGER | yes | | | | The body size after content decoding; NULL without a response, for a body larger than 20 MiB, or for a coding that was not offered. |
+| `size_bytes` | INTEGER | yes | | | | The body size after content decoding; NULL without a response, for a body larger than 20 MiB, or for an unsupported coding. |
 | `transferred_bytes` | INTEGER | yes | | | | The body size as transferred, before decoding; NULL without a response. |
 | `response_time_ms` | INTEGER | yes | | | | Time from sending the request to receiving the whole body. |
 | `redirect_location` | TEXT | yes | | | | The raw Location header of a 3xx response. |
@@ -248,7 +248,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `http_rel_prev_1` | TEXT | yes | | | | The target of the first pagination Link header entry whose rel names prev or previous; NULL without one, or when the Page is not analysed. |
 | `amphtml_link_element` | TEXT | yes | | | | The target of the first amphtml link element; NULL without one, or when the Page is not analysed. |
 | `mobile_alternate_link` | TEXT | yes | | | | The target of the first link element whose rel is alternate with a media attribute and no hreflang; NULL without one, or when the Page is not analysed. |
-| `size_bytes` | INTEGER | yes | | | | The Page's body size after content decoding, equal to urls.size_bytes; NULL for a body larger than 20 MiB, or for a coding that was not offered. |
+| `size_bytes` | INTEGER | yes | | | | The Page's body size after content decoding, equal to urls.size_bytes; NULL for a body larger than 20 MiB, or for an unsupported coding. |
 | `transferred_bytes` | INTEGER | yes | | | | The Page's body size as transferred, before decoding, equal to urls.transferred_bytes. |
 | `content_encoding` | TEXT | yes | | | | The Content-Encoding header of the Page's response as received, equal to urls.content_encoding; NULL without the header. |
 | `word_count` | INTEGER | yes | | | | The number of words in the Content Area text; NULL when the Page is not analysed or its Page extractor failed. |

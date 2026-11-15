@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | Local plan `e069ad43` | v0.1 complete through group 10; v0.2 groups 11–14 have an active plan; runtime implementation and validation remain open. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | Local branch through task 11.2a; prior checkpoint `eab31aed` | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence and Accept-Encoding overrides implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -69,12 +69,41 @@ reconciliation with the implemented lifecycle before they are built.
 Continue on local branch `coord/022-fetch-v02-2026-11-15`; its current tasks are in
 `openspec/changes/022-add-fetch-policy/tasks.md`.
 
-022's local plan at `e069ad43` covers groups 11–14: per-hop Internal identity and
-safe secret recording/continue inputs, an explicit proxy, bounded offered HTTP
-capability measurement via ALPN, and bounded zstd decoding. Runtime implementation
-remains open. Task 14.8 requires actual Python 3.12–3.14 runtime evidence on Windows,
+022's plan covers groups 11–14: per-hop Internal identity and safe secret
+recording/continue inputs, an explicit proxy, bounded offered HTTP capability
+measurement via ALPN, and bounded zstd decoding. Tasks 11.1–11.2 are complete locally:
+header-aware secret recording, explicit-before-default source precedence, Internal
+request headers and persisted User-Agent selection for direct continue. The Seed's
+provisional Page and robots classification now agree. The `eab31aed` checkpoint
+passed independent review and the local full check (2,107 tests passed, 14 skipped,
+98.59% coverage). Remaining runtime work and whole-change acceptance are open.
+Task 11.2a adds source-boundary Accept-Encoding validation and literal wire checks
+for overrides, including empty and repeated fields. Supported response decoding
+remains independent of the advertised preference. The default is still
+`gzip, deflate, br`; zstd remains in group 14.
+Task 14.8 requires actual Python 3.12–3.14 runtime evidence on Windows,
 macOS and Linux; local checks and mypy platform targets do not satisfy it. The resume
 Command adapter belongs to 060; Page capability population belongs to 030.
+
+### Continuation and deferred test work
+
+Work pauses after task 11.2a's reviewed and checked Accept-Encoding slice.
+Resume only on a new instruction, confirming the actual branch, task marks
+and checks first. Continue with 11.3–11.7's per-hop guards and header diagnostics,
+then Basic Auth and fresh-secret continue inputs (11.8–11.14), group review, explicit
+proxy, offered HTTP capability and bounded zstd. Keep 060 frozen at task 0.6.
+
+Before using sensitive custom headers, finish the pending diagnostic and continue
+guards: the current secret collector skips header lists, transport failure messages
+can reach stored URL diagnostics unredacted, and fresh-secret restoration is not yet
+implemented. Header-aware masking in recorded argv/config does not close these
+paths. Tasks 11.7 and 11.12–11.14 own that work. Before Basic Auth implementation,
+also make the non-ASCII credential encoding explicit in the owning plan so sending
+and diagnostic masking use the same representation.
+
+The [test organization plan](test-organization-plan.md) records the agreed direction
+and safe migration checks. Its implementation is deferred until after 022 and a
+later instruction to continue. No test reorganization is part of this checkpoint.
 
 ## What blocks Crawl → Issues
 

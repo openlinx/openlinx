@@ -225,10 +225,12 @@ async def _fetched(run: Run, decided: UrlResult, response: FetchResult, in_chain
             parse_error_message=f"The body is larger than {BODY_LIMIT // 1024 // 1024} MiB.",
         )
     elif prepared and not decoded:
-        # A server that ignored the offered codings: its bytes are no text to parse.
+        # Unsupported bytes cannot be parsed, even when the request advertised their coding.
         page = PreparedPage(
             parse_error="unsupported_encoding",
-            parse_error_message=f"The body is in {content_encoding}, which no request offers.",
+            parse_error_message=(
+                f"The body is in {content_encoding}, which the Crawl cannot decode."
+            ),
         )
     else:
         page = await context.pages.prepare(url, response) if prepared else None

@@ -10,6 +10,9 @@ _ROBOTS_USER_AGENT = re.compile(r"[a-zA-Z_-]+")
 # the header, or start another one.
 _HEADER_VALUE = re.compile(r"[\t\x20-\x7e]+")
 _HEADER_NAME = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+_ACCEPT_ENCODING_ITEM = re.compile(
+    _HEADER_NAME.pattern + r"(?:[ \t]*;[ \t]*[qQ]=(?:0(?:\.[0-9]{0,3})?|1(?:\.0{0,3})?))?"
+)
 
 
 def as_rate(rate: float) -> float:
@@ -51,6 +54,14 @@ def as_header(header: str) -> tuple[str, str]:
     value = value.strip(" \t")
     if name.lower() == "user-agent":
         as_user_agent(value)
+    if (
+        name.lower() == "accept-encoding"
+        and value
+        and any(
+            _ACCEPT_ENCODING_ITEM.fullmatch(item.strip(" \t")) is None for item in value.split(",")
+        )
+    ):
+        raise ValueError("Accept-Encoding needs coding tokens with optional RFC 9110 qvalues")
     return name, value
 
 
@@ -58,4 +69,7 @@ def as_headers(headers: list[str]) -> tuple[tuple[str, str], ...]:
     parsed = tuple(as_header(header) for header in headers)
     if sum(name.lower() == "user-agent" for name, _ in parsed) > 1:
         raise ValueError("custom headers allow only one User-Agent entry")
+    encodings = [value for name, value in parsed if name.lower() == "accept-encoding"]
+    if len(encodings) > 1 and "" in encodings:
+        raise ValueError("repeated Accept-Encoding entries must all have non-empty values")
     return parsed
