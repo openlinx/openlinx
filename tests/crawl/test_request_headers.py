@@ -1,4 +1,4 @@
-"""Exercise Internal request headers through the CLI, HTTP and recorded Crawl metadata."""
+"""Exercise scoped request headers through the CLI, HTTP and recorded Crawl metadata."""
 
 import json
 from pathlib import Path
@@ -6,9 +6,11 @@ from pathlib import Path
 import pytest
 
 from openlinx.naming import SETTINGS_FILE_NAME
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Redirect, Site
 from tests.support.cli import run_cli
+from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row
 from tests.support.workspace import TempWorkspace
 
@@ -40,6 +42,62 @@ def test_a_custom_header_is_sent_to_internal_urls(
             "--header=X-Token: ***",
         ]
     assert b"abc123" not in crawl_file.read_bytes()
+
+
+def test_a_custom_header_never_goes_to_external_urls(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site({"/": Page(body='<a href="http://other.test/page">Other</a>')}),
+        Site({"/page": Page(body="Other")}),
+    )
+
+    result = crawl_result(
+        "http://site.test/",
+        resolver=hosts.resolver,
+        header=["X-Env: staging", "X-Token: abc123", "x-env: audit"],
+    )
+
+    assert result.summary.state == "completed"
+    assert [
+        (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["staging", "audit"], ["abc123"]),
+        ("/", ["staging", "audit"], ["abc123"]),
+    ]
+    assert sorted(
+        (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
+        for request in hosts.other.requests
+    ) == [("/page", [], []), ("/robots.txt", [], [])]
+
+
+def test_an_external_url_redirect_never_inherits_custom_headers(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site({"/": Redirect("http://other.test/page")}),
+        Site({"/page": Page(body="Other")}),
+    )
+
+    result = crawl_result(
+        "http://site.test/",
+        resolver=hosts.resolver,
+        header=["X-Env: staging", "X-Token: abc123", "x-env: audit"],
+    )
+
+    assert result.summary.state == "completed"
+    assert [
+        (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["staging", "audit"], ["abc123"]),
+        ("/", ["staging", "audit"], ["abc123"]),
+    ]
+    assert sorted(
+        (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
+        for request in hosts.other.requests
+    ) == [("/page", [], []), ("/robots.txt", [], [])]
 
 
 @pytest.mark.parametrize(
