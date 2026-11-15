@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | Local branch through task 11.12 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides, header guards, failure-message masking and Basic Auth with per-request identity, settings-source and diagnostic guards implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | Local branch through task 11.13 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides, header guards, failure-message masking and Basic Auth with safe fresh-auth continue inputs implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -131,15 +131,23 @@ ASCII, non-ASCII and decomposed Unicode use literal expectations; a direct HTTP
 protocol failure separately proves the URL path. Harmless context stays visible.
 Nine failing mutations prove the masking paths, individual secret forms and exact
 UTF-8 encoding; no runtime change was needed.
+Task 11.13 requires fresh auth through `CrawlOverrides.auth` when enabled credentials
+were recorded. Missing input raises `secrets_required` (exit 2) before writer/network
+access; invalid fresh input is refused without quoting it. Fresh auth is sent on the
+wire, collected for diagnostic masking and recorded as `***` again. Explicit null or
+empty auth disables it, and recorded null needs no fresh input. Request-policy
+validation checks its own header data without treating the secret marker as auth.
+Read-only files, request logs and failing mutations prove the refusal order and
+masking; the code and service behaviour are documented in the same slice.
 Confirm the actual branch, task marks and checks before continuing.
-Continue with fresh-secret continue inputs
-(11.13–11.14), group review, explicit
+Continue with fresh sensitive-header inputs and preserved harmless settings
+(11.14), docs verification and group review, explicit
 proxy, offered HTTP capability and bounded zstd. Keep 060 frozen at task 0.6.
 
-Fresh-secret restoration on continue remains unimplemented; tasks 11.13–11.14 own
-that contract, including a guard that disabled auth needs no fresh value. The encoding
-and disabled-auth semantics are explicit in the owning plan's D1/D8 and fetching
-specification.
+Fresh sensitive-header restoration remains unimplemented; task 11.14 owns matching
+names/occurrences, preserving harmless values and the original header winner, and
+revalidating the resulting auth/header combination. The encoding and disabled-auth
+semantics are explicit in the owning plan's D1/D8 and fetching specification.
 
 The [comment review and test quality plan](test-organization-plan.md) separates
 comment review, test-contract corrections and file organization. Review preparation

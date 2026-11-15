@@ -214,6 +214,15 @@ The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file al
 
 Of the settings on this page, a continue may change the URL limit, to a higher one or none, `--concurrency` and `--rate`, as `060`'s resume options allow. The URL limit counts over the Crawl's whole life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see [Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as `seed_unreachable` again.
 
+A Crawl with enabled Basic Auth records `***`, so a continue needs fresh credentials.
+The service accepts them through `CrawlOverrides.auth`; omitting that input refuses
+the continue as `secrets_required` (exit 2), with a hint naming `--auth` or `crawl.auth`,
+before opening a writer or network connection. An explicit empty string or `None`
+disables auth instead. Disabled auth records `null` and needs no fresh value on a
+later continue. Fresh credentials are masked in diagnostics and recorded as `***`
+again, so each continue with enabled auth needs fresh input. The service retains
+stored non-secret settings without reloading the current Workspace configuration.
+
 A continue fetches through the proxy variables of its own process, not the start's, and records them in `crawl.config`'s `environment` table in place of the start's, redacted the same way (see [Proxy variables](#proxy-variables)).
 
 ### When one URL fails

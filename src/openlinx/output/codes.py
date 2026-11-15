@@ -105,6 +105,12 @@ INVALID_VALUE = _declare(
 UNKNOWN_FIELD = _declare(
     "unknown_field", "error", ExitCode.USAGE, "A --fields name the Command does not have."
 )
+SECRETS_REQUIRED = _declare(
+    "secrets_required",
+    "error",
+    ExitCode.USAGE,
+    "Continuing a Crawl requires fresh secret values; the hint names the required input.",
+)
 INVALID_CURSOR = _declare(
     "invalid_cursor",
     "error",

@@ -46,6 +46,7 @@ from openlinx.output.codes import (
     INVALID_URL,
     INVALID_VALUE,
     OPTION_CONFLICT,
+    SECRETS_REQUIRED,
     SEED_OUT_OF_SCOPE,
     SUBFOLDER_IS_ROOT,
 )
@@ -130,12 +131,17 @@ KEEP = _Override.KEEP
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CrawlOverrides:
-    """Settings a continue may change; the planned resume Command also requires that the URL
-    limit can only be raised (060-add-crawl-control D8)."""
+    """Settings a continue may change, including fresh auth that recording cannot retain.
+
+    KEEP preserves recorded values, except enabled auth needs fresh input; None or empty
+    auth disables it. The planned resume Command also requires that the URL limit can only
+    be raised (060 D8).
+    """
 
     max_urls: int | Literal[_Override.KEEP] | None = KEEP
     concurrency: int | Literal[_Override.KEEP] = KEEP
     rate: float | Literal[_Override.KEEP] | None = KEEP
+    auth: str | Literal[_Override.KEEP] | None = KEEP
 
     def given(self) -> dict[str, Any]:
         values = {field.name: getattr(self, field.name) for field in fields(self)}
@@ -355,13 +361,21 @@ def continue_crawl(
     fetchers: FetcherFactory = aiohttp_fetcher,
     stop: StopSignal | None = None,
 ) -> CrawlResult:
-    """Continue a stopped or failed Crawl from its file alone; the keyword arguments are
-    start_crawl's, including a fresh stop flag for each run."""
+    """Continue a stopped or failed Crawl with recorded settings and fresh secret inputs.
+
+    The keyword arguments are start_crawl's, including a fresh stop flag for each run.
+    """
     recorded = read_recorded(crawl_file.path)
     custom_user_agent = _recorded_user_agent(recorded.config, crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
     given = overrides.given()
+    if recorded.config["crawl"].get("auth") is not None and "auth" not in given:
+        raise OpenLinxError(
+            SECRETS_REQUIRED,
+            "Continuing this Crawl requires fresh Basic Auth credentials.",
+            hint="Supply fresh credentials through --auth or crawl.auth.",
+        )
     try:
         settings = CrawlSettings.model_validate({**recorded.config["crawl"], **given})
     # Only an override can be refused: the recorded values passed when the Crawl started.
@@ -375,6 +389,8 @@ def continue_crawl(
     # place of the start's.
     proxies = ProxyVariables.of(os.environ)
     environment = _environment(proxies)
+    runtime = {"crawl": settings.model_dump(mode="json"), **environment}
+    secret_names = SecretNames(settings={**default_tables().secret_settings(), **_PROXY_SECRETS})
     planned = _Planned(
         seed=_seed(recorded.seeds[0], strip_params),
         settings=settings,
@@ -383,14 +399,12 @@ def continue_crawl(
         crawl_mode=recorded.crawl_mode,
         seed_count=len(recorded.seeds),
         fetch_policy=_fetch_policy(settings, proxies, custom_user_agent=custom_user_agent),
-        # The recorded config holds no secret; the continue's own proxy variables may.
-        secrets=secret_values(environment, _PROXY_SECRETS),
+        secrets=secret_values(runtime, secret_names.settings),
     )
     started = {table: values for table, values in recorded.config.items() if table != "environment"}
     config = {
         **started,
-        "crawl": settings.model_dump(mode="json"),
-        **redact((), environment, SecretNames(settings=_PROXY_SECRETS)).config,
+        **redact((), runtime, secret_names).config,
     }
     crawl = _Crawl(
         plan=planned,
@@ -413,7 +427,10 @@ def _recorded_user_agent(config: Mapping[str, Any], path: Path) -> bool:
             raise ValueError("request_policy needs a boolean custom_user_agent")
         custom: bool = policy["custom_user_agent"]
         if custom:
-            settings = CrawlSettings.model_validate(config.get("crawl"))
+            crawl = config.get("crawl")
+            if not isinstance(crawl, dict):
+                raise ValueError("custom_user_agent needs recorded crawl settings")
+            settings = CrawlSettings.model_validate({"header": crawl.get("header", [])})
             if sum(name.lower() == "user-agent" for name, _ in as_headers(settings.header)) != 1:
                 raise ValueError("custom_user_agent needs one valid custom User-Agent")
         return custom

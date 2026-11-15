@@ -187,8 +187,11 @@ def test_the_codes_of_the_fetch_policy_are_listed() -> None:
     assert [
         (d["code"], d["level"], d["exit_code"])
         for d in diagnostics
-        if d["code"] in {"seed_redirected_out_of_scope"}
-    ] == [("seed_redirected_out_of_scope", "warning", None)]
+        if d["code"] in {"seed_redirected_out_of_scope", "secrets_required"}
+    ] == [
+        ("secrets_required", "error", 2),
+        ("seed_redirected_out_of_scope", "warning", None),
+    ]
 
 
 def test_naming_rule_for_input_errors() -> None:

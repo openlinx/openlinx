@@ -98,6 +98,9 @@ Auth defaults to disabled. An explicit empty value overrides lower-priority cred
 and records as `null` in config; supplied argv values stay redacted. Enabled auth records
 as `***` in its entirety. See [Basic authentication](crawling.md#basic-authentication)
 for the wire encoding, empty parts and diagnostic masking.
+Continuing a Crawl with recorded enabled auth requires fresh input through the
+service; it never replays `***` or reloads Workspace settings. Recorded `null` needs
+no fresh auth. See [Continuing a Crawl](crawling.md#continuing-a-crawl).
 
 ### Tables and precedence
 
