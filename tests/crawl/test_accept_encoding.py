@@ -306,10 +306,20 @@ def test_accept_encoding_overrides_survive_robots_and_page_retries(
         "X-Token: abc123",
         "--header",
         "x-env: audit",
+        "--auth",
+        "alice:s3cret",
         "--retries",
         "1",
     )
 
+    assert [
+        (request.path, request.headers.getall("Authorization", [])) for request in server.requests
+    ] == [
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/", ["Basic YWxpY2U6czNjcmV0"]),
+    ]
     assert [
         (
             r.path,

@@ -190,6 +190,7 @@ def test_the_seed_outage_probe_keeps_custom_headers(
         timeout=1,
         retries=0,
         network_wait=30,
+        auth="alice:s3cret",
         header=["X-Env: staging", "X-Token: abc123", "x-env: audit"],
     )
 
@@ -200,6 +201,15 @@ def test_the_seed_outage_probe_keeps_custom_headers(
         if name in ("crawl_paused", "crawl_resumed")
     ] == [("crawl_paused", "timeout", None), ("crawl_resumed", None, "outage")]
     # robots.txt blocks the ordinary Seed request, so the first / is the outage probe.
+    assert [
+        (request.path, request.headers.getall("Authorization", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/", ["Basic YWxpY2U6czNjcmV0"]),
+    ]
     assert [
         (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
         for request in hosts.site.requests

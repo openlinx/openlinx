@@ -76,10 +76,19 @@ def test_a_checked_internal_url_still_gets_custom_headers(
         "http://site.test/docs/",
         resolver=hosts.resolver,
         scope="subfolder",
+        auth="alice:s3cret",
         header=["X-Env: staging", "X-Token: abc123", "x-env: audit"],
     )
 
     assert result.summary.state == "completed"
+    assert [
+        (request.path, request.headers.getall("Authorization", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/docs/", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/outside", ["Basic YWxpY2U6czNjcmV0"]),
+    ]
     assert [
         (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
         for request in hosts.site.requests

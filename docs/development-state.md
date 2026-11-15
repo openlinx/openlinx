@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | Local branch through task 11.9 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides, header guards, failure-message masking and Basic Auth with External request guards implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | Local branch through task 11.10 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides, header guards, failure-message masking and Basic Auth with per-request identity guards implemented locally. Groups 11–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -114,8 +114,14 @@ Seed and ordinary Internal redirects to an External target. Literal HTTP logs an
 stored classification/redirect links establish that each target was requested without
 credentials. Failing mutations prove the Internal gates; existing custom-header
 guards remain intact. No runtime change was needed.
+Task 11.10 extends the auth guards to Internal robots, robots redirects to External
+URLs, Checked Internal URLs outside Scope, separate robots and Page retries, and the
+Seed outage probe. Literal request logs, stored classifications/attempts and pause
+events establish each path's role. Six failing mutations exercise the auth assertions
+independently of the retained header assertions; no runtime change was needed.
 Confirm the actual branch, task marks and checks before continuing.
-Continue with Basic Auth guards and fresh-secret continue inputs (11.10–11.14), group review, explicit
+Continue with Basic Auth recording/diagnostic guards and fresh-secret continue inputs
+(11.11–11.14), group review, explicit
 proxy, offered HTTP capability and bounded zstd. Keep 060 frozen at task 0.6.
 
 Fresh-secret restoration on continue remains unimplemented; tasks 11.13–11.14 own

@@ -11,7 +11,7 @@ from openlinx.naming import SETTINGS_FILE_NAME
 from openlinx.output.diagnostics import OpenLinxError
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Redirect, Site
+from tests.fixture_site.routes import Page, Redirect, Robots, Site
 from tests.support.cli import run_cli
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
@@ -68,6 +68,70 @@ def _assert_internal_auth(fixture_site: StartSite, auth: str, authorization: str
     row = crawl_row(file)
     assert json.loads(row["config"])["crawl"]["auth"] == "***"
     assert json.loads(row["command_argv"])[-2:] == ["--auth", "***"]
+
+
+def test_internal_robots_requests_carry_credentials(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site({"/robots.txt": Robots("User-agent: *\nDisallow:\n"), "/": Page(body="Home")}),
+        Site({}),
+    )
+
+    result = crawl_result("http://site.test/", resolver=hosts.resolver, auth="alice:s3cret")
+
+    assert result.summary.state == "completed"
+    assert [
+        (request.path, request.headers.getall("Authorization", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/", ["Basic YWxpY2U6czNjcmV0"]),
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT is_internal, fetch_state, status_code FROM urls WHERE url = ?",
+        ["http://site.test/"],
+    ) == [(1, "fetched", 200)]
+    assert hosts.other.requests == ()
+
+
+def test_a_robots_redirect_drops_credentials_at_an_external_hop(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/robots.txt": Redirect("http://other.test/robots.txt"),
+                "/": Page(body="Home"),
+            }
+        ),
+        Site({"/robots.txt": Robots("User-agent: *\nDisallow:\n")}),
+    )
+
+    result = crawl_result("http://site.test/", resolver=hosts.resolver, auth="alice:s3cret")
+
+    assert result.summary.state == "completed"
+    assert [
+        (request.path, request.headers.getall("Authorization", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/", ["Basic YWxpY2U6czNjcmV0"]),
+    ]
+    assert [
+        (request.path, request.headers.getall("Authorization", []))
+        for request in hosts.other.requests
+    ] == [("/robots.txt", [])]
+    assert query(
+        result.crawl_file,
+        "SELECT is_internal, fetch_state, status_code FROM urls WHERE url = ?",
+        ["http://site.test/"],
+    ) == [(1, "fetched", 200)]
+    assert query(
+        result.crawl_file,
+        "SELECT origin, is_internal, robots_state, robots_status_code FROM origins",
+    ) == [("http://site.test", 1, "ok", 200)]
 
 
 @pytest.mark.parametrize("custom_authorization", [False, True], ids=["basic-auth", "custom-auth"])
