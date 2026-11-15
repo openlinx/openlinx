@@ -1,14 +1,62 @@
-# Test organization plan
+# Comment review and test quality plan
 
-Status: deferred. The direction is agreed; the directory map and migration slices
-still need review. Resume 022 first. Do not start this reorganization during the
-current pause or alongside unfinished fetch-policy implementation.
+Status: review preparation is active; implementation follows 022. Comment review,
+test quality review and test organization are separate work items. The directory
+map and migration slices still need review. Do not reorganize tests alongside
+unfinished fetch-policy implementation.
 
 The goal is to make tests easy to find and understand while preserving every
 existing contract and regression guard. Keep the public seams and boundary doubles
 in [testing.md](testing.md). TDD's refactoring step includes test clarity; it does
 not require one directory per change, one test per private function, or one assertion
 per test.
+
+## Review work before reorganization
+
+- [ ] Review comments and docstrings against [AGENTS.md](../AGENTS.md): preserve
+  non-obvious reasons, invariants and design decisions; identify stale claims and
+  text that only repeats the code. Check design citations against their owning
+  decisions. Record each finding with its location, reason and proposed action;
+  do not treat blanket deletion or shorter text as the goal.
+- [ ] Review tests against [testing.md](testing.md): map each scenario or regression
+  guard to its public seam, inputs, independent literal expectations and permitted
+  boundary doubles. Identify tests coupled to private implementation, assertions
+  derived from the code being tested, unrelated behaviours bundled together and
+  setup that hides meaningful inputs. Source-inspection repository guards require
+  a different assessment from product behaviour tests.
+- [ ] Record red/green or mutation evidence where available. Missing historical
+  evidence is unknown, not proof that a test violated TDD. Prove any new guard
+  that passes immediately with a named failing mutation, then restore the code.
+- [ ] Turn confirmed findings into small correction slices after 022. Keep comment
+  edits, assertion/helper changes and pure file moves separate. Each slice keeps
+  scenario traceability, parameterized cases and the existing quality gates, gets
+  independent review and passes the required check before commit.
+
+Start with hooks, writer, network-pause, code-style and request-header tests, then
+record which areas remain unreviewed. A sample review does not establish whole-suite
+compliance. Completion requires an accounted-for review scope, resolved findings
+and verified scenario coverage, not merely a green suite or a new directory tree.
+
+### Findings to verify and correct
+
+The initial sample review found two test-quality candidates, confirmed by source
+inspection only. Reproduce them before changing tests; neither establishes a
+historical failure to follow red/green.
+
+- [ ] In `tests/test_code_style.py`, `fake_clock_with_real_io` accepts the presence
+  of `fetcher=` even when its value is `None`. Add a failing negative case for
+  `crawl_result(..., clock=FakeClock(), fetcher=None)` and make the guard reject
+  that real-I/O path while preserving permitted FakeFetcher cases.
+- [ ] In `tests/crawl/test_network_pause.py`, the 1800-second case of
+  `test_probes_back_off_to_once_a_minute` builds expectations with `range`, as the
+  implementation does. Replace the expected schedule with independent literals,
+  retaining the full case and proving it catches a changed probe interval.
+
+The comment sample found no actionable defect; preserve the explanations of
+handler type checking and writer savepoint cost. Complete the wider review before
+claiming the comment policy is satisfied throughout the repository. Keep the
+documented SQL-batching and replay tests: [testing.md](testing.md) explicitly permits
+those narrow checks of implementation behaviour.
 
 ## Preparation after 022
 
