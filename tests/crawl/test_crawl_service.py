@@ -1,4 +1,4 @@
-"""The Crawl Service wires 015's journal mode and redaction (020-add-crawl-core D11; seams 1, 2)."""
+"""Verify the Crawl Service applies journal-mode selection and secret redaction."""
 
 import json
 import re

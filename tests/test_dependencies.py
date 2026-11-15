@@ -1,4 +1,4 @@
-"""Every runtime dependency is reviewed (design D14 of 000-scaffold-project)."""
+"""Guard runtime dependencies against the reviewed allowlist."""
 
 from fnmatch import fnmatchcase
 from importlib import metadata

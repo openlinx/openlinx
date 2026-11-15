@@ -1,5 +1,4 @@
-"""The warnings a Crawl gives, with their texts and details; the warning log keeps each once
-per what its code names (020-add-crawl-core D10)."""
+"""Build Crawl warnings whose codes define how the warning log deduplicates them."""
 
 from collections.abc import Iterable, Sequence
 

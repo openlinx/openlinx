@@ -1,4 +1,4 @@
-"""The hooks of a Crawl: handlers, passes and extractors (020-add-crawl-core D9; seam 2)."""
+"""Verify Crawl handlers, passes and extractors through the service API."""
 
 import json
 import pickle
@@ -209,7 +209,7 @@ _RULES = ("missing_title", "missing_description", "missing_h1", "thin_content")
 
 
 async def _materialise_issues(context: PassContext) -> None:
-    """Writes an Issue of each rule for every URL, as 040's pass does."""
+    """Emulate a Rule pass by writing an Issue of each Rule for every URL."""
 
     def unit(connection: Connection) -> None:
         connection.execute(
@@ -781,7 +781,8 @@ def _flaky(result: UrlResult) -> tuple[Flaky, ...]:
 
 def _write_flaky(written: list[int]) -> Callable[[Connection, Sequence[Flaky]], None]:
     def write(connection: Connection, rows: Sequence[Flaky]) -> None:
-        # Fails when the writer runs the unit again, which ends the writer (017 D6).
+        # Fails when the writer runs the unit again, which ends the writer
+        # (017-speed-up-crawl-writer D6).
         if written:
             raise RuntimeError("not the same twice")
         written.extend(row.url_id for row in rows)

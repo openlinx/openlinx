@@ -1,6 +1,7 @@
-"""Writes src/openlinx/extract/unicode_scripts.py: the character classes of the word rule and of the
-address display (030-add-page-data D8), from one Unicode version's Scripts.txt and
-DerivedGeneralCategory.txt, so no column depends on the interpreter's own Unicode version.
+"""Generate word and address character tables pinned to one Unicode version.
+
+Writes src/openlinx/extract/unicode_scripts.py from Scripts.txt and DerivedGeneralCategory.txt,
+so no column depends on the interpreter's own Unicode version (030-add-page-data D8).
 
 The inputs are https://www.unicode.org/Public/<X.Y.Z>/ucd/Scripts.txt and
 https://www.unicode.org/Public/<X.Y.Z>/ucd/extracted/DerivedGeneralCategory.txt.

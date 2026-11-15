@@ -1,4 +1,4 @@
-"""Finding the Workspace (010-add-workspace-and-cli-contract, workspace)."""
+"""Verify Workspace discovery through the public API."""
 
 import sys
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""`linx schema` (015-add-crawl-store D6; 018-add-schema-conventions D4)."""
+"""Expose the public crawl-file schema through the schema Command."""
 
 from dataclasses import replace
 from typing import Annotated

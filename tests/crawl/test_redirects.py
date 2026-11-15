@@ -1,4 +1,4 @@
-"""Redirects followed hop by hop, each hop a URL row (022-add-fetch-policy, fetching; seam 3+6)."""
+"""Verify redirects follow hop by hop with each hop recorded as a URL row."""
 
 from pathlib import Path
 

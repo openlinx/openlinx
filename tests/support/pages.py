@@ -1,5 +1,4 @@
-"""A document's Links, as page preparation reads them from a 200 response (seam 4), and a page
-executor that holds Pages beyond the requests in flight, as 026's pool does."""
+"""Prepare response Links and provide a backlogged PageExecutor double for tests."""
 
 from datetime import UTC, datetime
 
@@ -30,8 +29,8 @@ def page_links(
 
 
 class BackloggedPool:
-    """A page executor that may hold `backlog` Pages beyond the requests in flight, as 026's
-    pool does, and prepares each one at once; pass it as `pages=lambda: BackloggedPool(2)`."""
+    """A page executor that holds `backlog` Pages beyond the requests in flight and prepares
+    each one at once; pass it as `pages=lambda: BackloggedPool(2)`."""
 
     workers = 1
 

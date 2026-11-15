@@ -1,4 +1,4 @@
-"""The run of a Crawl: its depths, each URL's unit and the hooks (020-add-crawl-core D2, D3, D9).
+"""Coordinate the Crawl frontier, URL recording and extension hooks.
 
 dispatch: run_crawl. context: CrawlContext. hooks: Hooks, Handler, handler, Pass, PassContext,
 PassWriter, UrlResult, UrlResponse. stop: StopSignal. warning_log: WarningLog.

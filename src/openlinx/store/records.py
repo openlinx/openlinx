@@ -1,4 +1,4 @@
-"""The store's records and enumerations, loading no sqlalchemy (designs D6 and D9 of 015)."""
+"""Define store records and enumerations without loading SQLAlchemy."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -18,7 +18,7 @@ ScopeKind = Literal["host", "subdomains", "subfolder"]
 
 
 class RecordedScope(TypedDict):
-    """crawl.scope (020-add-crawl-core D18)."""
+    """crawl.scope."""
 
     mode: ScopeKind
     hosts: list[str]
@@ -30,11 +30,11 @@ class RecordedScope(TypedDict):
 type JournalMode = Literal["wal", "delete"]
 type JournalSetting = Literal["auto", "wal", "delete"]
 type CrawlState = Literal["running", "stopped", "completed", "failed", "interrupted"]
-# Why a Crawl or one of its runs ended early; the one value set of every such column (D12).
+# Why a Crawl or one of its runs ended early; the one value set of every such column.
 type StopReason = Literal[
     "max_urls", "interrupt", "requested", "seed_unreachable", "site_unreachable", "write_failed"
 ]
-# Rules applied, everything allowed, or everything disallowed or unanswered (D6).
+# Rules applied, everything allowed, or everything disallowed or unanswered.
 type RobotsState = Literal["ok", "missing", "unreachable"]
 type HttpVersion = Literal["http_2", "http_1_1"]
 type SkipReason = Literal[
@@ -49,7 +49,7 @@ type SkipReason = Literal[
     "url_too_long",
 ]
 # The reasons a URL is recorded as skipped when it is discovered, never dispatched; a later
-# followed Link re-queues a URL skipped for one of them (020-add-crawl-core D5).
+# followed Link re-queues a URL skipped for one of them.
 type DiscoverySkipReason = Literal["nofollow", "link_type_not_followed", "max_redirects"]
 type LinkType = Literal[
     "hyperlink",
@@ -72,7 +72,7 @@ type LinkType = Literal[
     "sitemap_hreflang",
     "javascript_redirect",
 ]
-# The elements and attributes that 020's Link discovery reads.
+# The elements and attributes that Link discovery reads.
 type LinkElement = Literal[
     "a",
     "area",
@@ -221,19 +221,19 @@ class QueuedUrl:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewUrl:
     """A URL discovered from a response, recorded unless the Crawl has it already, one
-    deeper than the URL it was found on as the store holds it (design D3)."""
+    deeper than the URL it was found on as the store holds it."""
 
     url: NormalizedUrl
     discovered_via: DiscoveredVia
     is_internal: bool
     in_scope: bool
-    # Why none of the Page's Links to it is followed; None queues it (design D5).
+    # Why none of the Page's Links to it is followed; None queues it.
     skip_reason: DiscoverySkipReason | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ResponseHeaders:
-    """A row of response_headers: the headers of a URL's last attempt (022-add-fetch-policy D7)."""
+    """A row of response_headers: the headers of a URL's last attempt."""
 
     url_id: int
     # As received, in order and letter case, with cookie values redacted.
@@ -242,7 +242,7 @@ class ResponseHeaders:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UrlTally:
-    """How a unit changed the urls counts of progress events (020-add-crawl-core D10)."""
+    """How a unit changed the urls counts of progress events."""
 
     discovered: int = 0
     fetched: int = 0
@@ -296,7 +296,7 @@ class UrlCounts:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RecordedCrawl:
-    """What a continue builds its run from: the file alone (020-add-crawl-core D20)."""
+    """What a continue builds its run from: the file alone."""
 
     state: CrawlState
     crawl_mode: CrawlMode
@@ -333,7 +333,7 @@ class Redirect:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Reclassified:
     """A URL's is_internal and in_scope decided again: a URL of a Seed's Redirect Chain,
-    against the Scope the chain ended in (022-add-fetch-policy D3)."""
+    against the Scope the chain ended in."""
 
     url_id: int
     is_internal: bool
@@ -370,10 +370,10 @@ class FetchedUrl:
     content_encoding: str | None = None
     size_bytes: int | None = None
     transferred_bytes: int | None = None
-    # NULL when robots.txt was not checked (design D6).
+    # NULL when robots.txt was not checked.
     blocked_by_robots_txt: bool | None = None
     discovered: tuple[NewUrl, ...] = ()
-    # What the handlers returned, written in the same unit (design D9).
+    # What the handlers returned, written in the same unit.
     rows: tuple[HandlerRows[Any], ...] = ()
 
 
@@ -383,7 +383,7 @@ class SkippedUrl:
 
     url_id: int
     skip_reason: SkipReason
-    # The skip was decided on it: a URL lowered or raised since then is decided again (D5).
+    # The skip was decided on it: a URL lowered or raised since then is decided again.
     provenance: Provenance
     blocked_by_robots_txt: bool | None = None
     rows: tuple[HandlerRows[Any], ...] = ()
@@ -407,7 +407,7 @@ class ErroredUrl:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RobotsTxtRecord:
-    """What an origin's robots.txt request gave, for the origin's row (design D6)."""
+    """What an origin's robots.txt request gave, for the origin's row."""
 
     origin: str
     state: RobotsState

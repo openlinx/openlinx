@@ -1,4 +1,4 @@
-"""Crawl file URIs (design D2 of 015-add-crawl-store)."""
+"""Verify Crawl file URIs and connection behavior."""
 
 from pathlib import PurePath, PurePosixPath, PureWindowsPath
 

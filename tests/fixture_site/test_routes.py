@@ -1,4 +1,4 @@
-"""Sites are checked when they are declared (design D9 of 000-scaffold-project)."""
+"""Verify fixture-site declarations are validated before serving."""
 
 import pytest
 

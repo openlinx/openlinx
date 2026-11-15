@@ -1,4 +1,4 @@
-"""HTTPS listeners with a test CA, behind the DNS resolver hook (022-add-fetch-policy D5)."""
+"""Verify HTTPS fixture listeners with a test certificate authority."""
 
 import asyncio
 import ssl

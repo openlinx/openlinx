@@ -1,4 +1,4 @@
-"""The [content_area] settings at the CLI (030-add-page-data D13, page-data; seam 1)."""
+"""Verify content_area settings through the CLI."""
 
 import json
 

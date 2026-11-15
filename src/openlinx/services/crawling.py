@@ -1,4 +1,4 @@
-"""The Crawl Service: a foreground Spider-mode Crawl (020-add-crawl-core D11, D15)."""
+"""Plan and run foreground Spider-mode Crawls through injected dependencies."""
 
 import asyncio
 import os
@@ -96,7 +96,7 @@ class CrawlRequest:
     home: Path
     workspace: Path | None
     command_argv: Sequence[str]
-    # Settings given as flags, by table: they override the settings file (010 D2).
+    # Settings given as flags, by table: they override the settings file.
     flags: Mapping[str, Mapping[str, Any]]
     # The command line's tokens that take a secret, such as --token, which the file redacts:
     # no default, so a caller that forgot them never records a secret in the clear.
@@ -113,7 +113,7 @@ class CrawlPlan:
     strip_params: re.Pattern[str] | None
     fetch_policy: FetchPolicy
     new_crawl: NewCrawl
-    # Every table as loaded, from which default_hooks takes the configs of 030's hooks.
+    # Every table as loaded, from which default_hooks takes the built-in hook configs.
     loaded: Settings
 
 
@@ -127,8 +127,8 @@ KEEP = _Override.KEEP
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CrawlOverrides:
-    """The settings a continue may change, as 060 D8 lets a resume change them; 060 checks
-    that a URL limit is only raised (design D20)."""
+    """Settings a continue may change; the planned resume Command also requires that the URL
+    limit can only be raised (060-add-crawl-control D8)."""
 
     max_urls: int | Literal[_Override.KEEP] | None = KEEP
     concurrency: int | Literal[_Override.KEEP] = KEEP
@@ -141,7 +141,7 @@ class CrawlOverrides:
 
 @dataclass(frozen=True, kw_only=True)
 class CrawlResult:
-    """Built at the end from the crawl file, never from counters kept while it ran (D10)."""
+    """Built at the end from the crawl file, never from counters kept while it ran."""
 
     crawl_id: str
     summary: CrawlSummary
@@ -187,7 +187,7 @@ class CrawlResult:
 
 
 def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> CrawlPlan:
-    """Validation and config resolution, before anything is created (design D11); `tables`
+    """Validation and config resolution, before anything is created; `tables`
     are the built-in ones unless given."""
     # The call's own input first: the Seed, stripped once the settings are read, and the
     # flags that conflict.
@@ -220,7 +220,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         seeds=[request.seed],
         command_argv=request.command_argv,
         cwd=request.cwd,
-        # Every registered table, resolved (design D11).
+        # Every registered table, resolved.
         config={**settings.root.model_dump(mode="json"), **_environment(proxies)},
         scope=scope.to_json(),
         secret_names=SecretNames(request.secret_flags, tables.secret_settings() | _PROXY_SECRETS),
@@ -239,7 +239,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
     )
 
 
-# A proxy URL may hold a password; 015's redaction keeps its user and host (design D8).
+# A proxy URL may hold a password; redaction keeps its user and host for diagnostics.
 _PROXY_SECRETS = frozenset(f"environment.{key}" for key in SECRET_KEYS)
 
 
@@ -290,8 +290,8 @@ def start_crawl(
     stop: StopSignal | None = None,
 ) -> CrawlResult:
     """`pages` builds the page executor instead of `default_page_executor`, `fetchers` opens
-    the Fetcher, and `stop` is the stop flag that `060`'s control rows set: one per run, since
-    it binds the loop of the run that first sets or awaits it (design D9, D10, D15)."""
+    the Fetcher, and the caller supplies one `stop` flag per run because it binds the loop
+    of the run that first sets or awaits it (020-add-crawl-core D15)."""
     log = WarningLog(reporter)
     planned = _Planned(
         seed=plan.seed,
@@ -328,8 +328,8 @@ def continue_crawl(
     fetchers: FetcherFactory = aiohttp_fetcher,
     stop: StopSignal | None = None,
 ) -> CrawlResult:
-    """Continues a stopped or failed Crawl from its file alone, which 060's resume calls; the
-    keyword arguments are start_crawl's, a fresh stop flag for each run included (design D20)."""
+    """Continue a stopped or failed Crawl from its file alone; the keyword arguments are
+    start_crawl's, including a fresh stop flag for each run."""
     recorded = read_recorded(crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
@@ -429,8 +429,7 @@ class _Crawl:
 
     plan: _Planned
     crawl_file: CrawlFile
-    # The crawl.config a continue runs with, which the run writes and flushes before it crawls
-    # (design D20).
+    # The crawl.config a continue runs with, which the run writes and flushes before it crawls.
     continuing: Mapping[str, Any] | None
     clock: Clock
     log: WarningLog
@@ -479,8 +478,8 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
             plan = crawl.plan
             return replace(ended, failure=failure(plan.seed, plan.settings, crawl.crawl_file))
         else:
-            # Before the end is written, for completed and stopped alike: 040 reads either
-            # state as "its Issues are materialised".
+            # Run passes before writing completed or stopped so either state guarantees that
+            # post-crawl results have been materialised.
             for crawl_pass in crawl.hooks.passes:
                 await crawl_pass.run(PassContext(context.writer, crawl.clock))
             state: CrawlState = "completed" if reason is None else "stopped"
@@ -492,7 +491,7 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
 
 async def _failed_end(crawl: _Crawl, error: OpenLinxError) -> _End:
     """Recorded once more through a fresh writer, since the Crawl's own one may have ended; if
-    that fails too, the file stays running (design D16)."""
+    that fails too, the file stays running (020-add-crawl-core D16)."""
     try:
         with crawl.clock.off_loop():
             writer = await asyncio.to_thread(CrawlWriter, crawl.crawl_file.path, crawl.clock)
@@ -520,7 +519,7 @@ async def _end(
 
 @asynccontextmanager
 async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
-    """The one place a Crawl's context is built, and its resources closed (design D15)."""
+    """The one place a Crawl's context is built, and its resources closed."""
     plan, crawl_file, clock = crawl.plan, crawl.crawl_file, crawl.clock
     # Built before crawl_started reports its workers: nothing spawns before its start.
     executor = crawl.pages()
@@ -567,12 +566,12 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
             raise
         await writer.close_async()
     finally:
-        # 026's pool shuts its workers down here, however the Crawl ended.
+        # A process-backed executor must shut its workers down here, however the Crawl ended.
         await executor.close()
 
 
 def _with_subdomains(flags: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
-    """--subdomains has no setting of its own: it is resolved into scope (design D11)."""
+    """--subdomains has no setting of its own: it is resolved into scope."""
     crawl_flags = dict(flags.get("crawl", {}))
     scope = crawl_flags.get("scope", "subdomains")
     if scope != "subdomains":
@@ -626,7 +625,7 @@ def _subfolder_is_root(seed: NormalizedUrl) -> OpenLinxError:
 def _invalid_seed(text: str, reason: InvalidUrlReason) -> OpenLinxError:
     details = {"reason": reason}
     if reason == "userinfo":
-        # Never echoed: the user name and password would reach logs (design D13).
+        # Never echoed: the user name and password would reach logs.
         return OpenLinxError(
             INVALID_URL,
             "The Seed holds a user name or password, which a crawled URL must not hold.",

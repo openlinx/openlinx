@@ -1,4 +1,4 @@
-"""Crawl metadata (015-add-crawl-store, crawl-store)."""
+"""Verify recorded Crawl metadata through the store API."""
 
 import json
 import re

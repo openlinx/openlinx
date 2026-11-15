@@ -1,4 +1,4 @@
-"""Page rows (030-add-page-data, page-data; seam 3+6)."""
+"""Verify stored Page rows through a Crawl."""
 
 from dataclasses import replace
 from datetime import UTC, datetime

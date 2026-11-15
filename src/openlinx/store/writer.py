@@ -1,4 +1,4 @@
-"""The transactional writer (015-add-crawl-store D4; 017-speed-up-crawl-writer D2, D3, D6)."""
+"""Batch recording units transactionally and replay them after a unit fails."""
 
 import asyncio
 import sqlite3
@@ -104,7 +104,7 @@ class CrawlWriter:
         self._loop_deadline = False
         self._unflushed: asyncio.Event | None = None
         # Armed only while a unit runs, so the writer's own commits and rollbacks, a replay's
-        # included, are not counted (design D6).
+        # included, are not counted.
         self._in_unit = False
         # What the unit did to the transaction, in order: "commit" and "rollback".
         self._unit_ended: list[str] = []
@@ -399,7 +399,7 @@ class CrawlWriter:
         error: BaseException | None,
     ) -> bool:
         """False, or the writer ends, when the unit committed or rolled back the batch's
-        transaction itself (design D6)."""
+        transaction itself."""
         ended = self._unit_ended
         if "commit" in ended:
             durable = (
@@ -423,7 +423,7 @@ class CrawlWriter:
     def _committed(self, unit: Unit[Any], connection: Connection, *, durable: bool) -> RuntimeError:
         """A unit committed: its changes after the commit go, and the batch before it, which a
         commit that succeeded made permanent, resolves; the writer then ends, since a replay
-        could no longer undo the batch (design D6)."""
+        could no longer undo the batch (017-speed-up-crawl-writer D6)."""
         connection.rollback()
         if durable:
             self._settle(self._batch)
@@ -454,7 +454,7 @@ class CrawlWriter:
                 raise
             raise failure from replay_error
         finally:
-            # Its own error even when the replay fails and ends the writer (design D6).
+            # Its own error even when the replay fails and ends the writer.
             failed.done.set_exception(error)
             if failed.submitted:
                 self._free(1)
@@ -516,7 +516,7 @@ class CrawlWriter:
 def _uncancellable[T]() -> Future[T]:
     done: Future[T] = Future()
     # So cancel() returns False: a cancelled Future would end the writer at its commit, for
-    # every caller, and the unit is never withdrawn anyway (design D2).
+    # every caller, and the unit is never withdrawn anyway.
     done.set_running_or_notify_cancel()
     return done
 
@@ -542,7 +542,8 @@ def _run_counted[T](unit: Unit[T], connection: Connection) -> tuple[T, int]:
 
 def _run_again(ran: _Ran, connection: Connection) -> None:
     # A unit that does not do the same again ends the writer, never just its own changes: its
-    # caller holds the first run's result, and may have built later units on it (design D6).
+    # caller holds the first run's result, and may have built later units on it
+    # (017-speed-up-crawl-writer D6).
     try:
         result, changes = _run_counted(ran.unit, connection)
     except BaseException as error:
@@ -558,7 +559,8 @@ def _run_again(ran: _Ran, connection: Connection) -> None:
 
 def _compared_by_identity(result: object) -> str | None:
     """The name of a type in the result that compares by identity, which a replay's != could not
-    check; per type, not per element, so a tuple of 500 records costs one check (design D6)."""
+    check; per type, not per element, so a tuple of 500 records costs one check
+    (017-speed-up-crawl-writer D6)."""
     kinds = {type(result)}
     if isinstance(result, tuple | list | set | frozenset):
         kinds.update(type(element) for element in result)
@@ -574,7 +576,7 @@ def _compared_by_identity(result: object) -> str | None:
 
 def _batch_committed(connection: Connection, begun: object) -> bool:
     # The caller excludes a latched failure of the first commit. Any current transaction is
-    # then a later one, whose failure cannot undo the original batch (design D6).
+    # then a later one, whose failure cannot undo the original batch.
     return connection.get_transaction() is not begun
 
 

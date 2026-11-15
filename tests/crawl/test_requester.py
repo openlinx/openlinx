@@ -1,4 +1,4 @@
-"""Which outcome of an attempt is tried again (022-add-fetch-policy D4; pure logic)."""
+"""Verify which request-attempt outcomes permit a retry."""
 
 from datetime import UTC, datetime
 from typing import get_args

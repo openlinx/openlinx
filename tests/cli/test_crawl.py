@@ -1,4 +1,4 @@
-"""`linx crawl` (020-add-crawl-core, crawling)."""
+"""Verify the crawl Command's inputs, output and recorded results."""
 
 import json
 

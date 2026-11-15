@@ -1,4 +1,4 @@
-"""The reason phrase table against the checked-in IANA registry snapshot (030-add-page-data D19)."""
+"""Verify reason phrases against the checked-in IANA registry snapshot."""
 
 import csv
 import re

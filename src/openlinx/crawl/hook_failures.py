@@ -1,5 +1,4 @@
-"""What a hook's failure says: its error's text and where in the hook it was raised
-(023-fix-code-audit D3)."""
+"""Describe hook failures with the error text and the location inside the hook."""
 
 import sys
 import traceback
@@ -22,7 +21,7 @@ class _Redactor(Protocol):
 
 
 class HookFailure(msgspec.Struct, frozen=True, kw_only=True):
-    """One hook's failure: a struct, so an extractor's crosses 026's process boundary."""
+    """One hook's failure: a struct, so an extractor's failure can cross a process boundary."""
 
     hook: str
     error_type: str

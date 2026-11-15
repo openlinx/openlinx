@@ -1,10 +1,10 @@
-"""Crawl State transitions: one table and one check (020-add-crawl-core D12)."""
+"""Validate Crawl State changes against one transition table."""
 
 from collections.abc import Mapping
 
 from openlinx.store.records import CrawlState, StopReason
 
-# Each allowed change of state, with the stop reasons it allows; 060 adds interrupted.
+# Allowed state changes and stop reasons; 060-add-crawl-control owns interrupted support.
 TRANSITIONS: Mapping[tuple[CrawlState, CrawlState], frozenset[StopReason | None]] = {
     ("running", "completed"): frozenset({None}),
     ("running", "stopped"): frozenset({"max_urls", "interrupt", "requested"}),

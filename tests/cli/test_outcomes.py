@@ -1,4 +1,4 @@
-"""Partial results (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify partial CLI results preserve their data and failure exit codes."""
 
 from tests.support.app import example_app
 from tests.support.cli import run_cli

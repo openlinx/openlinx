@@ -1,4 +1,4 @@
-"""The fake Fetcher: a boundary double for timing scenarios only (020-add-crawl-core D8, D15)."""
+"""Provide a scripted Fetcher boundary double only for timing scenarios."""
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass

@@ -1,4 +1,4 @@
-"""Choosing the journal mode (015-add-crawl-store, crawl-store)."""
+"""Verify journal-mode selection from Crawl file paths."""
 
 from pathlib import PurePosixPath, PureWindowsPath
 

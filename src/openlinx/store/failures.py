@@ -1,4 +1,4 @@
-"""Which write failures are one URL's, and which the crawl file's (020-add-crawl-core D2, D16)."""
+"""Distinguish write failures affecting one URL from failures affecting the crawl file."""
 
 import sqlite3
 
@@ -15,7 +15,7 @@ _ONE_ROW = (sqlite3.IntegrityError, sqlite3.DataError, sqlite3.InterfaceError)
 def is_write_failure(error: BaseException) -> bool:
     """True when writing the crawl file failed, wherever it was written: the writer ended or
     its replay failed, another connection held the file, or the database refused for a reason
-    that is not one row's (020-add-crawl-core D16)."""
+    that is not one row's."""
     # The writer's own errors first: none of them is a database error.
     if isinstance(error, CrawlWriterClosedError | CrawlWriterReplayError):
         return True
@@ -27,7 +27,7 @@ def is_write_failure(error: BaseException) -> bool:
 
 def write_failure_cause(error: BaseException) -> BaseException:
     """The error the write failed on: an ended writer refuses with the error it ended on as
-    its cause (017 D6)."""
+    its cause (017-speed-up-crawl-writer D6)."""
     if isinstance(error, CrawlWriterClosedError) and error.__cause__ is not None:
         return error.__cause__
     return error

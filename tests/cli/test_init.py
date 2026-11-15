@@ -1,4 +1,4 @@
-"""`linx init` (010-add-workspace-and-cli-contract, workspace)."""
+"""Verify the init Command creates and reports a Workspace."""
 
 import sys
 from pathlib import Path

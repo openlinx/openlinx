@@ -1,4 +1,4 @@
-"""Docs, schema and file agree (015-add-crawl-store, 018-add-schema-conventions, crawl-store)."""
+"""Verify schema documentation, declarations and Crawl files agree."""
 
 import json
 import re

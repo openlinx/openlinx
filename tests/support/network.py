@@ -1,4 +1,4 @@
-"""The network guard: tests reach only loopback (design D13 of 000-scaffold-project)."""
+"""Restrict test network access to loopback addresses."""
 
 import asyncio
 import ipaddress

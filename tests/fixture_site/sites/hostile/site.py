@@ -1,4 +1,4 @@
-"""Hostile pages: bytes that their declared charset cannot decode (020-add-crawl-core D16)."""
+"""Serve bytes that their declared charset cannot decode."""
 
 from pathlib import Path
 

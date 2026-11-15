@@ -1,4 +1,4 @@
-"""The table rules and the registry (design D2 of 010-add-workspace-and-cli-contract)."""
+"""Verify settings table registration and the table contract."""
 
 import re
 from collections.abc import Callable

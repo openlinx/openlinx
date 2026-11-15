@@ -1,4 +1,4 @@
-"""The network pause's count (020-add-crawl-core D16; seams 2, 3 and 4)."""
+"""Verify network-pause counting through service, HTTP and pure-logic seams."""
 
 import io
 import json

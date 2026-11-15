@@ -1,4 +1,4 @@
-"""Compressed responses (022-add-fetch-policy, fetching; seam 3)."""
+"""Verify compressed responses over HTTP."""
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site

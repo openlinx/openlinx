@@ -1,4 +1,4 @@
-"""How services report warnings and progress (design D3 of 010-add-workspace-and-cli-contract)."""
+"""Provide the service boundary for warnings and progress events."""
 
 from typing import Any, Protocol
 

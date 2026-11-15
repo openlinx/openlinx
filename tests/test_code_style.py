@@ -1,5 +1,4 @@
-"""Guard: code rules (018-add-schema-conventions; 020-add-crawl-core D7, D9, D13, D14, D19;
-022-add-fetch-policy D2)."""
+"""Guard architectural boundaries and code conventions by inspecting source."""
 
 import ast
 import re
@@ -68,7 +67,7 @@ def _is_unbounded_memo(decorator: ast.expr) -> bool:
 
 
 def violations(sources: Mapping[str, str]) -> list[str]:
-    """Each module's breaches of ADR-0006, given every module's source by its path."""
+    """Find mutable records, class hierarchies and unbounded memos that violate ADR-0006."""
     trees = {module: ast.parse(source) for module, source in sources.items()}
     classes = {
         module: [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
@@ -183,7 +182,7 @@ class AppGroup(OpenLinxGroup): ...
 
 
 URL_MODULE = "openlinx/crawl/urls.py"
-# Each store module that casts urls.url to a NormalizedUrl (design D13).
+# Each store module that casts urls.url to a NormalizedUrl.
 NORMALIZED_URL_MAKERS = {URL_MODULE, "openlinx/store/urls.py"}
 
 
@@ -209,7 +208,7 @@ def _makes_normalized_url(node: ast.AST) -> bool:
 
 
 def url_type_violations(sources: Mapping[str, str]) -> list[str]:
-    """Breaches of design D13 of 020-add-crawl-core, given every module's source by its path."""
+    """Find NormalizedUrl construction outside its factory and store reconstruction boundary."""
     found = []
     for module, source in sources.items():
         tree = ast.parse(source)
@@ -275,7 +274,7 @@ def test_a_normalized_url_made_outside_its_makers_is_named() -> None:
     ]
 
 
-# Only the store writes SQL; the schema service loads sqlalchemy lazily (020-add-crawl-core D14).
+# Only the store writes SQL; the schema service loads sqlalchemy lazily.
 SQLALCHEMY_IMPORTERS = ("openlinx/store/", "openlinx/services/schema.py")
 
 
@@ -766,7 +765,8 @@ def _parses(sources: Mapping[str, str]) -> list[tuple[str, int, str | None]]:
 
 
 def parse_violations(sources: Mapping[str, str]) -> list[str]:
-    """Parsers that break design D5, given every module's source by path."""
+    """Find document parses with scripting disabled and fragment parses outside noscript
+    handling."""
     return [f"{module}:{line} {breach}" for module, line, breach in _parses(sources) if breach]
 
 
@@ -870,7 +870,7 @@ FACTORIES = {
 
 
 def factory_violations(sources: Mapping[str, str]) -> list[str]:
-    """Hooks and Links built outside their factories, by source path (023 D12)."""
+    """Hooks and Links built outside their factories, by source path."""
     found = []
     for module, source in sources.items():
         tree = ast.parse(source)
@@ -1122,8 +1122,8 @@ def test_a_wait_outside_the_clock_is_named() -> None:
 
 
 # Every row goes into urls through insert_urls, which records its origin first: an insert that
-# forgets it fails on a NULL origin_id and ends as a silent record_failed (022-add-fetch-policy
-# design D2).
+# forgets it fails on a NULL origin_id and ends as a silent record_failed
+# (022-add-fetch-policy D2).
 URLS_MODULE = "openlinx/store/urls.py"
 
 
@@ -1476,7 +1476,8 @@ def test_a_virtual_clock_beside_real_io_is_named() -> None:
     ]
 
 
-# Click's internals have no public path, and the runner owns the raw streams (design D15 of 023).
+# Click's internals have no public path; raw streams belong to the runner
+# (023-fix-code-audit D15).
 TID251_SUPPRESSIONS = {"openlinx/cli/click_compat.py": 2, "openlinx/cli/runner.py": 1}
 # Every spelling that may silence it, a line's or a file's (ruff: or flake8:), in any case and
 # with or without spaces, alone or among other codes; matching more is only stricter.

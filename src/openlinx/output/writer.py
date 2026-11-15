@@ -1,4 +1,4 @@
-"""The one Output object of an invocation (design D3 of 010-add-workspace-and-cli-contract)."""
+"""Own one invocation's output format and streams through a single Output object."""
 
 import shutil
 import threading

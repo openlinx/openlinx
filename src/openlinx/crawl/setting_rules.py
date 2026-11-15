@@ -1,4 +1,4 @@
-"""Rules that the CLI and the settings file share, one message each (020-add-crawl-core D11)."""
+"""Share setting validation rules and messages between the CLI and settings file."""
 
 import math
 import re

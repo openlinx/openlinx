@@ -1,4 +1,4 @@
-"""The `[store]` settings table (015-add-crawl-store, crawl-store)."""
+"""Verify store settings through the CLI."""
 
 from pathlib import Path
 

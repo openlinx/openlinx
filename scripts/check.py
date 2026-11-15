@@ -1,4 +1,4 @@
-"""Run the CI gates locally in CI's order (design D11 of 000-scaffold-project)."""
+"""Run the CI gates locally in the same order as CI."""
 
 import os
 import shutil

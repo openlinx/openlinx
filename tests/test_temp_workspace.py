@@ -1,4 +1,4 @@
-"""The `temp_workspace` fixture (design D8 of 000-scaffold-project)."""
+"""Verify the isolated temporary Workspace fixture."""
 
 from pathlib import Path
 

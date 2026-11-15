@@ -1,4 +1,4 @@
-"""The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
+"""Declare the complete public crawl-file schema and its constraints."""
 
 from collections.abc import Iterable
 from typing import Any, Literal, get_args, get_origin
@@ -56,7 +56,7 @@ def literal_values(alias: Any) -> list[str]:
     return [item for member in get_args(value) for item in literal_values(member)]
 
 
-# Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
+# Version 1 lasts until post-v0.1 schema changes introduce migrations (015-add-crawl-store D5).
 SCHEMA_VERSION = 1
 CRAWL_MODES = literal_values(CrawlMode)
 CRAWL_STATES = literal_values(CrawlState)
@@ -1324,7 +1324,7 @@ links = public_table(
     "HTML, or in the Link and Refresh headers of an in-Scope 2xx response.",
     change=30,
 )
-# The layout and these indexes are provisional until the links benchmark chooses (design D4).
+# This layout and its indexes await the Link layout benchmark (030-add-page-data D4).
 Index(
     "links_target",
     links.c.target_url_id,

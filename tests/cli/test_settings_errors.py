@@ -1,4 +1,4 @@
-"""Invalid settings name the offending key (010-add-workspace-and-cli-contract, workspace)."""
+"""Verify invalid settings name the offending key."""
 
 from pathlib import Path
 

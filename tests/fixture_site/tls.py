@@ -1,4 +1,4 @@
-"""Distinct TLS trust failures behind the fixture resolver (022-add-fetch-policy D5, D9)."""
+"""Build distinct TLS trust failures for the local fixture listeners."""
 
 import ssl
 from collections.abc import Callable

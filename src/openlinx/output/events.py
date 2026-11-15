@@ -1,4 +1,4 @@
-"""Progress event lines on stderr (design D3 of 010-add-workspace-and-cli-contract)."""
+"""Write progress events as lines on stderr."""
 
 from collections.abc import Mapping
 from datetime import UTC, datetime

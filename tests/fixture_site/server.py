@@ -1,4 +1,4 @@
-"""The fixture-site server, aiohttp on 127.0.0.1 in a thread (design D9 of 000-scaffold-project)."""
+"""Serve fixture sites with aiohttp on 127.0.0.1 in a background thread."""
 
 import asyncio
 import socket

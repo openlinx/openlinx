@@ -1,4 +1,4 @@
-"""Stored Links match discovery (030-add-page-data, page-data; seam 3+6)."""
+"""Verify stored Links match discovered Links."""
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site

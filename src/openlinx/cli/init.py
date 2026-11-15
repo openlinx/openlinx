@@ -1,4 +1,4 @@
-"""`linx init` over the Workspace service (design D9 of 010-add-workspace-and-cli-contract)."""
+"""Adapt Workspace creation to the init Command."""
 
 from pathlib import Path
 from typing import Any

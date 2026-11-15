@@ -1,4 +1,4 @@
-"""Reference resolution and Links through one policy-aware factory (020 D5, D19; 023 D12)."""
+"""Resolve references and build Links through one policy-aware factory."""
 
 import msgspec
 
@@ -56,7 +56,7 @@ def discovered_link(
     follow_nofollow: bool,
 ) -> DiscoveredLink:
     """A Link of the document or of a header: its nofollow is its rel's, and the follow rule
-    gives its skip reason (design D5)."""
+    gives its skip reason."""
     nofollow = "nofollow" in rel
     return DiscoveredLink(
         type=link_type,

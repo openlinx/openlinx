@@ -1,4 +1,4 @@
-"""How `linx crawl` fails (020-add-crawl-core D16, crawling; seam 1)."""
+"""Verify Crawl failures are reported as CLI diagnostics."""
 
 from pathlib import Path
 from typing import Any

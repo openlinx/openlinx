@@ -1,4 +1,4 @@
-"""Resources: requested, never parsed unless in-Scope HTML (020-add-crawl-core D5; seam 3+6)."""
+"""Verify Resources are requested and parsed only when they are in-Scope HTML."""
 
 import pytest
 

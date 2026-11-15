@@ -1,4 +1,4 @@
-"""The --crawl flag (015-add-crawl-store, crawl-store)."""
+"""Verify Crawl selection through the crawl option."""
 
 from tests.support.app import EXAMPLE_READ_CRAWL, example_app
 from tests.support.cli import run_cli

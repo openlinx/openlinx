@@ -1,4 +1,4 @@
-"""The robots directives parser, which 030 imports for its columns (020-add-crawl-core D6)."""
+"""Parse robots directives for crawling policy and stored Page data."""
 
 import re
 from collections.abc import Iterable
@@ -15,7 +15,8 @@ _NOFOLLOW = frozenset({"nofollow", "none"})
 
 
 class RobotsDirectives(msgspec.Struct, frozen=True, kw_only=True):
-    """Named as 030's columns, so the two changes never disagree about noindex or nofollow."""
+    """Named as the stored Page columns, so discovery and extraction agree on noindex and
+    nofollow."""
 
     meta_robots: str | None
     meta_robots_noindex: bool

@@ -1,4 +1,4 @@
-"""Redacting secrets before a Crawl records them (design D7 of 015-add-crawl-store)."""
+"""Redact secret settings and credentials before recording Crawl data."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass

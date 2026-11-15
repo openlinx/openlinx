@@ -1,4 +1,4 @@
-"""Help and version are plain text (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify help and version remain plain text."""
 
 from tests.support.cli import run_cli
 

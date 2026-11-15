@@ -1,4 +1,4 @@
-"""A Page's cookies from its Set-Cookie headers, without their values (030-add-page-data D14)."""
+"""Extract cookie metadata from Set-Cookie headers without retaining values."""
 
 import re
 from collections.abc import Callable, Sequence

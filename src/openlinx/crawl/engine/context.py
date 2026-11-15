@@ -1,4 +1,4 @@
-"""One context for a Crawl's dependencies (020-add-crawl-core D15)."""
+"""Group the dependencies shared by a Crawl's engine tasks."""
 
 import re
 from dataclasses import dataclass
@@ -20,7 +20,7 @@ from openlinx.store.writer import CrawlWriter
 class CrawlContext:
     crawl_file: CrawlFile
     settings: CrawlSettings
-    # The Scope the Crawl was planned with; the current one is the Seed chain's (022 D3).
+    # The Scope the Crawl was planned with; the current one is the Seed chain's.
     planned_scope: ScopeRules
     # --strip-params, compiled once: the Seed, the engine and page preparation share it.
     strip_params: re.Pattern[str] | None
@@ -28,7 +28,7 @@ class CrawlContext:
     warnings: WarningLog
     writer: CrawlWriter
     fetcher: Fetcher
-    # The Fetcher's settings, whose timeout the watchdog outlasts (022 D1).
+    # The Fetcher's settings, whose timeout the watchdog outlasts.
     fetch_policy: FetchPolicy
     pages: PageExecutor
     hooks: Hooks

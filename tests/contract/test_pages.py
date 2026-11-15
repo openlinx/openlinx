@@ -1,4 +1,4 @@
-"""The pages table in linx schema (030-add-page-data, page-data; seam 6)."""
+"""Verify the pages table exposed by the schema Command."""
 
 from typing import Any
 

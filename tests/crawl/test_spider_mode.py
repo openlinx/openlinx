@@ -1,4 +1,4 @@
-"""Spider mode over HTTP (020-add-crawl-core, crawling; seam 3+6)."""
+"""Verify Spider-mode crawling through HTTP and stored results."""
 
 import pytest
 
@@ -207,7 +207,8 @@ def test_a_skipped_url_has_no_response_data(
 def test_deeply_nested_html_does_not_stop_the_crawl(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
-    # 10,000 deep: lexbor's tree builder parses it in about 50 ms (design Risks).
+    # Deep nesting must stay parseable without the native-stack overflow caused by serialization
+    # (020-add-crawl-core, Risks).
     nested = "<div>" * 10_000 + '<a href="/after">After</a>' + "</div>" * 10_000
     server = fixture_site(
         Site(

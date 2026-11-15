@@ -1,4 +1,4 @@
-"""Resource sizes (022-add-fetch-policy, fetching; seam 3+6)."""
+"""Verify Resource sizes through HTTP and stored rows."""
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site

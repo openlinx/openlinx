@@ -1,4 +1,4 @@
-"""Redacting secrets (015-add-crawl-store, crawl-store)."""
+"""Verify secrets are redacted from recorded Crawl data."""
 
 from typing import cast
 

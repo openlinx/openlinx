@@ -1,4 +1,4 @@
-"""The Content Area and its counts (030-add-page-data, page-data; seam 4)."""
+"""Verify Content Area selection and text metrics through pure extraction."""
 
 import pytest
 

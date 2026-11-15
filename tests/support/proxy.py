@@ -1,5 +1,4 @@
-"""A forward proxy for the proxy scenarios: it relays plain-http requests and records each one
-(022-add-fetch-policy D9)."""
+"""Relay plain HTTP through a local forward proxy that records each request."""
 
 import threading
 from collections.abc import Callable, Mapping

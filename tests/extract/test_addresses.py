@@ -1,5 +1,4 @@
-"""The display form of a URL, and its path and query (030-add-page-data, the Address columns;
-seam 4)."""
+"""Verify a URL's display address, path and query through pure extraction."""
 
 from hypothesis import given, reject
 from hypothesis import strategies as st

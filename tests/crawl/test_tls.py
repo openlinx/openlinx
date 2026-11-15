@@ -1,4 +1,4 @@
-"""TLS trust (022-add-fetch-policy D5, fetching spec: TLS certificate verification)."""
+"""Verify TLS certificate trust through real HTTPS requests."""
 
 from openlinx.output.reporter import Collected
 from tests.fixture_site.routes import Page, Site

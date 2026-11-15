@@ -1,4 +1,4 @@
-"""Every test gets its own home folder (design D8 of 000-scaffold-project)."""
+"""Verify each test receives an isolated home folder."""
 
 import subprocess
 import sys

@@ -1,4 +1,4 @@
-"""The [store] settings table (design D3 of 015-add-crawl-store)."""
+"""Define the store settings table and its validation bounds."""
 
 from pydantic import BaseModel, ConfigDict, Field
 

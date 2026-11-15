@@ -1,4 +1,4 @@
-"""Column types shared by every table of the public schema (design D6 of 015-add-crawl-store)."""
+"""Share column types across every table of the public schema."""
 
 from datetime import UTC, datetime
 from typing import Any, ClassVar

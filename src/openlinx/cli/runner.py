@@ -1,4 +1,4 @@
-"""Runs the app; each failure is a diagnostic (design D5 of 010-add-workspace-and-cli-contract)."""
+"""Run the CLI app and turn failures into diagnostics."""
 
 import sys
 import traceback
@@ -158,7 +158,7 @@ def _invalid_value(error: typer.BadParameter) -> OpenLinxError:
         meta = meta_of(callback) if callback is not None else None
         hint = formats_hint(meta) if meta is not None else None
     setting = _setting_of(error)
-    # The shape of a value refused when given to a service: its setting's key (design D10).
+    # The shape of a value refused when given to a service: its setting's key.
     details = {} if setting is None else {"key": setting}
     return OpenLinxError(INVALID_VALUE, error.format_message(), hint=hint, details=details)
 

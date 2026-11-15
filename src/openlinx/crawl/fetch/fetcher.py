@@ -1,4 +1,4 @@
-"""The Fetcher: one request, one hop, never a redirect followed (020-add-crawl-core D8)."""
+"""Fetch one HTTP hop and return request failures as data."""
 
 from collections.abc import AsyncIterator, Callable, Iterable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
@@ -68,7 +68,7 @@ class FetchResult:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FetchFailure:
-    """A request that got no HTTP response: returned, never raised (design D8)."""
+    """A request that got no HTTP response: returned, never raised."""
 
     fetch_error: FetchError
     # The exception's type and text.
@@ -88,11 +88,11 @@ DEFAULT_USER_AGENT = f"{PRODUCT_NAME}/{__version__} (+{CRAWLER_PAGE_URL})"
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FetchPolicy:
     """The Fetcher's settings of a Crawl, from its plan to its Fetcher; retries and the hop limit
-    are the Requester's and the engine's (022-add-fetch-policy D1)."""
+    are the Requester's and the engine's."""
 
     user_agent: str
     proxies: ProxyVariables
-    # The watchdog of 020's design D16 outlasts it.
+    # The request watchdog outlasts this deadline, so it does not cut the Fetcher short.
     timeout_seconds: float
 
 
@@ -145,7 +145,7 @@ class AiohttpFetcher:
 
 def fetch_error_of(error: Exception) -> FetchError:
     # First: aiohttp's TLS errors are ClientConnectorErrors too, and a certificate failure is
-    # an answer of sorts, which the network pause must never count (design D16).
+    # an answer of sorts, which the network pause must never count (020-add-crawl-core D16).
     if isinstance(error, aiohttp.ClientSSLError):
         return "tls_error"
     if isinstance(error, BodyDecodingError):
@@ -180,7 +180,7 @@ async def aiohttp_fetcher(
         timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
         headers={
             "User-Agent": policy.user_agent,
-            # The codings this tool decodes itself, never aiohttp's own list (design D1).
+            # The codings this tool decodes itself, never aiohttp's own list.
             "Accept-Encoding": ACCEPT_ENCODING,
         },
         # No cookie session: a cookie set by one response would change what later ones return.

@@ -1,4 +1,4 @@
-// Seam 9 wiring (design D10 of 000-scaffold-project): 070 adds the Report script's tests here.
+// Seam 9 wiring: 070-add-html-report owns the planned Report script tests here.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

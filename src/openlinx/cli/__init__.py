@@ -1,1 +1,1 @@
-"""Typer app, one module per command group: 000-scaffold-project, then each Command's change."""
+"""CLI adapters, with one module per Command group."""

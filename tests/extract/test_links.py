@@ -1,4 +1,4 @@
-"""Link attributes and source pairs agree with their declarations (030 D4; 023 D12; seam 4)."""
+"""Verify Link attributes and source pairs match their declarations."""
 
 from openlinx.store.records import LINK_TYPES, LinkAttribute, LinkElement, LinkType
 from openlinx.store.schema import literal_values

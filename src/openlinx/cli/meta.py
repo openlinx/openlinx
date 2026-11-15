@@ -1,4 +1,4 @@
-"""`@command_meta`: what a Command outputs (design D7 of 010-add-workspace-and-cli-contract)."""
+"""Attach output contracts to Commands and enforce them at the CLI boundary."""
 
 import functools
 import inspect
@@ -143,7 +143,7 @@ def _secret_problems(command: Callable[..., Any], names: Iterable[str]) -> list[
             continue
         if extra.setting is not None:
             problems.append(f"{name} declares secret, which its setting {extra.setting} decides")
-        # The attached short form (-tVALUE) would slip past redaction (design D7 of 015).
+        # The attached short form (-tVALUE) would slip past redaction (015-add-crawl-store D7).
         problems += [
             f"{name} is secret, so it cannot have the short name {short}"
             for short in option_names(command, name)

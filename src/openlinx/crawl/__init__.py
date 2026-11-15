@@ -1,4 +1,4 @@
-"""The crawl core, in packages whose imports run one way (020-add-crawl-core D19).
+"""Crawl core packages with dependencies flowing toward shared policy modules.
 
 urls, scope, settings, setting_rules, reference_urls, references, hook_failures and following:
 what every package uses.

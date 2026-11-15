@@ -1,4 +1,4 @@
-"""A controlled Windows tree waits after both Python descendants are ready (030 task 12.3)."""
+"""Keep a controlled Windows process tree alive until both Python descendants are ready."""
 
 import json
 import os

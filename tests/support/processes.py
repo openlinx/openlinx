@@ -1,4 +1,4 @@
-"""Python processes that a test can kill (015-add-crawl-store)."""
+"""Own child processes and process trees that tests can stop or kill."""
 
 import os
 import subprocess
@@ -36,7 +36,7 @@ def console_process(
     stderr: int,
     cleanup_timeout: float = 5.0,
 ) -> Iterator[subprocess.Popen[bytes]]:
-    """Own a controlled Windows tree whose root waits for its children (030 task 12.3).
+    """Own a controlled Windows tree whose root waits for its children.
 
     Output goes to the caller's binary temporary files, never inherited pipes. The tree
     must not spawn after cleanup starts or lose its intermediate parents before discovery.

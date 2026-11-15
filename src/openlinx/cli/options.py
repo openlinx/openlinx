@@ -1,4 +1,4 @@
-"""The global flags, defined once (design D7 of 010-add-workspace-and-cli-contract)."""
+"""Define global CLI options once for all Commands."""
 
 import inspect
 import typing

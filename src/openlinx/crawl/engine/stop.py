@@ -1,5 +1,4 @@
-"""The stop flag of a Crawl, set once with its stop_reason, and the grace of a stop
-(020-add-crawl-core D10, D16)."""
+"""Keep the Crawl's stop reason and bound the grace allowed for requests in flight."""
 
 import asyncio
 from collections.abc import Callable
@@ -17,7 +16,7 @@ def _rank(reason: StopReason) -> int:
 
 
 def _ends_under_way(reason: StopReason) -> bool:
-    """Every stop but the URL limit's, which refuses new URLs only (022-add-fetch-policy D4)."""
+    """Every stop but the URL limit's, which refuses new URLs only."""
     return reason != "max_urls"
 
 
@@ -39,7 +38,7 @@ class StopSignal:
         self._on_first_set: list[Callable[[StopReason], object]] = []
         self._was_set = asyncio.Event()
         # Set by every stop but the URL limit's, which refuses new URLs only, so a retry and a
-        # network pause already under way go on within the grace (022-add-fetch-policy D4).
+        # network pause already under way go on within the grace.
         self._ends_under_way = asyncio.Event()
         self._closed = False
         # Any stop keeps a new request from starting; only one that ends what is under way
@@ -67,7 +66,7 @@ class StopSignal:
     def set(self, reason: StopReason, cause: BaseException | None = None) -> None:
         """The first stop counts, but a failure outranks a stop and a write failure the
         network failures: a Crawl that stopped at its URL limit and then lost its file has
-        failed (design D10, D16)."""
+        failed (020-add-crawl-core D10, D16)."""
         self._on_its_loop()
         if self._closed:
             return
@@ -88,7 +87,7 @@ class StopSignal:
     def close(self) -> StopReason | None:
         """The end's one read of the reason: a stop set after it, during the passes or the
         end's writes, changes nothing and writes no stopping event, since the Crawl ends as
-        its empty frontier says (design D10)."""
+        its empty frontier says (020-add-crawl-core D10)."""
         self._closed = True
         return self._reason
 
@@ -125,7 +124,7 @@ class _View:
 
 class StopGrace:
     """The grace of a stop: the requests in flight then get these seconds of clock time in all,
-    the depth's and the Checked URLs' alike, from the stop (design D16)."""
+    the depth's and the Checked URLs' alike, from the stop."""
 
     def __init__(self, clock: Clock, seconds: float) -> None:
         self._clock = clock

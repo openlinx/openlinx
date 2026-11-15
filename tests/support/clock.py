@@ -1,5 +1,4 @@
-"""`FakeClock`, the virtual clock of the timing tests (design D8 of 000-scaffold-project,
-D7 of 020-add-crawl-core)."""
+"""Drive timing tests with a virtual clock that advances when all work waits."""
 
 import asyncio
 import heapq

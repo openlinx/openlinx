@@ -1,4 +1,4 @@
-"""The directive, refresh and canonical columns of a Page (030-add-page-data, page-data; seam 4)."""
+"""Verify a Page's directive, refresh and canonical columns through pure extraction."""
 
 import pytest
 

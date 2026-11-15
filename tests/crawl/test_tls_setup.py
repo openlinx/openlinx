@@ -1,4 +1,4 @@
-"""The TLS setup: the OS trust store, or certifi without it (022-add-fetch-policy D5, seam 4)."""
+"""Verify TLS setup uses the OS trust store with certifi as its loading fallback."""
 
 import ssl
 import sys

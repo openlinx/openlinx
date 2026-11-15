@@ -1,4 +1,4 @@
-"""The aiohttp Fetcher: every failed request has its code (020-add-crawl-core D8; seams 3, 4)."""
+"""Verify the aiohttp Fetcher returns request failures with diagnostic codes."""
 
 import socket
 import ssl

@@ -1,4 +1,4 @@
-"""What a fresh process loads (designs D2 and D10 of 010-add-workspace-and-cli-contract)."""
+"""Guard the modules loaded by fresh CLI processes."""
 
 import os
 import subprocess
@@ -184,7 +184,7 @@ def test_dot_dot_segments_name_the_folder_they_resolve_to() -> None:
 
 
 # linx commands reads the inherited secret flag of an option's setting from the table's model,
-# so it may load pydantic and pydantic's own dependencies (design D10 of 010).
+# so it may load pydantic and pydantic's own dependencies.
 SETTINGS_MODELS = {
     "pydantic",
     "pydantic_core",

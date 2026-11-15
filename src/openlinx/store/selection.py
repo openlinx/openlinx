@@ -1,4 +1,4 @@
-"""Resolving --crawl to a crawl file (design D8 of 015-add-crawl-store)."""
+"""Resolve the crawl option to a crawl file in the Workspace."""
 
 import os
 from pathlib import Path
@@ -72,7 +72,7 @@ def _metadata_of(path: Path, crawl_id: str) -> dict[str, Any]:
 def _metadata(path: Path) -> dict[str, Any]:
     try:
         return read_metadata(path)
-    # Not a SQLite file, no crawl table, or not exactly one crawl row (design D5).
+    # Not a SQLite file, no crawl table, or not exactly one crawl row.
     except (DBAPIError, NoResultFound, MultipleResultsFound) as error:
         raise OpenLinxError(
             CRAWL_FILE_INVALID,

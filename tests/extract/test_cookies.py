@@ -1,4 +1,4 @@
-"""Cookie rows from a Page's Set-Cookie headers (030-add-page-data, page-data; seam 4)."""
+"""Verify cookie rows derived from a Page's Set-Cookie headers."""
 
 from datetime import UTC, datetime
 

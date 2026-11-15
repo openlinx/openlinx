@@ -1,4 +1,4 @@
-"""Pages, cursors and fields (design D6 of 010-add-workspace-and-cli-contract)."""
+"""Select result fields and page items using opaque cursors."""
 
 import base64
 import hashlib

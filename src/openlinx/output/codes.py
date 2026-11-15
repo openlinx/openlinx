@@ -1,4 +1,4 @@
-"""Exit codes and the list of diagnostic codes (design D5 of 010-add-workspace-and-cli-contract)."""
+"""Declare diagnostic codes and their associated exit codes."""
 
 from dataclasses import dataclass
 from enum import IntEnum
@@ -9,8 +9,7 @@ from openlinx.naming import SETTINGS_FILE_NAME
 type Level = Literal["error", "warning", "info"]
 # How the warning log keeps a warning of the code: each one; once per the detail once_per
 # names; counted, one entry whose count is the URLs it affected; pauses, one entry counting
-# the network pauses; or for its run only, which a continue drops (design D10 of
-# 020-add-crawl-core).
+# the network pauses; or for its run only, which a continue drops.
 type Kept = Literal["each", "once", "counted", "pauses", "run"]
 
 

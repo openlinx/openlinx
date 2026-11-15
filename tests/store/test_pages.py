@@ -1,4 +1,4 @@
-"""The row writer of openlinx.store.pages (030-add-page-data D1; seam 2)."""
+"""Verify Page and cookie row writing through the store API."""
 
 from dataclasses import fields
 from datetime import UTC, datetime

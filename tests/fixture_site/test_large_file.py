@@ -1,4 +1,4 @@
-"""`LargeFile` routes (design D9 of 000-scaffold-project)."""
+"""Verify LargeFile routes serve generated large bodies."""
 
 import hashlib
 

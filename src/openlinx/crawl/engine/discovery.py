@@ -1,4 +1,4 @@
-"""The URLs that a Page links to, as the engine records them (020-add-crawl-core D1, D5)."""
+"""Combine a Page's Links into one discovery record per target URL."""
 
 from collections.abc import Iterable
 
@@ -12,8 +12,7 @@ def discovered_urls(
     links: Iterable[DiscoveredLink],
     scope: ScopeRules,
 ) -> tuple[NewUrl, ...]:
-    """One row per URL, followed when any of its Links requests it, in document order
-    (design D5)."""
+    """One row per URL, followed when any of its Links requests it, in document order."""
     # A Page names most URLs several times, and each row costs its unit an insert.
     chosen: dict[NormalizedUrl, tuple[DiscoveredLink, DiscoverySkipReason | None]] = {}
     for link in links:
@@ -32,7 +31,7 @@ def _outranks(
     known_reason: DiscoverySkipReason | None,
 ) -> bool:
     # A requested Link outranks an unrequested one, and a Resource Link a followed one: being a
-    # Resource is the Link's own property, which the depth limit and the barrier read (D5).
+    # Resource is the Link's own property, which the depth limit and the barrier read.
     if reason is not None:
         return False
     return known_reason is not None or (

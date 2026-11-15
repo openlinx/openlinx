@@ -1,4 +1,4 @@
-"""Runs of blocking responses belong to the engine's warnings (020-add-crawl-core D7)."""
+"""Track consecutive blocking responses for Crawl warnings."""
 
 # Consecutive 403 and 429 responses of one host before the warning that it may be blocking.
 BLOCKING_RUN = 10

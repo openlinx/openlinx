@@ -1,4 +1,4 @@
-"""Diagnostics on stderr and exit codes (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify diagnostics on stderr and their exit codes."""
 
 import json
 

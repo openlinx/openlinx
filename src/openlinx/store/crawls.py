@@ -1,4 +1,4 @@
-"""Crawl files in the Workspace's data folder (designs D1 and D2 of 015-add-crawl-store)."""
+"""Create Crawl files and update their run metadata in the Workspace's data folder."""
 
 import platform
 import sqlite3
@@ -66,7 +66,7 @@ def create_crawl_file(
 def set_state(
     connection: Connection, state: CrawlState, at: datetime, stop_reason: StopReason | None = None
 ) -> None:
-    """The one writer of how a Crawl ends, checked against its state (020-add-crawl-core D12)."""
+    """The one writer of how a Crawl ends, checked against its state."""
     current: CrawlState = connection.execute(select(crawl.c.state)).scalar_one()
     check_transition(current, state, stop_reason)
     completed_at = at if state == "completed" else None
@@ -87,8 +87,7 @@ def record_state(
 
 
 def record_scope(scope: RecordedScope) -> Callable[[Connection], None]:
-    """A unit that records the Scope again, once a Seed's Redirect Chain widened it
-    (022-add-fetch-policy D3)."""
+    """A unit that records the Scope again, once a Seed's Redirect Chain widened it."""
     statement = update(crawl).values(scope=dict(scope))
 
     def unit(connection: Connection) -> None:
@@ -124,8 +123,7 @@ def read_recorded(path: Path) -> RecordedCrawl:
 
 def record_continue(config: Mapping[str, Any], at: datetime) -> Callable[[Connection], None]:
     """A unit that runs the Crawl again, with the settings it now runs with in crawl.config,
-    and queues again the URLs whose outcome is usually transient (020-add-crawl-core D1,
-    D20)."""
+    and queues again the URLs whose outcome is usually transient."""
 
     def unit(connection: Connection) -> None:
         set_state(connection, "running", at)
@@ -183,7 +181,7 @@ def _set_journal_mode(
         (granted,) = connection.execute(f"PRAGMA journal_mode = {journal.mode}").fetchone()
         confirmed = confirm_journal_mode(journal, granted, location)
         if granted != confirmed.mode:
-            # SQLite refused WAL; no test can make it refuse (design D3).
+            # SQLite refused WAL; no test can make it refuse.
             (granted,) = connection.execute("PRAGMA journal_mode = DELETE").fetchone()
     return confirmed, granted
 

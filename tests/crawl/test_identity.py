@@ -1,4 +1,4 @@
-"""What every request says about the tool (022-add-fetch-policy, fetching; seam 3)."""
+"""Verify requests identify the tool over HTTP."""
 
 import json
 import re

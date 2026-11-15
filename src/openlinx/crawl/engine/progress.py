@@ -1,5 +1,4 @@
-"""Progress events: the urls counts kept from committed units, written every 10 seconds
-(020-add-crawl-core D10)."""
+"""Emit progress from committed URL tallies without scanning the frontier for each event."""
 
 from collections.abc import Callable
 from itertools import count
@@ -13,7 +12,7 @@ PROGRESS_SECONDS = 10
 
 class UrlCounters:
     """Seeded once a run by a counting query, then kept from the tallies of committed units, so
-    no event counts over urls, which a GROUP BY would scan (design D10)."""
+    no event counts over urls, which a GROUP BY would scan (020-add-crawl-core D10)."""
 
     def __init__(self, counts: UrlCounts) -> None:
         self._tally = UrlTally(

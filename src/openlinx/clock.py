@@ -1,4 +1,4 @@
-"""The `Clock` every component that reads time takes (design D6 of 000-scaffold-project)."""
+"""Inject timekeeping so production and timing tests share the same scheduling logic."""
 
 import asyncio
 import time

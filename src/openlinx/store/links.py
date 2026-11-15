@@ -1,4 +1,4 @@
-"""The row writer of the links table, and the inlink pass's units (030-add-page-data D4, D6)."""
+"""Write Link rows and build replay-safe units for the inlink pass."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import fields

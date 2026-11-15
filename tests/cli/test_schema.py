@@ -1,5 +1,4 @@
-"""`linx schema` (015-add-crawl-store, 018-add-schema-conventions, 022-add-fetch-policy,
-crawl-store)."""
+"""Verify the schema Command exposes the declared crawl-file schema."""
 
 from collections.abc import Iterator
 from typing import Any

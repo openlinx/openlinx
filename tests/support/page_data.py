@@ -1,4 +1,4 @@
-"""Page data at seam 4: page preparation, then the Page handler (030-add-page-data, Test seams)."""
+"""Exercise Page preparation and its handler together at the pure-logic seam."""
 
 from datetime import UTC, datetime
 

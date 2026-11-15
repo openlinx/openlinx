@@ -1,4 +1,4 @@
-"""The request log (design D9 of 000-scaffold-project)."""
+"""Verify fixture-site request logging."""
 
 import asyncio
 

@@ -1,4 +1,4 @@
-"""The [crawl] settings table (020-add-crawl-core D11)."""
+"""Define the crawl settings table and its validation bounds."""
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 

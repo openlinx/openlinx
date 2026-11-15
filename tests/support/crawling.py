@@ -1,4 +1,4 @@
-"""Crawling the fixture site in tests (020-add-crawl-core, seam 3+6)."""
+"""Run Crawls against the fixture site and read their stored results."""
 
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -99,7 +99,7 @@ def continued(
     fetcher: Fetcher | None = None,
     stop: StopSignal | None = None,
 ) -> CrawlResult:
-    """Continues the Crawl that `crawl` ended, through the Crawl Service, as 060's resume does."""
+    """Continue the Crawl ended by `crawl` through the Crawl Service."""
     return continue_crawl(
         CrawlFile(crawl.crawl_id, crawl.crawl_file),
         overrides or CrawlOverrides(),

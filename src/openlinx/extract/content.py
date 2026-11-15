@@ -1,4 +1,4 @@
-"""Content Area text: its counts, its hash and Text Ratio (030-add-page-data D7, D8, D10, D13)."""
+"""Measure Content Area text, its hash and Text Ratio."""
 
 import hashlib
 import math
@@ -71,7 +71,7 @@ def average_words_per_sentence(words: int, sentences: int) -> float | None:
 
 def content_hash(blocks: Iterable[str], words: int) -> str | None:
     # Without words, empty shells would all be Exact Duplicates of each other. No Unicode
-    # normalisation: its tables differ between interpreters (D10).
+    # normalisation: its tables differ between interpreters (030-add-page-data D10).
     if words == 0:
         return None
     return hashlib.sha256(normalized(joined(blocks)).encode()).hexdigest()

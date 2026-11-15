@@ -1,4 +1,4 @@
-"""The Page handler: a URL's Page row from its UrlResult (030-add-page-data, page-data; seam 4)."""
+"""Verify the Page handler maps a UrlResult to a Page row."""
 
 from datetime import UTC, datetime
 from typing import Any

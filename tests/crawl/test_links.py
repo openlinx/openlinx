@@ -1,4 +1,4 @@
-"""Link discovery in HTML (020-add-crawl-core, crawling)."""
+"""Verify HTML Link discovery through pure logic."""
 
 from datetime import UTC, datetime
 
@@ -491,7 +491,7 @@ def test_deeply_nested_html_gives_its_links() -> None:
             '<head><noscript><base href="/other/"></noscript></head><a href="a"></a>',
             [("hyperlink", "http://site.test/a")],
         ),
-        # A page's own template holds placeholders that scripts fill in (design D5).
+        # A page's own template holds placeholders that scripts fill in (020-add-crawl-core D5).
         ('<template><a href="{{ url }}"></a></template>', []),
         # With scripting on, the content of a <script> is text.
         ('<script>"<noscript>"</script><a href="/x"></a>', [("hyperlink", "http://site.test/x")]),

@@ -1,4 +1,4 @@
-"""Registering Commands on the app (design D7 of 010-add-workspace-and-cli-contract)."""
+"""Verify Command registration and output metadata on the app."""
 
 import re
 from collections.abc import Callable

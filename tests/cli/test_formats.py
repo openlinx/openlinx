@@ -1,4 +1,4 @@
-"""Output formats (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify CLI output formats."""
 
 from pathlib import Path
 

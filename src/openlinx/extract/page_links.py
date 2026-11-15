@@ -1,4 +1,4 @@
-"""The Link extractor: what the element of each HTML Link says (030-add-page-data D4)."""
+"""Extract the element attributes associated with each HTML Link."""
 
 from collections.abc import Mapping
 

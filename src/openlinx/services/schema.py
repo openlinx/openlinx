@@ -1,4 +1,4 @@
-"""The service behind `linx schema` (015-add-crawl-store D6; 018-add-schema-conventions D4)."""
+"""Describe the public crawl-file schema for the schema Command."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -18,7 +18,7 @@ class SchemaDescription:
 
 
 def describe_schema(table: str | None = None) -> SchemaDescription:
-    # Imported here: sqlalchemy stays off the CLI's startup path (design D9).
+    # Imported here: sqlalchemy stays off the CLI's startup path.
     from openlinx.store.schema import SCHEMA_VERSION, public_tables
 
     # sorted() is stable, so tables of one change keep the order the change declared them.

@@ -1,4 +1,4 @@
-"""The Crawl's warning log (020-add-crawl-core D10; seams 2, 3 and 3+6)."""
+"""Verify Crawl warning retention and counting across runs."""
 
 import json
 from collections.abc import Sequence

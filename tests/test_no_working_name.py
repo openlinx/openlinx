@@ -1,14 +1,14 @@
-"""Guard: the working name spider is gone (021-rename-to-openlinx design D2 and D3)."""
+"""Guard the product rename while preserving Spider as a Crawl Mode."""
 
 import re
 import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# History, which the rename's own plan now is, and this guard.
+# Archived plans retain historical names; this guard must name what it checks.
 EXEMPT = ("openspec/changes/archive/", "tests/test_no_working_name.py")
 # spider as the Crawl Mode and as Spider mode, and ADR-0006's dated measurement, are not the
-# product's name (design D2).
+# product's name.
 KEPT = re.compile(
     r"crawl_mode\W{1,8}spider\b"
     r'|CrawlMode = Literal\["spider"'

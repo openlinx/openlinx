@@ -1,4 +1,4 @@
-"""Home, proxy and network isolation as a pytest plugin (design D13 of 000-scaffold-project)."""
+"""Isolate home folders, proxies and network access through a pytest plugin."""
 
 from collections.abc import Iterator
 from pathlib import Path

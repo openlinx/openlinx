@@ -1,4 +1,4 @@
-"""Durability across a killed writer process (015-add-crawl-store, crawl-store)."""
+"""Verify Crawl writer durability across a killed process."""
 
 import pytest
 

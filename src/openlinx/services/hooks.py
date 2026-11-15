@@ -1,4 +1,4 @@
-"""A Crawl's hooks, composed here: the crawl core never imports them (020-add-crawl-core D9)."""
+"""Compose built-in Crawl hooks outside the crawl core."""
 
 from openlinx.crawl.engine.hooks import Hooks, Pass, PassContext, UrlResult, handler
 from openlinx.crawl.pages.preparation import InProcessExecutor, PageExecutor
@@ -21,8 +21,8 @@ from openlinx.workspace.settings import Settings
 
 
 def default_hooks(settings: Settings | None = None) -> Hooks:
-    """The built-in hooks, listed explicitly: 030 and 040 add theirs here. Their configs come
-    from the Crawl's loaded settings, or are the defaults without them."""
+    """Register built-in hooks here with configs from the Crawl's loaded settings, or their
+    defaults when no settings are supplied."""
     area = ContentArea() if settings is None else settings.table(ContentAreaSettings).content_area()
     return Hooks(
         extractors=(page_data_extractor(area), PAGE_LINKS),
@@ -43,7 +43,7 @@ def _response_headers(result: UrlResult) -> tuple[ResponseHeaders, ...]:
 
 
 async def count_inlinks(context: PassContext) -> None:
-    """The inlink pass (030-add-page-data D6): it only orders the store's units."""
+    """The inlink pass only orders the store's units; SQL stays in the store."""
     pages_200 = await context.writer.run_async(pages_with_status_200)
     for first, last in await context.writer.run_async(inlink_ranges):
         await context.writer.submit_async(inlink_counts(first, last, pages_200))
@@ -51,5 +51,5 @@ async def count_inlinks(context: PassContext) -> None:
 
 
 def default_page_executor() -> PageExecutor:
-    """Where Pages are prepared: in process here, 026's process pool later."""
+    """Prepare Pages in process; 026-add-parse-pool owns the planned worker-process executor."""
     return InProcessExecutor()

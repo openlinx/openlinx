@@ -1,4 +1,4 @@
-"""The columns the Page extractor derives from the HTML (030-add-page-data, page-data; seam 4)."""
+"""Verify the Page extractor's HTML-derived columns through pure logic."""
 
 import sys
 from dataclasses import fields

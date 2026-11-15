@@ -1,4 +1,4 @@
-"""The TLS context of every request of a Crawl (022-add-fetch-policy D5)."""
+"""Build the TLS context shared by a Crawl's requests."""
 
 import ssl
 

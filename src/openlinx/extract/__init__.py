@@ -1,4 +1,4 @@
-"""Page data: 030-add-page-data. Link discovery is 020's, in openlinx.crawl.pages.links.
+"""Extract Page data and Link attributes from prepared responses.
 
 page_data: PAGE_DATA, the Page extractor, and page_data_extractor.
 page_links: PAGE_LINKS, the Link extractor.

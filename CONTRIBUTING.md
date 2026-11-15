@@ -422,8 +422,7 @@ Register hooks at the composition root; the crawl core takes them as inputs.
 
 ## Code style
 
-- Write a comment only for a non-obvious *why*. Don't add a docstring to a function or method whose name and types already say what it does, and don't add a comment that restates the code.
-- Each module starts with a one-line docstring that names the design decision it implements, such as "design D7 of 000-scaffold-project". An empty `__init__.py` that only marks a test package needs none.
+- Follow the [comment and docstring policy](AGENTS.md#rules-only-review-catches-follow-them-without-being-asked): explain the responsibility or decision in the module’s first line and the non-obvious *why* in comments. An empty `__init__.py` that only marks a test package needs no docstring.
 - An `__init__.py` holds no code: callers import its submodules. A package's docstring is a summary line and the list of its interface, which lives nowhere else.
 - **The paradigm** is [ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md): logic in pure functions, data in frozen dataclasses (frozen `msgspec.Struct`s for page preparation's per-response records, which cross the parse pool, and for records that define a JSON document), dependencies as parameters typed by a Protocol, state only where it is inherent, no class hierarchies of our own, and pydantic only at the boundary.
 - **A memo** of a pure function, `functools.lru_cache(maxsize=N)` on a function whose result depends only on its arguments, is allowed and is not module-level state (ADR-0006). It always has a bound, never `maxsize=None` or `functools.cache`, and a one-line comment at the decorator says why it pays.

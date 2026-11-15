@@ -1,4 +1,4 @@
-"""Checked-out text files use LF on every OS (design D16 of 000-scaffold-project)."""
+"""Verify checked-out text files use LF on every operating system."""
 
 import subprocess
 from pathlib import Path

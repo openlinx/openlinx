@@ -1,4 +1,4 @@
-"""The network guard (design D13 of 000-scaffold-project)."""
+"""Verify the network guard restricts tests to loopback addresses."""
 
 import socket
 import urllib.error

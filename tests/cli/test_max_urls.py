@@ -1,4 +1,4 @@
-"""The URL limit at the CLI (020-add-crawl-core D10, crawling; seam 1)."""
+"""Verify the URL limit through the CLI."""
 
 import pytest
 
