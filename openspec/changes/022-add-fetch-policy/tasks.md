@@ -14,7 +14,7 @@ An option and its setting are declared by the task that applies them (`020` D11,
 
 A value that a handler or the store needs from a response goes on `020`'s `UrlResponse` (`UrlResult.response`), and a request that got none keeps its `UrlFailure` (`UrlResult.failure`); the store record is built from them (`020` task 5.20).
 
-**v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9 and 10 join it with `020`'s network pause and close it. Groups 11–14 are marked (v0.2) and wait for v0.2.
+**v0.1 and v0.2:** groups 1–8 are 022-min, in v0.1 (ROADMAP). Groups 9 and 10 join it with `020`'s network pause and close it. Groups 11–14 implement the remaining v0.2 fetching policy in order. Each new option is usable and safely recorded in its introducing slice; shared secret metadata may be introduced first through the store API. The resume Commands remain with crawl control, and copying origin capability into Pages remains with Page data.
 
 **Order against `020`:** this change builds on `020`'s accepted code with its `UrlResult` shape (`020` tasks 5.19–5.25), merged in at the manager's SHA. A task that needs a part of `020` that is not merged yet says "after `020` task N". `020`'s network pause (its group 12) is merged in; group 9 joins it with this change's retries.
 
@@ -186,34 +186,61 @@ Tasks 6.4 and 8.2 close in this group too, 8.2 from the first PR's CI.
 
 ## 11. (v0.2) Custom headers and credentials
 
-- [ ] 11.1 [HTTP] Drive "A custom header is sent to Internal URLs": `--header` with the `crawl.header` setting, and `Request` carries its dispatch decision's `is_internal` (design D1).
-- [ ] 11.2 [HTTP] Drive "A custom header never goes to External URLs", on `020`'s two fixture instances.
-- [ ] 11.3 [CLI] Drive "A malformed header is rejected".
-- [ ] 11.4 [3+6] Drive "A cookie header keeps its name and hides its value": declare `--header` and `crawl.header` a header secret, the header form of `015`'s redaction.
-- [ ] 11.5 [HTTP] Drive "Credentials are sent to Internal URLs": `--auth`, marked secret.
-- [ ] 11.6 [HTTP] Drive "Credentials never go to External URLs".
-- [ ] 11.7 [3+6] Drive "The recorded command hides the password".
-- [ ] 11.8 [HTTP] Drive "Credentials in openlinx.toml are used".
-- [ ] 11.9 Docs: document custom headers, basic auth and secrets in `docs/crawling.md`.
-- [ ] 11.10 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+For groups 11–14, each introducing slice updates the required setting/option/code/schema docs and contract fixtures in the same commit. The Docs tasks below check examples and consolidate explanations; they do not postpone that obligation.
+
+- [ ] 11.1 [2] Drive "Harmless headers survive recording beside secrets" and "A cookie header keeps its name and hides its value" through `create_crawl`: explicit whole/header/URL secret forms, list-aware recording, names/repetitions/order preserved; retain existing whole-secret behaviour. Extend settings/option metadata without changing the public boolean secret indicator (D8).
+- [ ] 11.2 [3+6] Drive "A custom header is sent to Internal URLs": usable `--header`/`crawl.header`, per-attempt policy and `Request.is_internal`; verify the original literal reaches the server and the config is safely recorded (D1, D8).
+- [ ] 11.3 [3] Drive "A custom header never goes to External URLs" and "An External URL redirect never inherits custom headers" using separate fixture instances, preserving the existing collision-free header behaviour.
+- [ ] 11.4 [3] Drive "Internal robots requests carry custom headers" and "A robots redirect drops Internal headers at an External hop": classify each robots hop afresh, never install identity headers session-wide.
+- [ ] 11.5 [3] Drive "A checked Internal URL still gets custom headers". Guard the same decision on retries and the Seed's outage probe with literal fixture request logs; retain existing Scope and retry tests (D1).
+- [ ] 11.6 [1] Drive "A malformed header is rejected", including CR/LF injection, before any fixture request; drive "Joined header arguments hide only sensitive values" with repeated split and joined argv entries and harmless entries on either side.
+- [ ] 11.7 [2] Drive "Sensitive header values are absent from failure diagnostics" through a boundary error that quotes a header value; verify emitted and stored text, retaining all existing whole-secret/URL redaction guards.
+- [ ] 11.8 [3+6, 1] Drive "Credentials are sent to Internal URLs" and "Conflicting authentication is refused before network": usable `--auth`/`crawl.auth`, whole-secret recording, and case-insensitive resolved Authorization conflict validation in the same introducing slice.
+- [ ] 11.9 [3] Drive "Credentials never go to External URLs" and the corresponding External URL redirect guard, retaining previous custom-header guards.
+- [ ] 11.10 [3] Drive "Internal robots requests carry credentials" and "A robots redirect drops credentials at an External hop"; also verify auth on an Internal checked URL, retry and Seed outage probe without leaking to an External request.
+- [ ] 11.11 [1, 3+6] Drive "The recorded command hides the password" and "Credentials in openlinx.toml are used", including joined auth argv; drive "Authentication conflicts across settings sources" for both flag/TOML directions and assert no request.
+- [ ] 11.12 [2] Drive "Auth diagnostics hide plaintext and encoded credentials" through a real reporting/storage boundary: raw `user:password`, password, base64 payload and the sent Basic Authorization value are all absent.
+- [ ] 11.13 [2] Drive "Continue refuses a recorded password without a fresh value": validate before writer/network open, declare/reuse `secrets_required` (exit 2), and document the code in `docs/cli.md`. This is the service contract, with no resume Command added.
+- [ ] 11.14 [2+3] Drive "Fresh credentials preserve stored harmless settings" and "Continue refuses a missing sensitive header value": overlay fresh auth/header values without reloading non-secret Workspace settings, preserve harmless entries/order, and revalidate auth conflicts.
+- [ ] 11.15 Docs: update `docs/crawling.md` for custom headers, basic auth, per-hop Internal identity and safe continuing; update `docs/workspace.md` and CLI metadata fixtures for the new settings/options. Verify descriptions and examples against the implemented behaviour.
+- [ ] 11.16 Review Standards and Spec on group 11's commits, including secret collection and all per-hop paths; refactor only with the full gate green. Any guard that was green immediately must have a named failing mutation.
 
 ## 12. (v0.2) The proxy flag
 
-- [ ] 12.1 [HTTP] Drive "Requests go through the proxy": `--proxy` and `crawl.proxy`.
-- [ ] 12.2 [HTTP] Drive "The proxy flag overrides the proxy variables".
-- [ ] 12.3 [3+6] Drive "A proxy password is redacted": mark `--proxy` a URL secret.
-- [ ] 12.4 Docs: document `--proxy` and `[crawl] proxy` in `docs/crawling.md`.
-- [ ] 12.5 Review: run the code-review skill on group 12's commits, then refactor with the whole suite green.
+- [ ] 12.1 [3+6] Drive "Requests go through the proxy": usable `--proxy`/`crawl.proxy` with URL-form redaction in argv and config, preserving the environment-variable scenarios.
+- [ ] 12.2 [3] Drive "The proxy flag overrides the proxy variables" and "An explicit proxy overrides NO_PROXY", for flag and Workspace sources; verify HTTP and HTTPS choose the same resolved proxy policy.
+- [ ] 12.3 [2, 3+6] Drive "A proxy password is redacted", including joined argv and a credential-free explicit URL; preserve the existing environment-without-password recording contract. Verify quoted proxy-password diagnostics do not leak.
+- [ ] 12.4 [Fixture, 3] Drive "HTTPS uses an authenticated proxy tunnel": extend the real local proxy with CONNECT and request logging, including successful credentials and rejection of missing/wrong credentials. Assert that the origin sees no proxy auth.
+- [ ] 12.5 [3] Drive "CONNECT does not carry custom origin identity", retaining the Internal/External origin-auth guards through a tunnel; no mock of our request or proxy-choice modules.
+- [ ] 12.6 [2+3] Drive "Continue refuses an explicit proxy password without a fresh value" and the successful fresh-proxy counterpart; preserve recorded non-secret config and verify current environment variables are reread without `secrets_required`.
+- [ ] 12.7 Docs: document explicit proxy precedence, CONNECT, secrets and continue inputs in `docs/crawling.md` and `docs/workspace.md`; verify CLI metadata matches settings.
+- [ ] 12.8 Review Standards and Spec on group 12's commits, including retained environment/proxy failures; refactor only with the full gate green and prove immediately-green guards by mutation.
 
-## 13. (v0.2) HTTP version
+## 13. (v0.2) Offered HTTP capability
 
-- [ ] 13.1 [Fixture] Add two HTTPS listeners: one that selects `h2`, and one that offers only `http/1.1`.
-- [ ] 13.2 [3+6] Drive "A plain http origin": filling `origins.http_version`.
-- [ ] 13.3 [3+6] Drive "An origin that selects HTTP/2": the ALPN handshake (design D6).
-- [ ] 13.4 [3+6] Drive "An origin that offers only HTTP/1.1".
-- [ ] 13.5 Docs: document `http_version` and the ALPN check in `docs/crawling.md`.
-- [ ] 13.6 Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
+- [ ] 13.1 [Fixture, 3+6] Drive "A plain http origin": write `http_1_1` without a TLS probe. Update the origin column description and `docs/schema.md` to offered capability; the matching Page description has the same meaning, while its population remains with Page data.
+- [ ] 13.2 [Fixture, 3+6] Drive "An origin that selects HTTP/2": add an h2-selecting TLS listener test-first, then the dedicated probe through the existing resolver and trust setup; verify ordinary crawler requests remain HTTP/1.1.
+- [ ] 13.3 [Fixture, 3+6] Drive "An origin that offers only HTTP/1.1" and "A listener with no ALPN selection is HTTP/1.1 capable", with real TLS listeners and literal stored values.
+- [ ] 13.4 [2, 3+6] Drive "One failed probe is not repeated for another URL": run-local dedup at the origins/store seam and bounded active tasks, no public columns or unbounded memo; concurrent URLs and a replay still produce one probe. Retain TLS failure and hostname-verification guards.
+- [ ] 13.5 [3+6] Drive "Ignoring robots does not skip capability measurement" and "An External origin is measured"; measurement must not depend on robots.txt loading.
+- [ ] 13.6 [3+6] Drive "Probe failure leaves URL requests unchanged", including NULL after a failed measurement on a later run; verify URL attempts/limit and network pause are unaffected.
+- [ ] 13.7 [Fixture, 3+6] Drive the successful ALPN measurement through authenticated HTTP CONNECT; assert shared proxy precedence, original hostname/SNI and DNS address/port mapping, with no origin identity in CONNECT.
+- [ ] 13.8 [Fixture, 3+6] Drive rejected/malformed/oversized CONNECT probes: a non-success status or more than 65,536 header bytes leaves capability NULL, preserving ordinary URL failure classification.
+- [ ] 13.9 [2+3] Drive "A stalled capability probe has a total deadline" separately for admission, DNS, TCP, CONNECT and TLS using network/resolver boundaries and the real clock; a single one-second budget includes admission and every phase, not one second per phase.
+- [ ] 13.10 [2+3] Drive "A single host slot cannot deadlock the capability probe" with Crawl concurrency 1 and one per-host slot; also guard connection limits across several origins. No wait for a probe permit may hold a URL/robots.txt permit.
+- [ ] 13.11 [2+3] Drive "Stop closes an admitted capability probe", plus cancellation while pending admission and normal completion with a pending measurement: join all work and close sockets before closing the writer; cancellation propagates.
+- [ ] 13.12 [6] Drive "The measured column describes capability" while retaining "The HTTP version is a later column" as v0.1 evidence only. Verify matching schema docs and the Page column description without implementing Page population.
+- [ ] 13.13 Docs: document offered capability, NULL on failed measurement, HTTP/1.1 request transport and bounded proxy/DNS/TLS probe lifecycle in `docs/crawling.md`.
+- [ ] 13.14 Review Standards and Spec on group 13's commits, especially admission/stop, bounds and probe isolation; refactor only with the full gate green and prove immediately-green guards by mutation.
 
-## 14. (v0.2) zstd
+## 14. (v0.2) Bounded zstd
 
-- [ ] 14.1 [3+6] Add zstd decoding (`zstandard`, or `compression.zstd` on 3.14) and the `zstd` token of `Accept-Encoding` (design D1), with a test of a zstd Resource's two sizes, then run the code-review skill on it.
+- [ ] 14.1 [4, 3+6] Drive "A zstd Resource records both sizes" and the zstd advertisement in "Requests accept compressed bodies": `compression.zstd` on 3.14, conditional `backports.zstd` on 3.12–3.13, a push decoder with finite `max_length` and window log 23. Add dependency, lockfile and allowlist together; verify the literal 14-byte frame, installation and strict typing before fixing the package version (D1).
+- [ ] 14.2 [4, 3+6] Drive "Concatenated zstd frames form one body": `eof`/`unused_data`, bounded draining with `needs_input`, frame boundaries split across input chunks, skippable frames and no growing list of frames. Use real precompressed bytes and literal expected output.
+- [ ] 14.3 [4, 3+6] Drive "An incomplete zstd frame is an invalid response" and corrupt/checksum/trailing-garbage cases; preserve existing decoding-failure classifications.
+- [ ] 14.4 [4, 3+6] Drive "A zstd window above the HTTP limit is refused", with real 8 MiB and 16 MiB window fixtures; verify the bound applies on each new frame and independently of the declared content size and output cap.
+- [ ] 14.5 [4, 3+6] Drive "A zstd bomb stops at the decoded cap": exact cap, one byte over, cap inside a chunk and stacked zstd/gzip/br stages, including an oversized intermediate stage. Assert bounded decoder output as well as final stored truncation; no inflate-then-truncate implementation.
+- [ ] 14.6 [3+6] Retain "A body in an encoding that was not offered is not parsed" with `x-unknown` instead of the now-offered zstd; preserve all gzip/deflate/br, Resource-size and compressed/wire-cap guards. Prove immediately-green guards by mutation.
+- [ ] 14.7 Docs: update supported codings, sizes, 20 MiB output/intermediate caps and the 8 MiB zstd window limit in `docs/crawling.md`; verify installation guidance for the conditional dependency.
+- [ ] 14.8 [8, 4, 3+6] Verify locked installation, backend/type compatibility and the focused bounded-decoder/fixture cases on real Python 3.12–3.14 on Windows, macOS and Linux. Record actual results; a local run or mypy platform target alone does not establish the runtime matrix, and no skip/ignore weakens it.
+- [ ] 14.9 Review Standards and Spec on group 14's commits, including API/version evidence, frame/window/output bounds and retained unknown-coding guards; refactor only with the full gate green.

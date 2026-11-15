@@ -31,9 +31,13 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLi
 - **THEN** it exits with code 2 and error code `invalid_value`, and no request is made
 
 ### Requirement: Custom headers
+**In short:** custom headers reach each Internal request, while stored metadata hides sensitive values and keeps harmless entries.
+
 **(v0.2)** `--header "Name: Value"` SHALL add a request header. It SHALL be accepted more than once, and its setting `crawl.header` SHALL be a list of `Name: Value` strings. A value without `:` SHALL be rejected with exit code 2 and error code `invalid_value`. Custom headers SHALL be sent only with requests for Internal URLs and their robots.txt, never with requests for External URLs.
 
-`--header` and `crawl.header` SHALL be declared a header secret. `015-add-crawl-store` then records the value of every sensitive header as `Name: ***`: `Cookie`, and every header whose name contains `auth`, `token`, `secret`, `key` or `password`.
+`--header` and `crawl.header` SHALL be declared a header secret while their public secret indicator remains boolean `true`. Recorded config and argv SHALL keep header names, repetitions, harmless values and order, replacing only sensitive values with `***`: `Cookie` and every name containing `auth`, `token`, `secret`, `key` or `password`, matched without case. Both split and `--header=value` argv forms SHALL be redacted. Diagnostics and stored failure messages SHALL NOT reveal sensitive header values.
+
+Internal identity SHALL be decided for each attempt and each redirect hop, including robots.txt redirects, retries and outage probes. A checked Internal URL outside a Seed folder SHALL still receive it. No origin identity header SHALL be copied into a proxy CONNECT request.
 
 #### Scenario: A custom header is sent to Internal URLs
 - **WHEN** `linx crawl {site}/ --header "X-Env: staging"` runs
@@ -51,8 +55,38 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLi
 - **WHEN** `linx crawl {site}/ --header "Cookie: session=abc123"` ends
 - **THEN** the `crawl` table of `crawl.config` has `"header": ["Cookie: ***"]`
 
+#### Scenario: Harmless headers survive recording beside secrets
+- **WHEN** a Crawl runs with `--header "X-Env: staging" --header "x-ToKeN: abc123" --header "X-Env: audit"`
+- **THEN** `crawl.config` contains `"header": ["X-Env: staging", "x-ToKeN: ***", "X-Env: audit"]`
+
+#### Scenario: Joined header arguments hide only sensitive values
+- **WHEN** a Crawl runs with `--header=X-Env: staging` and `--header=Cookie: sid=abc123` as two argv entries
+- **THEN** the recorded entries are `"--header=X-Env: staging"` and `"--header=Cookie: ***"`
+
+#### Scenario: Internal robots requests carry custom headers
+- **WHEN** `linx crawl http://site.test/ --header "X-Env: staging"` runs
+- **THEN** the request for `http://site.test/robots.txt` has `X-Env` = `staging`
+
+#### Scenario: A robots redirect drops Internal headers at an External hop
+- **WHEN** `http://site.test/robots.txt` redirects to `http://other.test/robots.txt`, and the Crawl uses `--header "X-Env: staging"`
+- **THEN** the request for `http://other.test/robots.txt` has no `X-Env` header
+
+#### Scenario: A checked Internal URL still gets custom headers
+- **WHEN** `http://site.test/docs/` links to `http://site.test/outside`, and `linx crawl http://site.test/docs/ --header "X-Env: staging"` runs
+- **THEN** the checked request for `http://site.test/outside` has `X-Env` = `staging`
+
+#### Scenario: An External URL redirect never inherits custom headers
+- **WHEN** `http://site.test/` redirects to `http://other.test/page`, and the Crawl uses `--header "X-Env: staging"`
+- **THEN** the request for `http://other.test/page` has no `X-Env` header
+
+#### Scenario: Sensitive header values are absent from failure diagnostics
+- **WHEN** a Crawl uses `--header "X-Token: abc123"` and a boundary failure message quotes `abc123`
+- **THEN** emitted diagnostics and stored failure messages contain `***` and do not contain `abc123`
+
 ### Requirement: HTTP basic authentication
-**(v0.2)** `--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `openlinx.toml`. `015-add-crawl-store` records it as `***`.
+**In short:** basic auth is Internal-only and conflicting custom Authorization is rejected before network access.
+
+**(v0.2)** `--auth <user:password>` (setting `crawl.auth`, marked secret) SHALL send HTTP basic authentication preemptively with every request for an Internal URL and its robots.txt, never with requests for External URLs. The setting SHALL also be accepted from `openlinx.toml`. Recorded config and argv hide it as `***`, in both split and joined argv forms; diagnostics SHALL also hide credentials. Nonempty resolved `crawl.auth` together with a custom `Authorization` header, matched without case, SHALL be rejected with error code `invalid_value` and exit code 2 before any network access, regardless of whether either value came from flags or Workspace settings.
 
 #### Scenario: Credentials are sent to Internal URLs
 - **WHEN** `linx crawl http://site.test/ --auth "alice:s3cret"` runs
@@ -70,7 +104,48 @@ Every request, including robots.txt, SHALL carry the `User-Agent` header `OpenLi
 - **WHEN** `openlinx.toml` holds `[crawl]` with `auth = "alice:s3cret"`, and `linx crawl http://site.test/` runs
 - **THEN** the request for `http://site.test/` has `Authorization` = `Basic YWxpY2U6czNjcmV0`
 
+#### Scenario: Internal robots requests carry credentials
+- **WHEN** `linx crawl http://site.test/ --auth "alice:s3cret"` runs
+- **THEN** `http://site.test/robots.txt` receives `Authorization` = `Basic YWxpY2U6czNjcmV0`
+
+#### Scenario: A robots redirect drops credentials at an External hop
+- **WHEN** `http://site.test/robots.txt` redirects to `http://other.test/robots.txt`, and the Crawl uses `--auth "alice:s3cret"`
+- **THEN** the request for `http://other.test/robots.txt` has no `Authorization` header
+
+#### Scenario: Conflicting authentication is refused before network
+- **WHEN** a Crawl uses `--auth "alice:s3cret" --header "aUtHoRiZaTiOn: Bearer abc123"`
+- **THEN** it exits with code 2 and `invalid_value`, and the fixture request log is empty
+
+#### Scenario: Authentication conflicts across settings sources
+- **WHEN** `[crawl] auth` is `alice:s3cret` and a Crawl uses `--header "Authorization: Bearer abc123"`
+- **THEN** it exits with code 2 and `invalid_value`, and the fixture request log is empty
+
+#### Scenario: Auth diagnostics hide plaintext and encoded credentials
+- **WHEN** a Crawl uses `--auth "alice:s3cret"` and a transport error quotes `alice:s3cret`, `s3cret`, `YWxpY2U6czNjcmV0` and `Basic YWxpY2U6czNjcmV0`
+- **THEN** neither emitted diagnostics nor stored failure messages contain any of those four values
+
+### Requirement: Fresh secrets on continue
+**In short:** continuing a Crawl requires fresh credentials and preserves its recorded harmless configuration.
+
+A continue SHALL NOT send recorded redaction markers as credentials. Required auth, sensitive header values and explicit proxy credentials SHALL be supplied afresh by the caller, or the continue SHALL refuse with `secrets_required` (exit 2) and a hint naming the required flag or Workspace setting, before opening a writer or network connection. Harmless stored header entries, their order, and all unrelated recorded non-secret settings SHALL remain unchanged. Fresh headers SHALL replace the matching sensitive name and occurrence. Resolved auth/header conflicts SHALL use the same validation as a new Crawl. Current process proxy variables SHALL be read again and SHALL NOT cause `secrets_required`.
+
+This contract applies to the existing continue service; the resume Command's flag/provenance and Workspace reread adapter is specified by crawl control.
+
+#### Scenario: Continue refuses a recorded password without a fresh value
+- **WHEN** the continue service receives a stopped Crawl whose recorded `auth` is `***`, without fresh auth
+- **THEN** it raises `secrets_required` with exit code 2 and a hint naming `--auth`, before any request or writer opens
+
+#### Scenario: Fresh credentials preserve stored harmless settings
+- **WHEN** a stopped Crawl recorded `timeout` = 7 and `header` = `["X-Env: staging", "X-Token: ***", "X-Env: audit"]`, and the continue service receives fresh `X-Token: new123` while the current Workspace has `timeout` = 99
+- **THEN** requests use `X-Token` = `new123`, both stored `X-Env` entries in order and timeout 7, and none uses `***`
+
+#### Scenario: Continue refuses a missing sensitive header value
+- **WHEN** a stopped Crawl recorded `header` = `["X-Env: staging", "Cookie: ***"]` and no fresh Cookie value is supplied
+- **THEN** the continue service raises `secrets_required` with exit code 2 and a hint naming `--header`, before any request or writer opens
+
 ### Requirement: Proxy
+**In short:** an explicit HTTP proxy overrides the environment and keeps proxy credentials out of origin requests and recorded secrets.
+
 **(v0.2)** `--proxy <url>` (setting `crawl.proxy`) SHALL send every request, robots.txt included, through the given HTTP proxy, with credentials when the URL contains them.
 
 Without `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy variables, as curl, pip and uv do:
@@ -79,9 +154,9 @@ Without `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy 
 - **Letter case:** each variable is read under its lower-case and its upper-case name, as curl reads them. When both are set, the lower-case one wins. An empty variable counts as unset.
 - **Scheme:** a proxy given without a scheme, such as `proxy.corp:3128`, SHALL be used as the http proxy `http://proxy.corp:3128`.
 
-The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, `--proxy` and `[crawl] proxy` SHALL override the variables, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
+The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, `--proxy` and `[crawl] proxy` SHALL override all proxy variables, including `NO_PROXY`, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
 
-The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy` or from a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`; a proxy URL from a variable without a password is recorded as `***`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
+The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy`, Workspace settings or a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`; a proxy URL from a variable without a password is recorded as `***`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
 
 #### Scenario: Requests go through the proxy
 - **WHEN** a test proxy listens on `127.0.0.1:{proxy_port}`, and `linx crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port}` runs
@@ -102,6 +177,22 @@ The password in a proxy URL SHALL be marked partly secret, whether it comes from
 #### Scenario: The proxy flag overrides the proxy variables
 - **WHEN** `HTTP_PROXY` is `http://127.0.0.1:{proxy_port_a}`, and `linx crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port_b}` runs
 - **THEN** the test proxy on `{proxy_port_b}` receives a request for `http://site.test/`, and the one on `{proxy_port_a}` receives none
+
+#### Scenario: An explicit proxy overrides NO_PROXY
+- **WHEN** `NO_PROXY` is `*` and a Crawl uses `--proxy http://127.0.0.1:{proxy_port}` for `http://site.test/`
+- **THEN** the proxy receives the request for `http://site.test/`
+
+#### Scenario: HTTPS uses an authenticated proxy tunnel
+- **WHEN** a test proxy accepts `u:pw`, and a Crawl requests `https://site.test/` with `--proxy http://u:pw@127.0.0.1:{proxy_port}`
+- **THEN** the proxy receives `CONNECT site.test:443` with `Proxy-Authorization` = `Basic dTpwdw==`, while the origin receives no `Proxy-Authorization`
+
+#### Scenario: CONNECT does not carry custom origin identity
+- **WHEN** a Crawl uses an HTTPS Seed, an explicit proxy, `--auth "alice:s3cret"` and `--header "X-Env: staging"`
+- **THEN** the proxy's CONNECT request has neither `Authorization` nor `X-Env`
+
+#### Scenario: Continue refuses an explicit proxy password without a fresh value
+- **WHEN** a stopped Crawl recorded `proxy` = `http://u:***@127.0.0.1:{proxy_port}` and the continue service receives no fresh proxy credentials
+- **THEN** it raises `secrets_required` with exit code 2 and a hint naming `--proxy`, before any request or writer opens
 
 #### Scenario: A proxy password is redacted
 - **WHEN** `linx crawl {site}/ --proxy http://u:pw@127.0.0.1:{proxy_port}` ends
@@ -348,7 +439,9 @@ URLs longer than 2,000 characters SHALL NOT be requested, and SHALL be recorded 
 - **THEN** that URL has `skip_reason` = `url_too_long`
 
 ### Requirement: Compression
-Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`, and offer no other coding. The Crawl SHALL decode those encodings itself, and several of them in the reverse order of the `Content-Encoding` header. A body that fails to decode SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`. A body in a coding that was not offered SHALL be recorded as `fetched`, with `size_bytes` NULL and `parsed` = 0; if it would otherwise have been parsed, it SHALL have `parse_error` = `unsupported_encoding`. This change adds these columns to `urls`:
+**In short:** offered codings decode incrementally under body and memory bounds; unknown codings retain the unsupported-encoding guard.
+
+Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Accept-Encoding: gzip, deflate, br, zstd`, and offer no other coding. The Crawl SHALL decode those encodings itself, and several of them in the reverse order of the `Content-Encoding` header. A body that fails to decode SHALL be recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`. A body in a coding that was not offered SHALL be recorded as `fetched`, with `size_bytes` NULL and `parsed` = 0; if it would otherwise have been parsed, it SHALL have `parse_error` = `unsupported_encoding`. For zstd, a stream SHALL support concatenated frames, reject corrupt or incomplete frames as `invalid_response`, and reject windows larger than 8,388,608 bytes, the HTTP content-coding limit. The 20 MiB body cap SHALL apply during decompression, including every intermediate stage of stacked encodings; neither a frame content-size field nor a small compressed body may cause unbounded allocation. These behaviours SHALL agree on Python 3.12, 3.13 and 3.14 on Windows, macOS and Linux. This change adds these columns to `urls`:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
@@ -358,7 +451,7 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Ac
 
 #### Scenario: Requests accept compressed bodies
 - **WHEN** `linx crawl {site}/` runs
-- **THEN** the request for `/` has `Accept-Encoding` = `gzip, deflate, br`
+- **THEN** the request for `/` has `Accept-Encoding` = `gzip, deflate, br, zstd` from v0.2 (`gzip, deflate, br` in v0.1)
 
 #### Scenario: A compressed Resource records both sizes
 - **WHEN** `/app.js` returns a 10,000-byte script as a 2,500-byte gzip body with `Content-Encoding: gzip`, and `/` holds `<script src="/app.js">`
@@ -373,8 +466,28 @@ Every request SHALL send `Accept-Encoding: gzip, deflate, br`, and from v0.2 `Ac
 - **THEN** `{site}/broken.js` has `fetch_state` = `error` and `fetch_error` = `invalid_response`
 
 #### Scenario: A body in an encoding that was not offered is not parsed
-- **WHEN** `/` links to `/zstd.html`, an HTML page that returns a zstd body with `Content-Encoding: zstd`
-- **THEN** `{site}/zstd.html` has `fetch_state` = `fetched`, `parsed` = 0, `parse_error` = `unsupported_encoding` and `size_bytes` NULL
+- **WHEN** `/` links to `/unknown.html`, an HTML page that returns an unoffered body with `Content-Encoding: x-unknown`
+- **THEN** `{site}/unknown.html` has `fetch_state` = `fetched`, `parsed` = 0, `parse_error` = `unsupported_encoding` and `size_bytes` NULL
+
+#### Scenario: A zstd Resource records both sizes
+- **WHEN** `/app.js` returns the 14-byte zstd frame `28b52ffd200529000068656c6c6f` decoding to `hello`, and `/` holds `<script src="/app.js">`
+- **THEN** `{site}/app.js` has `size_bytes` = 5, `transferred_bytes` = 14 and `content_encoding` = `zstd`
+
+#### Scenario: Concatenated zstd frames form one body
+- **WHEN** `/app.js` returns two consecutive copies of the 14-byte frame `28b52ffd200529000068656c6c6f` with `Content-Encoding: zstd`
+- **THEN** its decoded body is `hellohello`, `size_bytes` = 10 and `transferred_bytes` = 28
+
+#### Scenario: An incomplete zstd frame is an invalid response
+- **WHEN** `/broken.js` returns the incomplete frame `28b52ffd200529000068656c6c` with `Content-Encoding: zstd`
+- **THEN** its URL has `fetch_state` = `error` and `fetch_error` = `invalid_response`
+
+#### Scenario: A zstd window above the HTTP limit is refused
+- **WHEN** `/large-window.js` returns a zstd frame declaring a 16,777,216-byte window
+- **THEN** its URL has `fetch_state` = `error` and `fetch_error` = `invalid_response`
+
+#### Scenario: A zstd bomb stops at the decoded cap
+- **WHEN** `/huge.html` returns a zstd body decoding to 26,214,400 bytes of HTML
+- **THEN** its URL has `body_truncated` = 1, `parse_error` = `body_too_large` and `size_bytes` NULL, and at most 20,971,520 decoded bytes are retained
 
 ### Requirement: Resource sizes
 Every requested Resource SHALL have its `status_code`, `size_bytes` and `transferred_bytes` recorded, and SHALL NOT be parsed.
@@ -399,16 +512,20 @@ HTTPS requests SHALL verify the server certificate and its host name against the
 - **THEN** the Crawl completes, and no `crawl_paused` event is written
 
 ### Requirement: HTTP version per origin
-This change adds this column to `origins` in v0.1. Its description SHALL start with `Filled from v0.2. `, and it SHALL be NULL in every row until then.
+**In short:** a dedicated ALPN probe records the origin's offered capability while crawler requests use HTTP/1.1.
+
+In v0.1, before capability measurement, `origins.http_version` SHALL be NULL in every row and its description SHALL start with `Filled from v0.2. `.
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
-| `http_version` | TEXT | yes | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the origin's requests use |
+| `http_version` | TEXT | yes | `http_2`, `http_1_1` | Filled from v0.2. The HTTP capability selected by a dedicated ALPN probe; crawler requests use HTTP/1.1 |
 
-From v0.2, for every https origin it requests, the Crawl SHALL make one TLS handshake that offers the ALPN protocols `h2` and `http/1.1`. It SHALL record `origins.http_version` as `http_2` when `h2` is selected, and `http_1_1` otherwise. For http origins it SHALL record `http_1_1`. When the handshake fails, `http_version` SHALL be NULL and the Crawl SHALL go on.
+From v0.2, for every https origin it requests, the Crawl SHALL make one TLS handshake that offers the ALPN protocols `h2` and `http/1.1`. It SHALL record `origins.http_version` as `http_2` when `h2` is selected, and `http_1_1` otherwise. For http origins it SHALL record `http_1_1`. When measurement fails or is cancelled, `http_version` SHALL be NULL for that run and the Crawl SHALL go on according to its URL results. The measuring version SHALL remove the `Filled from v0.2. ` description prefix and describe offered capability.
+
+The probe SHALL use the same DNS routing, TLS trust and effective proxy as requests, but send no origin HTTP request. Each requested origin SHALL be measured once per run, including External origins, failed probes and runs ignoring robots.txt. One total `--timeout` deadline SHALL bound admission, DNS, connection, CONNECT and TLS. Probe concurrency SHALL respect the run's connection and host limits without waiting for a probe permit while holding a URL/robots.txt permit. CONNECT headers SHALL be limited to 65,536 bytes. Probe failure SHALL NOT change a URL outcome, attempt count, URL limit or network pause. Stop SHALL cancel probes, close their connections and join them before the run returns; normal completion SHALL join them before closing the writer.
 
 #### Scenario: The HTTP version is a later column
-- **WHEN** `linx schema origins` runs
+- **WHEN** `linx schema origins` runs in v0.1, before capability measurement is implemented
 - **THEN** the column `http_version` has `nullable` `true`, `values` `["http_2","http_1_1"]`, and a `description` that starts with `Filled from v0.2. `
 
 #### Scenario: An origin that selects HTTP/2
@@ -422,6 +539,42 @@ From v0.2, for every https origin it requests, the Crawl SHALL make one TLS hand
 #### Scenario: A plain http origin
 - **WHEN** `linx crawl {site}/` runs
 - **THEN** the `origins` row for `{site}` has `http_version` = `http_1_1`
+
+#### Scenario: A listener with no ALPN selection is HTTP/1.1 capable
+- **WHEN** a trusted `https://site.test` listener completes TLS without selecting ALPN
+- **THEN** its `origins.http_version` is `http_1_1`
+
+#### Scenario: One failed probe is not repeated for another URL
+- **WHEN** two URLs on `https://site.test` are requested in one run and the dedicated probe fails TLS
+- **THEN** exactly one dedicated probe is attempted and `origins.http_version` is NULL
+
+#### Scenario: Ignoring robots does not skip capability measurement
+- **WHEN** a Crawl ignores robots.txt and requests `https://site.test/` from an h2-selecting listener
+- **THEN** its `origins.http_version` is `http_2`
+
+#### Scenario: An External origin is measured
+- **WHEN** `http://site.test/` links to `https://other.test/page` and that trusted listener selects `h2`
+- **THEN** the row for `https://other.test` has `http_version` = `http_2`
+
+#### Scenario: Probe failure leaves URL requests unchanged
+- **WHEN** a dedicated probe fails while the ordinary request for `https://site.test/` returns 200 on its first attempt
+- **THEN** the origin has `http_version` NULL, and its URL has `status_code` = 200 and `attempt_count` = 1
+
+#### Scenario: A stalled capability probe has a total deadline
+- **WHEN** a dedicated probe stalls in DNS, CONNECT or TLS and the Crawl uses `--timeout 1`
+- **THEN** the probe is cancelled at its one-second total deadline, closes any connection it opened and leaves `http_version` NULL
+
+#### Scenario: A single host slot cannot deadlock the capability probe
+- **WHEN** `linx crawl https://site.test/ --concurrency 1` runs with one per-host slot and a trusted h2-selecting listener
+- **THEN** the Crawl completes with its Seed at status 200 and the origin at `http_2`
+
+#### Scenario: Stop closes an admitted capability probe
+- **WHEN** the continue service is stopped after its dedicated TLS probe opens a connection and stalls
+- **THEN** it returns with that connection closed, no probe task running and `http_version` NULL
+
+#### Scenario: The measured column describes capability
+- **WHEN** `linx schema origins` runs in the version that measures ALPN
+- **THEN** `http_version` describes offered capability, says crawler requests use HTTP/1.1, and has no `Filled from v0.2. ` prefix
 
 ### Requirement: The response_headers table
 The crawl store SHALL keep the response headers of each requested URL's last attempt in a table `response_headers`, under the conventions of `018-add-schema-conventions`, with one row for each URL whose last attempt received a response, and two columns:
