@@ -18,7 +18,7 @@ from tests.support.workspace import TempWorkspace
 
 # What the test app's example-settings Command declares secret.
 EXAMPLE_SECRETS = SecretNames(
-    flags=frozenset({"--token", "--api-key"}), settings=frozenset({"example.token"})
+    flags={"--token": True, "--api-key": True}, settings={"example.token": True}
 )
 
 

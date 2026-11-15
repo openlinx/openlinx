@@ -92,14 +92,25 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 
   `linx commands` shows `"secret": true` on such options. A secret option has only long names, such as `--token`, so the attached short form `-tVALUE` never carries a secret.
 - **Where:** the value after a secret flag, in both the `--flag value` and the `--flag=value` forms, and a secret setting's value in `config`, wherever it came from: the flag, `openlinx.toml` (secrets are allowed there) or a default. An unset secret stays `null`.
-- **The two shapes of a redacted value:**
+- **Recorded shapes follow the declaration:**
 
-  | Secret value | Recorded as |
-  |---|---|
-  | a URL with a password, such as `http://ann:s3cret@proxy.test:8080` | the same URL without its password: `http://ann:***@proxy.test:8080` |
-  | anything else, such as `s3cret` | `***` |
+  | Declaration | Value | Recorded as |
+  |---|---|---|
+  | `True` | `http://ann:s3cret@proxy.test:8080` | `http://ann:***@proxy.test:8080` |
+  | `True` | anything without a URL password, including a credential-free environment proxy | `***` |
+  | `"whole"` | any value, including a URL-shaped credential | `***` |
+  | `"header"` | `X-Env: staging`, `x-ToKeN: abc123`, `Cookie: sid=abc123` | `X-Env: staging`, `x-ToKeN: ***`, `Cookie: ***` |
+  | `"url"` | a valid URL with a password | the URL with only its password replaced by `***` |
+  | `"url"` | a valid credential-free URL | unchanged |
+  | `"url"` | a malformed URL | `***` |
+  | `False` | any value | unchanged |
 
-  A URL keeps its scheme, user, host, port and path, so a recorded proxy still says which proxy was used.
+  Header lists retain order and repeated entries. A header is sensitive when its name
+  is `Cookie` or contains `auth`, `token`, `secret`, `key` or `password`, ignoring case;
+  only its value is hidden and the original name spelling remains. A header without a
+  colon is hidden entirely. Unset values stay `null` for every policy. URL redaction
+  keeps the scheme, user, host, port, path, query and fragment. Environment proxies
+  retain their existing `True` declaration.
 
 ## Crawl States
 

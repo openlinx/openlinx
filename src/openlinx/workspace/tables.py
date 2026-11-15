@@ -3,11 +3,14 @@
 import importlib
 import math
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, cast, get_args, get_origin
 
 if TYPE_CHECKING:
     # Only for typing: pydantic must stay off the CLI's startup path.
     from pydantic import BaseModel
+
+type SecretPolicy = bool | Literal["whole", "header", "url"]
+
 
 # A table model, or a keyed table: dict[str, V] whose V is a table model.
 type Table = type[BaseModel] | type[dict[str, Any]]
@@ -27,21 +30,26 @@ class SettingsTables:
         for name, reference in self._references.items():
             yield name, _resolve(reference)
 
-    def is_secret(self, setting: str) -> bool:
-        # Declared once, on the settings field (json_schema_extra), so redaction reads it too.
+    def secret_policy(self, setting: str) -> SecretPolicy:
         name, _, key = setting.partition(".")
         model: Any = _resolve(self._references[name])
         extra = model.model_fields[key].json_schema_extra
-        return isinstance(extra, dict) and extra.get("secret") is True
+        policy = extra.get("secret", False) if isinstance(extra, dict) else False
+        if isinstance(policy, bool) or policy in ("whole", "header", "url"):
+            return cast(SecretPolicy, policy)
+        raise TypeError(f"Setting {setting} has an invalid secret policy.")
 
-    def secret_settings(self) -> frozenset[str]:
-        return frozenset(
-            f"{name}.{key}"
+    def is_secret(self, setting: str) -> bool:
+        return bool(self.secret_policy(setting))
+
+    def secret_settings(self) -> dict[str, SecretPolicy]:
+        return {
+            f"{name}.{key}": policy
             for name, table in self.items()
             if keyed_entry(table) is None
             for key in cast(Any, table).model_fields
-            if self.is_secret(f"{name}.{key}")
-        )
+            if (policy := self.secret_policy(f"{name}.{key}"))
+        }
 
 
 def _resolve(reference: str) -> Table:

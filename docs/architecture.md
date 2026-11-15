@@ -54,7 +54,7 @@ Settings come only from a Command's flag, then the Workspace's `openlinx.toml`, 
   - or a `None` default for a setting that is unset; the template writes it as `# <key> =`
   - flat tables, except keyed tables
 - **Keyed tables:** a table may be `dict[str, V]`, where V is a table model with a one-line docstring, for entries the user names, such as `[rules.<id>]`. Entries that are TOML literals (`050`'s `[segments]`) wait for the change that needs them, which also decides how the template describes them. The template writes the entry docstring and a commented `# [<table>.<name>]` header.
-- **Secrets** are declared once, on the settings field (`json_schema_extra={"secret": True}`). An option mapped to that setting inherits it, so `linx commands` reads the table's model; an option with no setting declares `secret` itself. A test checks that every option's setting names a setting of a registered table.
+- **Secrets** are declared once, on the settings field (`json_schema_extra={"secret": policy}`). The policy is `False`, `True`, `"whole"`, `"header"` or `"url"`. `True` preserves the existing password-only URL redaction, otherwise hiding the whole value; `"whole"` always hides the whole value, `"header"` preserves header names and harmless values, and `"url"` preserves valid URLs while hiding passwords. An option mapped to that setting inherits the policy, so `linx commands` reads the table's model; an option with no setting declares `secret` itself. The Command description always exposes a boolean; the recording path carries the declared policy by flag or dotted setting name. A test checks that every option's setting names a setting of a registered table.
 
 ## Crawl pipeline
 

@@ -1,7 +1,7 @@
 """Define store records and enumerations without loading SQLAlchemy."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from types import MappingProxyType
@@ -10,6 +10,7 @@ from typing import Any, Literal, TypedDict
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.store.rows import HandlerRows
 from openlinx.workspace.discovery import Workspace
+from openlinx.workspace.tables import SecretPolicy
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
 
@@ -175,10 +176,10 @@ LATEST = "latest"
 
 @dataclass(frozen=True)
 class SecretNames:
-    """The secret flags, such as --token, and secret settings, such as example.token."""
+    """The recording policy for each secret flag and dotted settings key."""
 
-    flags: frozenset[str] = frozenset()
-    settings: frozenset[str] = frozenset()
+    flags: Mapping[str, SecretPolicy] = field(default_factory=dict)
+    settings: Mapping[str, SecretPolicy] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)

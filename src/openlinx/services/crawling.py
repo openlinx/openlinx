@@ -79,7 +79,7 @@ from openlinx.store.urls import url_counts
 from openlinx.store.writer import CrawlWriter
 from openlinx.workspace.discovery import resolve_workspace
 from openlinx.workspace.settings import Settings, load_settings, refused_given_value
-from openlinx.workspace.tables import SettingsTables
+from openlinx.workspace.tables import SecretPolicy, SettingsTables
 
 _SEED_PROBLEMS: Mapping[InvalidUrlReason, str] = {
     "malformed": "is not a valid URL",
@@ -100,7 +100,7 @@ class CrawlRequest:
     flags: Mapping[str, Mapping[str, Any]]
     # The command line's tokens that take a secret, such as --token, which the file redacts:
     # no default, so a caller that forgot them never records a secret in the clear.
-    secret_flags: frozenset[str]
+    secret_flags: Mapping[str, SecretPolicy]
     # --subdomains: the same as the scope "subdomains", which conflicts with another one.
     subdomains: bool = False
 
@@ -223,7 +223,9 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         # Every registered table, resolved.
         config={**settings.root.model_dump(mode="json"), **_environment(proxies)},
         scope=scope.to_json(),
-        secret_names=SecretNames(request.secret_flags, tables.secret_settings() | _PROXY_SECRETS),
+        secret_names=SecretNames(
+            request.secret_flags, {**tables.secret_settings(), **_PROXY_SECRETS}
+        ),
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
         section_crawl=scope.section_crawl,
@@ -240,7 +242,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
 
 
 # A proxy URL may hold a password; redaction keeps its user and host for diagnostics.
-_PROXY_SECRETS = frozenset(f"environment.{key}" for key in SECRET_KEYS)
+_PROXY_SECRETS: Mapping[str, SecretPolicy] = {f"environment.{key}": True for key in SECRET_KEYS}
 
 
 def _fetch_policy(settings: CrawlSettings, proxies: ProxyVariables) -> FetchPolicy:

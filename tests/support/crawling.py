@@ -73,7 +73,7 @@ def crawl_result(
         workspace=None,
         command_argv=["linx", "crawl", seed],
         flags={"crawl": crawl},
-        secret_flags=frozenset(),
+        secret_flags={},
     )
     plan = plan_crawl(request, tables)
     return start_crawl(

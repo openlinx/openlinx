@@ -208,7 +208,15 @@ Each recipe lists the files to touch in order, the seam to test at, and what che
    the option recipe below. [test_commands.py](tests/cli/test_commands.py)::`test_mirrored_options_match_their_fields`
    also refuses a `[crawl]` field with no option. *Review:* a setting in another
    table gets an option when its contract calls for one.
-3. For a secret, set `json_schema_extra={"secret": True}` on the field.
+3. Declare redaction once with `json_schema_extra={"secret": policy}` on the field.
+   Use `True` for the existing password-only URL or whole-value behaviour;
+   `"whole"` to hide the entire value even when it looks like a URL; `"header"`
+   for ordered headers that retain names and harmless values; or `"url"` to keep
+   valid credential-free URLs and hide passwords. `False` leaves values visible.
+   Mapped options inherit this policy; an option without a setting declares it
+   in `OptionMeta(secret=...)`. `linx commands` still reports a boolean.
+   [test_secret_forms.py](tests/cli/test_secret_forms.py) checks metadata inheritance
+   through recording and the public boolean indicator.
    [test_crawl_service.py](tests/crawl/test_crawl_service.py)::`test_a_secret_setting_is_redacted_in_the_recorded_config`
    checks recording. At seam 2, test validation through `plan_crawl` in
    [crawling.py](src/openlinx/services/crawling.py), with `default_tables()` and no app;
