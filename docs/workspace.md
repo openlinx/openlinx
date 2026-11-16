@@ -104,6 +104,8 @@ no fresh auth. See [Continuing a Crawl](crawling.md#continuing-a-crawl).
 
 An HTTP proxy uses `[crawl] proxy = "http://u:pw@proxy.corp:3128"` or `--proxy`
 for one Crawl, covering every request, including robots.txt and External URLs.
+HTTPS uses an authenticated CONNECT tunnel with origin TLS verification; proxy
+credentials are not forwarded to the origin.
 A schemeless `host:port` becomes `http://host:port`. A nonempty resolved proxy
 overrides all proxy variables, including `NO_PROXY`. An empty flag overrides a
 Workspace proxy and restores environment handling, including `NO_PROXY`; an empty

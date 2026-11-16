@@ -82,8 +82,10 @@ def fixture_proxy() -> Iterator[StartProxy]:
     """A forward proxy that resolves names with the DNS resolver hook it is given."""
     with ExitStack() as running:
 
-        def start(resolver: AbstractResolver) -> ForwardProxy:
-            proxy = ForwardProxy(resolver)
+        def start(
+            resolver: AbstractResolver, *, auth: tuple[str, str] | None = None
+        ) -> ForwardProxy:
+            proxy = ForwardProxy(resolver, auth=auth)
             running.callback(proxy.stop)
             return proxy
 

@@ -78,7 +78,7 @@ These fakes stand in for things outside our code. They are the only test doubles
 - **Clock:** an injectable clock
 - **Randomness:** an injectable random source (e.g. for crawl id collisions)
 - **DNS:** a DNS resolver hook
-- **Proxy:** a local test proxy
+- **Proxy:** a real local forward proxy with HTTP relay, CONNECT tunnels, optional tunnel Basic authentication and separate CONNECT target/header logs; see the [fixture README](../tests/fixture_site/README.md#fixtures) for ownership and teardown
 - **TLS trust:** a test CA (trustme) passed into the crawler's TLS setup, so no test installs a CA into the OS trust store; and truststore's import made to fail, for the certifi fallback
 - **Processes:** the OS process-spawn call (not our own launcher function)
 - **`doctor`:** network and trust-store probes

@@ -579,6 +579,10 @@ Credentials may be included as `http://u:pw@proxy.corp:3128`. Recorded argv and
 without a password remains visible. See [Continuing a Crawl](#continuing-a-crawl)
 for the refusal of recorded password markers.
 
+HTTPS requests use CONNECT through the HTTP proxy. Proxy URL credentials authenticate
+the tunnel; the origin receives no `Proxy-Authorization`. TLS still verifies the origin's
+certificate and hostname through the tunnel.
+
 ### Proxy variables
 
 Without a nonempty explicit proxy, the Crawl honours the standard proxy variables,

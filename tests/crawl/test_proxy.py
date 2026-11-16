@@ -13,6 +13,7 @@ from openlinx.services.crawling import CrawlOverrides
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.tls import StartTlsHosts
 from tests.support.cli import run_cli
 from tests.support.crawling import continued, crawl_result, crawled
 from tests.support.crawls import query
@@ -21,6 +22,46 @@ from tests.support.proxy import StartProxy
 from tests.support.workspace import TempWorkspace
 
 SHOP = Site({"/": Page(body='<title>Shop</title><a href="/shoes">Shoes</a>')})
+
+
+def test_https_uses_an_authenticated_proxy_tunnel(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+) -> None:
+    hosts = fixture_tls_hosts(Site({"/": Page(body="<title>Secure shop</title>")}), Site({}))
+    proxy = fixture_proxy(hosts.resolver, auth=("u", "pw"))
+
+    result = crawl_result(
+        "https://site.test/",
+        proxy=proxy.url.replace("http://", "http://u:pw@"),
+        trust_anchors=hosts.trust_anchors,
+        retries=0,
+        network_wait=0,
+    )
+
+    assert (
+        result.summary.state,
+        query(
+            result.crawl_file,
+            "SELECT url, fetch_state, fetch_error, status_code, attempt_count FROM urls",
+        ),
+        {
+            (entry.method, entry.target, entry.headers.get("Proxy-Authorization"))
+            for entry in proxy.connect_requests
+        },
+        proxy.requests,
+        [
+            (request.path, request.headers.get("Proxy-Authorization"))
+            for request in hosts.secure_site.requests
+        ],
+    ) == (
+        "completed",
+        [("https://site.test/", "fetched", None, 200, 1)],
+        {("CONNECT", "site.test:443", "Basic dTpwdw==")},
+        (),
+        [("/robots.txt", None), ("/", None)],
+    )
 
 
 @pytest.mark.parametrize("source", ["flag", "joined_flag", "workspace"])
