@@ -51,9 +51,11 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - **(v0.2)** A checked URL outside the Scope may use the planned header-only optimisation when it has `Content-Length` and no `Content-Encoding`, taking both sizes from that header. If used, `Request` needs a separate `in_scope` decision for this purpose. Its `is_internal` alone controls identity headers and must never stand in for `in_scope`; this optimisation is not needed to add credentials. The 20 MiB cap bounds the body whenever it is read.
 - **No cookies:** `020`'s `DummyCookieJar` stays, so no cookie is ever replayed. This change pins it with a guard.
 - **Environment:** `trust_env=False`, aiohttp's default, which `020` keeps, so aiohttp reads no `.netrc` and no variables by itself. The Fetcher chooses the proxy per request:
-  1. **(v0.2)** `--proxy` or `[crawl] proxy` when set, overriding every proxy variable including `NO_PROXY`
+  1. **(v0.2)** a nonempty resolved `--proxy` or `[crawl] proxy`, overriding every proxy variable including `NO_PROXY`
   2. otherwise `ProxyVariables` in `openlinx.crawl.fetch.proxy`: `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` read once from the environment into `FetchPolicy` when each run starts, so a resumed Crawl reads them again, and the `environment` table of D8 records the same record. It applies the spec's rule itself: the lower-case name wins, an empty variable is unset, a proxy without a scheme is an http proxy, as curl reads it, and `NO_PROXY` names hosts and domain suffixes.
      - *Alternative: urllib's `getproxies_environment()` and `proxy_bypass_environment()`.* The second is undocumented and has no type stubs, both read every scheme's variable, `ALL_PROXY` included, and the bypass also matches ports and IP addresses, which the spec does not define. Rejected.
+
+  **(v0.2)** Explicit proxy inputs accept a schemeless `host:port` as `http://host:port`. Resolve source precedence before treating an empty proxy input as environment fallback: an explicit empty `--proxy` overrides a Workspace proxy and selects the current proxy variables, including their `NO_PROXY` rules. An empty input does not disable environment proxies.
 
   **(v0.2)** The ALPN check uses the same choice.
 - **TLS:** the context of D5 goes into the `TCPConnector`, next to the resolver.

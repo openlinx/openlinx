@@ -1,0 +1,15 @@
+{
+  "name": "--proxy",
+  "short": null,
+  "type": "string",
+  "choices": null,
+  "default": null,
+  "min": null,
+  "max": null,
+  "required": false,
+  "multiple": false,
+  "global": false,
+  "setting": "crawl.proxy",
+  "secret": true,
+  "description": "The HTTP proxy URL for every request, robots.txt's included; a nonempty value overrides proxy environment variables. A schemeless URL uses HTTP; empty uses the environment. Its password is hidden in records."
+}

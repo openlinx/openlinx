@@ -188,6 +188,17 @@ def crawl(
         ),
         OptionMeta(setting="crawl.auth"),
     ] = None,
+    proxy: Annotated[
+        str | None,
+        typer.Option(
+            "--proxy",
+            help="The HTTP proxy URL for every request, robots.txt's included; a nonempty "
+            "value overrides proxy environment variables. A schemeless URL uses HTTP; empty "
+            "uses the environment. Its password is hidden in records.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.proxy"),
+    ] = None,
     timeout: Annotated[
         float,
         typer.Option(

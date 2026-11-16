@@ -49,6 +49,15 @@ def as_auth(auth: str) -> str:
     return auth
 
 
+def proxy_url(value: str | None) -> str | None:
+    """An empty input falls back to environment; a schemeless input names an HTTP proxy."""
+    if not value:
+        return None
+    if "://" in value:
+        return value
+    return f"http://{value}"
+
+
 def as_robots_token(token: str) -> str:
     if _ROBOTS_USER_AGENT.fullmatch(token) is None:
         raise ValueError("a robots user-agent token has letters, '_' and '-' only (RFC 9309)")

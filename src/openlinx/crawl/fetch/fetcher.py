@@ -99,6 +99,7 @@ class FetchPolicy:
     headers: tuple[tuple[str, str], ...] = ()
     custom_user_agent: bool = False
     auth: str | None = None
+    proxy: str | None = None
 
 
 def request_headers(policy: FetchPolicy, *, is_internal: bool) -> tuple[tuple[str, str], ...]:
@@ -134,7 +135,7 @@ class AiohttpFetcher:
         url = yarl.URL(request.url, encoded=True)
         fetched_at, started = self._clock.now(), self._clock.monotonic()
         try:
-            proxy = self._policy.proxies.for_url(request.url)
+            proxy = self._policy.proxy or self._policy.proxies.for_url(request.url)
             async with self._session.get(
                 url,
                 allow_redirects=False,

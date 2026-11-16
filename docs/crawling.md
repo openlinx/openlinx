@@ -38,6 +38,7 @@ Every crawl setting is an option of `linx crawl` and a key of the `[crawl]` tabl
 | `--user-agent <string>` | `user_agent` | `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
 | `--header "Name: Value"` | `header` | `[]` | A repeatable custom header for Internal URLs and their robots.txt; sensitive values are hidden in records (see [Custom request headers](#custom-request-headers)). |
 | `--auth "user:password"` | `auth` | none | Preemptive Basic Auth for Internal URLs and their robots.txt; the whole value is hidden in records (see [Basic authentication](#basic-authentication)). |
+| `--proxy <url>` | `proxy` | none | An HTTP proxy for every request, robots.txt's included; a nonempty value overrides proxy variables, while empty uses them (see [Explicit proxy](#explicit-proxy)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `openlinx` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -247,7 +248,15 @@ diagnostics and recorded again as `Name: ***`. Restoring secrets preserves the r
 Internal User-Agent winner, global dedicated User-Agent and literal Accept-Encoding
 entries, and revalidates the auth/Authorization conflict before opening resources.
 
-A continue fetches through the proxy variables of its own process, not the start's, and records them in `crawl.config`'s `environment` table in place of the start's, redacted the same way (see [Proxy variables](#proxy-variables)).
+A continue keeps a recorded explicit proxy without a password. A recorded proxy password
+is `***`, so the service refuses the continue as `secrets_required` (exit 2), with a hint
+naming `--proxy` and `crawl.proxy`, before opening a writer or network connection.
+Fresh proxy input for a continue is not supported yet.
+
+With no explicit proxy, a continue fetches through the proxy variables of its own
+process, not the start's. It records the current variables in `crawl.config`'s
+`environment` table in place of the start's, redacted the same way
+(see [Proxy variables](#proxy-variables)).
 
 ### When one URL fails
 
@@ -552,9 +561,28 @@ The `response_headers` table keeps the headers of each URL whose last attempt go
 
 A URL longer than 2,000 characters, counted on the normalised URL with its non-ASCII characters percent-encoded, is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `url_too_long`, before any `--include` or `--exclude` pattern is matched against it.
 
+### Explicit proxy
+
+`--proxy http://127.0.0.1:3128` or `[crawl] proxy = "http://127.0.0.1:3128"`
+routes every request through that HTTP proxy, including robots.txt and External URLs.
+A nonempty explicit proxy overrides the proxy variables, including `NO_PROXY`.
+The flag takes priority over the Workspace setting. A schemeless value such as
+`proxy.corp:3128` becomes `http://proxy.corp:3128`.
+
+An explicit empty flag (`--proxy ""`) overrides a Workspace proxy and restores
+environment handling, including `NO_PROXY`; it does not disable environment proxies.
+An empty Workspace proxy also uses the environment. The resolved setting records as
+`null` for empty input, or as the normalized URL otherwise.
+
+Credentials may be included as `http://u:pw@proxy.corp:3128`. Recorded argv and
+`crawl.config` hide the password as `http://u:***@proxy.corp:3128`; an explicit URL
+without a password remains visible. See [Continuing a Crawl](#continuing-a-crawl)
+for the refusal of recorded password markers.
+
 ### Proxy variables
 
-The Crawl honours the standard proxy variables, as curl, pip and uv do. It is the one place where the tool reads the environment.
+Without a nonempty explicit proxy, the Crawl honours the standard proxy variables,
+as curl, pip and uv do. It is the one place where the tool reads the environment.
 - **Which proxy:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs. Each is read under its lower-case and its upper-case name, as curl reads them, and when both are set, the lower-case one wins; an empty variable counts as unset. A proxy without a scheme, such as `proxy.corp:3128`, is an http proxy. `ALL_PROXY` and the variables of other schemes are not read.
 - **Bypass:** `NO_PROXY` is a comma-separated list of host names and domain suffixes, with or without a leading dot, or `*` for every host. A host it names, or a host under a domain suffix it names, is requested directly: `site.test` covers `site.test` and `www.site.test`, but not `mysite.test`. Ports, IP addresses and IP ranges in `NO_PROXY` are not read.
 - **When:** the variables are read once, when a run starts, and every request of the run, robots.txt's included, follows them. A resumed Crawl reads them again.

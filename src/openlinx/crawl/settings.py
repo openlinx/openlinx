@@ -9,6 +9,7 @@ from openlinx.crawl.setting_rules import (
     as_robots_token,
     as_timeout,
     as_user_agent,
+    proxy_url,
 )
 from openlinx.naming import DEFAULT_ROBOTS_TOKEN
 from openlinx.store.records import ScopeKind
@@ -77,6 +78,13 @@ class CrawlSettings(BaseModel):
         "only; exact UTF-8 without trimming or normalization. Empty disables authentication.",
         json_schema_extra={"secret": "whole"},
     )
+    proxy: str | None = Field(
+        None,
+        description="The HTTP proxy URL for every request, robots.txt's included; a nonempty "
+        "value overrides proxy environment variables. A schemeless URL uses HTTP; empty uses "
+        "the environment. Its password is hidden in records.",
+        json_schema_extra={"secret": "url"},
+    )
     timeout: float = Field(
         20,
         strict=True,
@@ -144,6 +152,11 @@ class CrawlSettings(BaseModel):
     @classmethod
     def _is_auth(cls, auth: str | None) -> str | None:
         return None if auth is None or auth == "" else as_auth(auth)
+
+    @field_validator("proxy")
+    @classmethod
+    def _is_a_proxy(cls, proxy: str | None) -> str | None:
+        return proxy_url(proxy)
 
     @field_validator("robots_user_agent")
     @classmethod

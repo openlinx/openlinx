@@ -270,21 +270,32 @@ At continue service entry, including direct callers, recorded `request_policy` S
 ### Requirement: Proxy
 **In short:** an explicit HTTP proxy overrides the environment and keeps proxy credentials out of origin requests and recorded secrets.
 
-**(v0.2)** `--proxy <url>` (setting `crawl.proxy`) SHALL send every request, robots.txt included, through the given HTTP proxy, with credentials when the URL contains them.
+**(v0.2)** A nonempty resolved `--proxy <url>` (setting `crawl.proxy`) SHALL send every request, robots.txt included, through the given HTTP proxy, with credentials when the URL contains them. An explicit proxy given as `host:port` without a scheme SHALL be used as `http://host:port`.
 
-Without `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy variables, as curl, pip and uv do:
+Proxy inputs SHALL resolve source precedence before empty-value handling. A resolved empty proxy value SHALL select environment proxy handling. An explicit empty `--proxy` SHALL override a Workspace proxy and return to environment handling; it SHALL NOT disable the proxy variables or their `NO_PROXY` rules.
+
+Without a nonempty resolved `--proxy` or `[crawl] proxy`, the Crawl SHALL honour the standard proxy variables, as curl, pip and uv do:
 - **Which variable:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs.
 - **Bypass:** `NO_PROXY`, a comma-separated list of host names and domain suffixes, or `*`, names the hosts that bypass the proxy.
 - **Letter case:** each variable is read under its lower-case and its upper-case name, as curl reads them. When both are set, the lower-case one wins. An empty variable counts as unset.
 - **Scheme:** a proxy given without a scheme, such as `proxy.corp:3128`, SHALL be used as the http proxy `http://proxy.corp:3128`.
 
-The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, `--proxy` and `[crawl] proxy` SHALL override all proxy variables, including `NO_PROXY`, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
+The proxy variables are honoured from v0.1. This is the exception to the no-environment-variables rule of `010-add-workspace-and-cli-contract`. From v0.2, a nonempty resolved `--proxy` or `[crawl] proxy` SHALL override all proxy variables, including `NO_PROXY`, and the scenarios that pass `--proxy` apply. A resumed Crawl SHALL read the variables again.
 
 The password in a proxy URL SHALL be marked partly secret, whether it comes from `--proxy`, Workspace settings or a variable, and `015-add-crawl-store` records it as `http://<user>:***@<host>:<port>`; a proxy URL from a variable without a password is recorded as `***`. The proxy variables in use SHALL be recorded, set ones only, in the `environment` table of `crawl.config` under the lower-case keys `http_proxy`, `https_proxy` and `no_proxy`.
 
 #### Scenario: Requests go through the proxy
 - **WHEN** a test proxy listens on `127.0.0.1:{proxy_port}`, and `linx crawl http://site.test/ --proxy http://127.0.0.1:{proxy_port}` runs
 - **THEN** the test proxy receives a request for `http://site.test/`
+
+#### Scenario: An explicit schemeless proxy uses HTTP
+- **WHEN** `--proxy` or `[crawl] proxy` supplies `127.0.0.1:{proxy_port}` without a scheme for a Crawl of `http://site.test/`
+- **THEN** the Crawl uses `http://127.0.0.1:{proxy_port}` and the test proxy receives a request for `http://site.test/`
+
+#### Scenario: An empty proxy flag restores environment handling
+- **WHEN** the Workspace proxy is `http://127.0.0.1:{proxy_port_a}`, `HTTP_PROXY` is `http://127.0.0.1:{proxy_port_b}`, and `linx crawl http://site.test/ --proxy ""` runs
+- **THEN** the proxy on `{proxy_port_b}` receives the request for `http://site.test/`, and the Workspace proxy receives none
+- **AND** with `NO_PROXY=site.test`, both proxies receive no request and the fixture site receives the request for `/`
 
 #### Scenario: The HTTP_PROXY variable is honoured
 - **WHEN** `HTTP_PROXY` is `http://127.0.0.1:{proxy_port}`, and `linx crawl http://site.test/` runs

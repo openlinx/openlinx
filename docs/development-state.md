@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | Local branch through group 11 | v0.1 complete through group 10; v0.2 secret recording, scoped header precedence, Accept-Encoding overrides, header guards, failure-message masking and safe fresh auth/header continue inputs implemented locally. Groups 12–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | Local branch through task 12.1 | v0.1 complete through group 10; v0.2 scoped request identity, safe fresh auth/header continue inputs and explicit HTTP proxy routing implemented locally. Groups 12–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -161,8 +161,19 @@ regressions exposed both leaks before the fixes. The invalid request-policy guar
 now uses real HTTP and writable/read-only files instead of a Fetcher double; all
 original metadata cases remain. Named failing mutations prove the argv and refusal
 guards. Independent Standards and Spec review found no remaining issues in the fixes.
-Continue with the explicit proxy (group 12), offered HTTP capability (group 13) and
-bounded zstd (group 14). Keep 060 frozen at task 0.6.
+Task 12.1 adds `--proxy` and `crawl.proxy` with URL-form password redaction.
+Schemeless inputs use HTTP; an empty flag overrides the Workspace proxy and returns
+to current environment handling, including `NO_PROXY`. A continue refuses recorded
+proxy password markers before writer/network access; fresh proxy inputs remain in
+12.6. Mutation-proven guards cover CLI metadata and the empty-input bypass.
+The local full check passed with 2,468 tests and 14 platform skips; candidate CI is
+still unverified. The branch also contains integrated 030 and developer-check changes,
+so its prepared draft PR describes that combined scope; it is not published yet.
+
+Continue with the authenticated CONNECT fixture (12.4), which enables the HTTP/HTTPS
+precedence matrix in 12.2, then the remaining proxy tasks, offered HTTP capability
+(group 13) and bounded zstd (group 14). Final code review is deferred until the end
+of 022; keep its review tasks open until performed. Keep 060 frozen at task 0.6.
 
 Fresh auth and sensitive-header restoration now belong to the continue service.
 The resume Command and its Workspace/provenance adapter remain owned by 060;

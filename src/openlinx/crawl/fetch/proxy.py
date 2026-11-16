@@ -1,8 +1,10 @@
-"""Resolve each request's proxy from the captured proxy environment variables."""
+"""Normalize proxy URLs and resolve captured proxy environment variables per request."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlsplit
+
+from openlinx.crawl.setting_rules import proxy_url
 
 # The keys of the environment table of crawl.config whose proxy URL may hold a password.
 SECRET_KEYS = ("http_proxy", "https_proxy")
@@ -19,8 +21,8 @@ class ProxyVariables:
     @classmethod
     def of(cls, environ: Mapping[str, str]) -> "ProxyVariables":
         return cls(
-            http=_proxy_url(_variable(environ, "http_proxy")),
-            https=_proxy_url(_variable(environ, "https_proxy")),
+            http=proxy_url(_variable(environ, "http_proxy")),
+            https=proxy_url(_variable(environ, "https_proxy")),
             no_proxy=_variable(environ, "no_proxy"),
         )
 
@@ -42,14 +44,6 @@ def _variable(environ: Mapping[str, str], name: str) -> str | None:
     # The lower-case name first, as curl reads it. An empty value counts as unset. On Windows the
     # environment ignores letter case, so both names find the one variable.
     return environ.get(name) or environ.get(name.upper()) or None
-
-
-def _proxy_url(value: str | None) -> str | None:
-    # As curl does: a proxy given without a scheme is an http proxy, so HTTP_PROXY=proxy:3128
-    # works instead of failing every request.
-    if value is None or "://" in value:
-        return value
-    return f"http://{value}"
 
 
 def _bypassed(host: str, no_proxy: str) -> bool:

@@ -102,6 +102,17 @@ Continuing a Crawl with recorded enabled auth requires fresh input through the
 service; it never replays `***` or reloads Workspace settings. Recorded `null` needs
 no fresh auth. See [Continuing a Crawl](crawling.md#continuing-a-crawl).
 
+An HTTP proxy uses `[crawl] proxy = "http://u:pw@proxy.corp:3128"` or `--proxy`
+for one Crawl, covering every request, including robots.txt and External URLs.
+A schemeless `host:port` becomes `http://host:port`. A nonempty resolved proxy
+overrides all proxy variables, including `NO_PROXY`. An empty flag overrides a
+Workspace proxy and restores environment handling, including `NO_PROXY`; an empty
+Workspace value also uses the environment. Empty resolves to `null` in config.
+Recorded argv and config hide URL passwords as `http://u:***@proxy.corp:3128`;
+an explicit URL without a password stays visible. A continue refuses a recorded
+password marker as `secrets_required` before writer/network access; fresh proxy
+input for a continue is not supported yet. See [Explicit proxy](crawling.md#explicit-proxy).
+
 For a continue, `CrawlOverrides.header` supplies only fresh values for recorded sensitive
 headers, matched by case-insensitive name and occurrence. Missing values produce
 `secrets_required` (exit 2); harmless entries, unmatched/extra sensitive entries,

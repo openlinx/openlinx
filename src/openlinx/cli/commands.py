@@ -32,7 +32,8 @@ TYPE_NAMES = {
 ENVIRONMENT: list[dict[str, Any]] = [
     {
         "names": ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"],
-        "description": "The proxy for fetching, read when a run starts, in lower or upper case; "
+        "description": "When crawl.proxy is unset or empty, the proxy for fetching, read when "
+        "a run starts, in lower or upper case; "
         "the lower-case one wins. NO_PROXY lists hosts and domain suffixes that go direct.",
     }
 ]

@@ -10,6 +10,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
@@ -77,7 +78,7 @@ from openlinx.store.records import (
     StopReason,
     UrlCounts,
 )
-from openlinx.store.redaction import SecretValues, redact, secret_values
+from openlinx.store.redaction import REDACTED, SecretValues, redact, secret_values
 from openlinx.store.settings import StoreSettings
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import url_counts
@@ -284,6 +285,7 @@ def _fetch_policy(
         headers=headers,
         custom_user_agent=custom_user_agent,
         auth=settings.auth,
+        proxy=settings.proxy,
     )
 
 
@@ -372,6 +374,13 @@ def continue_crawl(
     custom_user_agent = _recorded_user_agent(recorded.config, crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
+    proxy = recorded.config["crawl"].get("proxy")
+    if proxy is not None and (proxy == REDACTED or urlsplit(proxy).password == REDACTED):
+        raise OpenLinxError(
+            SECRETS_REQUIRED,
+            "Continuing this Crawl requires fresh proxy credentials.",
+            hint="Fresh --proxy or crawl.proxy input for a continue is not supported yet.",
+        )
     given = overrides.given()
     if recorded.config["crawl"].get("auth") is not None and "auth" not in given:
         raise OpenLinxError(

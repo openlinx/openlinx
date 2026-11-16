@@ -1,12 +1,14 @@
-"""Verify proxy environment variables through HTTP requests."""
+"""Verify explicit and environment proxies through HTTP requests and recorded settings."""
 
 import json
 import socket
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 
 from openlinx.crawl.fetch.proxy import ProxyVariables
+from openlinx.output.diagnostics import OpenLinxError
 from openlinx.services.crawling import CrawlOverrides
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
@@ -14,10 +16,175 @@ from tests.fixture_site.routes import Page, Site
 from tests.support.cli import run_cli
 from tests.support.crawling import continued, crawl_result, crawled
 from tests.support.crawls import query
+from tests.support.permissions import read_only_file
 from tests.support.proxy import StartProxy
 from tests.support.workspace import TempWorkspace
 
 SHOP = Site({"/": Page(body='<title>Shop</title><a href="/shoes">Shoes</a>')})
+
+
+@pytest.mark.parametrize("source", ["flag", "joined_flag", "workspace"])
+@pytest.mark.parametrize("credentials", ["", "u:pw@"])
+def test_requests_go_through_the_proxy(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    source: str,
+    credentials: str,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    explicit = proxy.url.replace("http://", f"http://{credentials}")
+    recorded = proxy.url.replace("http://", "http://u:***@") if credentials else proxy.url
+    args = ["http://site.test/"]
+    expected_argv = ["linx", "crawl", "http://site.test/"]
+    if source == "workspace":
+        (temp_workspace.root / "openlinx.toml").write_text(
+            f'[crawl]\nproxy = "{explicit}"\n', encoding="utf-8"
+        )
+    elif source == "joined_flag":
+        args.append(f"--proxy={explicit}")
+        expected_argv.append(f"--proxy={recorded}")
+    else:
+        args.extend(("--proxy", explicit))
+        expected_argv.extend(("--proxy", recorded))
+
+    crawl_file = crawled(*args)
+
+    assert proxy.requests == (
+        "http://site.test/robots.txt",
+        "http://site.test/",
+        "http://site.test/shoes",
+    )
+    assert query(crawl_file, "SELECT url, status_code FROM urls ORDER BY id") == [
+        ("http://site.test/", 200),
+        ("http://site.test/shoes", 404),
+    ]
+    [(argv, config)] = query(crawl_file, "SELECT command_argv, config FROM crawl")
+    assert (json.loads(argv), json.loads(config)["crawl"]["proxy"]) == (
+        expected_argv,
+        recorded,
+    )
+
+
+@pytest.mark.parametrize("source", ["flag", "workspace", "service"])
+def test_an_explicit_schemeless_proxy_uses_http(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    source: str,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    explicit = proxy.url.removeprefix("http://")
+    if source == "workspace":
+        (temp_workspace.root / "openlinx.toml").write_text(
+            f'[crawl]\nproxy = "{explicit}"\n', encoding="utf-8"
+        )
+        file = crawled("http://site.test/", "--network-wait", "0", "--retries", "0")
+    else:
+        (temp_workspace.root / "openlinx.toml").write_text(
+            '[crawl]\nproxy = "http://127.0.0.1:1"\n', encoding="utf-8"
+        )
+        file = (
+            crawled(
+                "http://site.test/",
+                "--proxy",
+                explicit,
+                "--network-wait",
+                "0",
+                "--retries",
+                "0",
+            )
+            if source == "flag"
+            else crawl_result(
+                "http://site.test/", proxy=explicit, network_wait=0, retries=0
+            ).crawl_file
+        )
+
+    assert proxy.requests == (
+        "http://site.test/robots.txt",
+        "http://site.test/",
+        "http://site.test/shoes",
+    )
+    [(config,)] = query(file, "SELECT config FROM crawl")
+    assert json.loads(config)["crawl"]["proxy"] == proxy.url
+
+
+@pytest.mark.parametrize(
+    ("source", "bypass"),
+    [("flag", False), ("workspace", False), ("service", False), ("service", True)],
+)
+def test_an_empty_proxy_flag_restores_environment_handling(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    bypass: bool,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    workspace_proxy = fixture_proxy(hosts.resolver)
+    environment_proxy = fixture_proxy(hosts.resolver)
+    monkeypatch.setenv("HTTP_PROXY", environment_proxy.url)
+    if bypass:
+        monkeypatch.setenv("NO_PROXY", "site.test")
+    explicit = "" if source == "workspace" else workspace_proxy.url
+    (temp_workspace.root / "openlinx.toml").write_text(
+        f'[crawl]\nproxy = "{explicit}"\n', encoding="utf-8"
+    )
+
+    if source == "flag":
+        file = crawled("http://site.test/", "--proxy", "")
+    elif source == "workspace":
+        file = crawled("http://site.test/")
+    else:
+        file = crawl_result("http://site.test/", proxy="", resolver=hosts.resolver).crawl_file
+
+    assert workspace_proxy.requests == ()
+    assert environment_proxy.requests == (
+        ()
+        if bypass
+        else (
+            "http://site.test/robots.txt",
+            "http://site.test/",
+            "http://site.test/shoes",
+        )
+    )
+    assert [request.path for request in hosts.site.requests] == ["/robots.txt", "/", "/shoes"]
+    [(config,)] = query(file, "SELECT config FROM crawl")
+    assert json.loads(config)["crawl"]["proxy"] is None
+
+
+@pytest.mark.parametrize("read_only", [False, True], ids=["writable", "read-only"])
+def test_continue_refuses_an_explicit_proxy_password_without_a_fresh_value(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    read_only: bool,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    stopped = crawl_result(
+        "http://site.test/", proxy=proxy.url.replace("http://", "http://u:pw@"), max_urls=1
+    )
+    assert stopped.summary.state == "stopped"
+    [(config,)] = query(stopped.crawl_file, "SELECT config FROM crawl")
+    assert json.loads(config)["crawl"]["proxy"] == proxy.url.replace("http://", "http://u:***@")
+    requests = proxy.requests
+    files = {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()}
+
+    with (
+        read_only_file(stopped.crawl_file) if read_only else nullcontext(),
+        pytest.raises(OpenLinxError) as caught,
+    ):
+        continued(stopped, CrawlOverrides(max_urls=None))
+
+    assert (caught.value.code, caught.value.exit_code) == ("secrets_required", 2)
+    assert "crawl.proxy" in (caught.value.diagnostic.hint or "")
+    assert "--proxy" in (caught.value.diagnostic.hint or "")
+    assert proxy.requests == requests
+    assert {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()} == files
 
 
 def test_the_http_proxy_variable_is_honoured(

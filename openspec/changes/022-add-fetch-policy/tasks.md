@@ -208,12 +208,12 @@ For groups 11–14, each introducing slice updates the required setting/option/c
 
 ## 12. (v0.2) The proxy flag
 
-- [ ] 12.1 [3+6] Drive "Requests go through the proxy": usable `--proxy`/`crawl.proxy` with URL-form redaction in argv and config, preserving the environment-variable scenarios.
+- [x] 12.1 [3+6] Drive "Requests go through the proxy": usable `--proxy`/`crawl.proxy` with URL-form redaction in argv and config, preserving the environment-variable scenarios. Drive "An explicit schemeless proxy uses HTTP" and "An empty proxy flag restores environment handling": accept `host:port` as `http://host:port`; resolve source precedence before empty-value fallback, so an empty flag overrides the Workspace proxy and selects environment handling, including `NO_PROXY`, rather than disabling it. [2] Include the early refusal from "Continue refuses an explicit proxy password without a fresh value" before writer/network access; fresh proxy inputs remain in 12.6.
 - [ ] 12.2 [3] Drive "The proxy flag overrides the proxy variables" and "An explicit proxy overrides NO_PROXY", for flag and Workspace sources; verify HTTP and HTTPS choose the same resolved proxy policy.
 - [ ] 12.3 [2, 3+6] Drive "A proxy password is redacted", including joined argv and a credential-free explicit URL; preserve the existing environment-without-password recording contract. Verify quoted proxy-password diagnostics do not leak.
 - [ ] 12.4 [Fixture, 3] Drive "HTTPS uses an authenticated proxy tunnel": extend the real local proxy with CONNECT and request logging, including successful credentials and rejection of missing/wrong credentials. Assert that the origin sees no proxy auth.
 - [ ] 12.5 [3] Drive "CONNECT does not carry custom origin identity", retaining the Internal/External origin-auth guards through a tunnel; no mock of our request or proxy-choice modules.
-- [ ] 12.6 [2+3] Drive "Continue refuses an explicit proxy password without a fresh value" and the successful fresh-proxy counterpart; preserve recorded non-secret config and verify current environment variables are reread without `secrets_required`.
+- [ ] 12.6 [2+3] Retain 12.1's early refusal from "Continue refuses an explicit proxy password without a fresh value" and drive the successful fresh-proxy counterpart; preserve recorded non-secret config and verify current environment variables are reread without `secrets_required`.
 - [ ] 12.7 Docs: document explicit proxy precedence, CONNECT, secrets and continue inputs in `docs/crawling.md` and `docs/workspace.md`; verify CLI metadata matches settings.
 - [ ] 12.8 Review Standards and Spec on group 12's commits, including retained environment/proxy failures; refactor only with the full gate green and prove immediately-green guards by mutation.
 

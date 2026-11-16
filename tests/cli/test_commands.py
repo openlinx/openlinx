@@ -125,6 +125,14 @@ def test_the_auth_option_describes_its_setting_and_secret_policy() -> None:
     assert type(option["secret"]) is bool
 
 
+def test_the_proxy_option_describes_its_setting_and_secret_policy() -> None:
+    option = _options(run_cli("commands").json(), "crawl")["--proxy"]
+    expected = json.loads((CONTRACT / "crawl-proxy.json").read_text(encoding="utf-8"))
+
+    assert option == expected
+    assert type(option["secret"]) is bool
+
+
 def test_bounds_of_an_option() -> None:
     options = _options(run_cli("commands").json(), "crawl")
 
