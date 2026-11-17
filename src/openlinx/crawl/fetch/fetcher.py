@@ -109,7 +109,7 @@ class FetchPolicy:
     auth: str | None = None
     proxy: str | None = None
 
-    def proxy_for(self, url: NormalizedUrl) -> str | None:
+    def proxy_for(self, url: str) -> str | None:
         return self.proxy or self.proxies.for_url(url)
 
 
@@ -235,5 +235,8 @@ async def aiohttp_fetcher(
             )
         )
         yield AiohttpFetcher(
-            session, clock, policy, AlpnProbe(resolver, trust_anchors, policy.timeout_seconds)
+            session,
+            clock,
+            policy,
+            AlpnProbe(resolver, trust_anchors, policy.timeout_seconds, policy.proxy_for),
         )

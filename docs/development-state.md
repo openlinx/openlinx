@@ -242,6 +242,10 @@ when the Crawl is configured to ignore robots rules.
 Task 13.6 verifies that a failed probe preserves URL attempts, the URL limit and
 network pause accounting. A failed measurement on continue clears a prior value.
 
+Task 13.7 measures HTTPS capability over an authenticated HTTP CONNECT using
+the effective proxy, mapped proxy address and original TLS server name. Origin
+identity headers reach the origin only on the ordinary HTTP requests.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.

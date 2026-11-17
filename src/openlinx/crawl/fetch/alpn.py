@@ -1,8 +1,9 @@
-"""Measure HTTPS capability with a verified TLS handshake and no HTTP traffic."""
+"""Measure HTTPS capability with a verified TLS handshake and no origin HTTP traffic."""
 
 import asyncio
 import socket
 import ssl
+from collections.abc import Callable
 from contextlib import suppress
 from ipaddress import ip_address
 
@@ -10,17 +11,23 @@ import yarl
 from aiohttp.abc import AbstractResolver, ResolveResult
 from aiohttp.helpers import is_ip_address
 
+from openlinx.crawl.fetch.proxy_connect import CONNECT_STREAM_LIMIT, establish_tunnel
 from openlinx.crawl.fetch.tls import tls_context
 from openlinx.store.records import HttpVersion
 
 
 class AlpnProbe:
     def __init__(
-        self, resolver: AbstractResolver, trust_anchors: str | None, timeout_seconds: float
+        self,
+        resolver: AbstractResolver,
+        trust_anchors: str | None,
+        timeout_seconds: float,
+        proxy_for: Callable[[str], str | None],
     ) -> None:
         self._resolver = resolver
         self._trust_anchors = trust_anchors
         self._timeout_seconds = timeout_seconds
+        self._proxy_for = proxy_for
         self._context: ssl.SSLContext | None = None
 
     async def measure(self, origin: str) -> HttpVersion | None:
@@ -31,6 +38,8 @@ class AlpnProbe:
         if self._context is None:
             self._context = tls_context(self._trust_anchors)
             self._context.set_alpn_protocols(["h2", "http/1.1"])
+        if (route := self._proxy_for(origin)) is not None:
+            return await self._measure_proxy(route, host, port, self._context)
         try:
             addresses = await self._addresses(host, port)
         except (OSError, UnicodeError):
@@ -49,15 +58,46 @@ class AlpnProbe:
             except OSError:
                 continue
             try:
-                tls = writer.get_extra_info("ssl_object")
-                if not isinstance(tls, ssl.SSLObject):
-                    raise RuntimeError("A TLS stream must have an SSL object")
-                return "http_2" if tls.selected_alpn_protocol() == "h2" else "http_1_1"
+                return _version(writer)
             finally:
-                # There is no application data to flush. Don't wait for a peer's TLS shutdown.
-                writer.transport.abort()
-                with suppress(OSError):
-                    await writer.wait_closed()
+                await _close(writer)
+        return None
+
+    async def _measure_proxy(
+        self, route: str, host: str, port: int, context: ssl.SSLContext
+    ) -> HttpVersion | None:
+        try:
+            proxy = yarl.URL(route)
+            proxy_host, proxy_port = proxy.raw_host, proxy.port
+            if proxy.scheme != "http" or not proxy_host or proxy_port is None:
+                return None
+            addresses = await self._addresses(proxy_host, proxy_port)
+        except (OSError, ValueError):
+            return None
+        for address in addresses:
+            try:
+                reader, writer = await asyncio.open_connection(
+                    address["host"],
+                    address["port"],
+                    family=address["family"],
+                    flags=socket.AI_NUMERICHOST,
+                    limit=CONNECT_STREAM_LIMIT,
+                )
+            except OSError:
+                continue
+            try:
+                if not await establish_tunnel(reader, writer, proxy, host, port):
+                    return None
+                await writer.start_tls(
+                    context,
+                    server_hostname=host.rstrip("."),
+                    ssl_handshake_timeout=self._timeout_seconds,
+                )
+                return _version(writer)
+            except (OSError, ValueError):
+                return None
+            finally:
+                await _close(writer)
         return None
 
     async def _addresses(self, host: str, port: int) -> list[ResolveResult]:
@@ -78,3 +118,17 @@ class AlpnProbe:
                 flags=socket.AI_NUMERICHOST,
             )
         ]
+
+
+def _version(writer: asyncio.StreamWriter) -> HttpVersion:
+    tls = writer.get_extra_info("ssl_object")
+    if not isinstance(tls, ssl.SSLObject):
+        raise RuntimeError("A TLS stream must have an SSL object")
+    return "http_2" if tls.selected_alpn_protocol() == "h2" else "http_1_1"
+
+
+async def _close(writer: asyncio.StreamWriter) -> None:
+    # There is no application data to flush. Don't wait for a peer's TLS shutdown.
+    writer.transport.abort()
+    with suppress(OSError):
+        await writer.wait_closed()

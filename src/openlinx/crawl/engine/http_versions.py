@@ -32,8 +32,7 @@ class HttpVersions:
         origin = url_origin(url)
         if url.startswith("http://"):
             await self._writer.run_async(record_http_version(origin, "http_1_1"))
-        elif self._measure is not None and self._policy.proxy_for(url) is None:
-            # CONNECT needs its own TLS route. Never probe a proxied origin directly.
+        elif self._measure is not None:
             deadline = self._clock.monotonic() + self._policy.timeout_seconds
             if await self._writer.run_async(claim_http_version(origin, deadline)):
                 # A request holds its own slots here, so it only signals work in the store.
