@@ -181,6 +181,124 @@ def test_an_external_origin_is_measured(temp_workspace: TempWorkspace, fixture_s
     ) == [("http://site.test", 1, "http_1_1"), ("https://other.test", 0, "http_2")]
 
 
+def test_probe_failure_leaves_url_requests_unchanged(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    site = Site(
+        {
+            "/": Page(body='<a href="/child">Child</a>'),
+            "/child": Page(body="<title>Child</title>"),
+        }
+    )
+    hosts = fixture_tls_hosts(site, OTHER)
+
+    result = crawl_result(
+        "https://site.test/",
+        fetchers=with_wrong_name_for_probe(hosts),
+        concurrency=1,
+        max_urls=2,
+        network_wait=0,
+        retries=0,
+    )
+
+    assert result.summary.state == "completed"
+    assert hosts.badcert_sni.names == ("site.test",)
+    assert hosts.badcert.requests == ()
+    assert [request.path for request in hosts.secure_site.requests] == [
+        "/_warmup",
+        "/robots.txt",
+        "/",
+        "/child",
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT url, status_code, attempt_count, fetch_error FROM urls ORDER BY url",
+    ) == [("https://site.test/", 200, 1, None), ("https://site.test/child", 200, 1, None)]
+    assert query(result.crawl_file, "SELECT origin, http_version FROM origins") == [
+        ("https://site.test", None)
+    ]
+
+
+def test_a_failed_capability_probe_does_not_trigger_the_network_pause(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    # After the plain HTTP Seed answers, the HTTPS origin gets a probe and seven URL
+    # requests without a usable response. An eighth failure would trip the network pause.
+    downs = [f"/down/{number}" for number in range(1, 8)]
+    links = "".join(f'<a href="https://site.test{path}">Down</a>' for path in downs)
+    site = Site(
+        {
+            "/": Page(body=links),
+            **{path: Page(body="<p>Down</p>", reset_after=0) for path in downs},
+        }
+    )
+    hosts = fixture_tls_hosts(site, OTHER)
+
+    result = crawl_result(
+        "http://site.test/",
+        fetchers=with_wrong_name_for_probe(hosts),
+        concurrency=1,
+        network_wait=0,
+        retries=0,
+    )
+
+    assert result.summary.state == "completed"
+    assert hosts.badcert_sni.names == ("site.test",)
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_state, status_code, attempt_count, COUNT(*) FROM urls "
+        "GROUP BY 1, 2, 3 ORDER BY 1",
+    ) == [("error", None, 1, 7), ("fetched", 200, 1, 1)]
+    assert query(result.crawl_file, "SELECT origin, http_version FROM origins ORDER BY origin") == [
+        ("http://site.test", "http_1_1"),
+        ("https://site.test", None),
+    ]
+
+
+def test_a_failed_probe_on_continue_clears_the_earlier_capability(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    site = Site(
+        {
+            "/": Page(body='<a href="/middle">Middle</a>'),
+            "/middle": Page(body='<a href="/last">Last</a>'),
+            "/last": Page(body="<title>Last</title>"),
+        }
+    )
+    hosts = fixture_tls_hosts(site, OTHER, alpn=("h2", "http/1.1"))
+    stopped = crawl_result(
+        "https://site.test/",
+        resolver=hosts.resolver,
+        trust_anchors=hosts.trust_anchors,
+        concurrency=1,
+        max_urls=2,
+        network_wait=0,
+        retries=0,
+    )
+    assert stopped.summary.state == "stopped"
+    assert stopped.summary.stop_reason == "max_urls"
+    assert query(stopped.crawl_file, "SELECT origin, http_version FROM origins") == [
+        ("https://site.test", "http_2")
+    ]
+
+    result = continued(
+        stopped, CrawlOverrides(max_urls=None), fetchers=with_wrong_name_for_probe(hosts)
+    )
+
+    assert result.summary.state == "completed"
+    assert hosts.badcert_sni.names == ("site.test",)
+    assert query(
+        result.crawl_file, "SELECT url, status_code, attempt_count FROM urls ORDER BY url"
+    ) == [
+        ("https://site.test/", 200, 1),
+        ("https://site.test/last", 200, 1),
+        ("https://site.test/middle", 200, 1),
+    ]
+    assert query(result.crawl_file, "SELECT origin, http_version FROM origins") == [
+        ("https://site.test", None)
+    ]
+
+
 def test_a_plain_http_origin(
     temp_workspace: TempWorkspace, fixture_hosts: StartHosts, fixture_proxy: StartProxy
 ) -> None:

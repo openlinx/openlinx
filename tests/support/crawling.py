@@ -98,6 +98,7 @@ def continued(
     reporter: Reporter | None = None,
     clock: Clock | None = None,
     fetcher: Fetcher | None = None,
+    fetchers: FetcherFactory | None = None,
     stop: StopSignal | None = None,
 ) -> CrawlResult:
     """Continue the Crawl ended by `crawl` through the Crawl Service."""
@@ -107,7 +108,7 @@ def continued(
         clock or SystemClock(),
         reporter or Collected(),
         hooks or default_hooks(),
-        fetchers=_fetchers(resolver, trust_anchors, fetcher),
+        fetchers=fetchers or _fetchers(resolver, trust_anchors, fetcher),
         stop=stop,
     )
 
