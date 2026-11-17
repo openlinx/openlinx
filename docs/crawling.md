@@ -561,11 +561,32 @@ The `response_headers` table keeps the headers of each URL whose last attempt go
 
 - **Compression preferences:** by default every request, robots.txt's included, sends `Accept-Encoding: gzip, deflate, br, zstd`. A custom `--header "Accept-Encoding: identity"` (or Workspace `header` entry) replaces the entire default on Internal requests, including robots.txt and retries; External requests retain the default. The [custom header precedence](#custom-request-headers) applies. An explicit `Accept-Encoding:` sends a present, empty field. Repeated non-empty entries form one ordered list and remain separate, in their original case and order, in the recorded settings; an empty entry cannot accompany another Accept-Encoding entry.
 - **Preference syntax:** coding tokens, `identity`, `*` and optional RFC 9110 weights are accepted, including unknown names such as `x-unknown`. For example, `br;q=1, gzip;q=0.5, identity;q=0` is valid. A qvalue is `0` or `1`, optionally followed by a dot and up to three digits (only zeros after `1`); `0.` and `1.` are valid. Spaces and tabs are allowed around the semicolon, but not around `=`. Empty comma elements, unknown parameters and malformed weights fail before network access: `invalid_value` for CLI or service inputs, `settings_invalid` for Workspace settings.
-- **Decoder support:** independently of the request preference, the Crawl decodes gzip, deflate (the zlib format, or raw deflate, as some servers send), br and zstd, including when unadvertised or assigned `q=0`. Several codings are decoded in the reverse order of the `Content-Encoding` header, whose repeated lines count as one list. A gzip body of several members is decoded whole, as gunzip reads it. For zstd, the Crawl joins the decoded content of consecutive frames and ignores skippable frame payloads.
-- **Sizes:** every response records `content_encoding`, the header as received, `transferred_bytes`, the body as it came over the network, and `size_bytes`, the body after decoding. A script sent as 2,500 bytes of gzip that holds 10,000 bytes has `transferred_bytes` = 2500 and `size_bytes` = 10000. An image or any other Resource has its sizes recorded too, and is never parsed.
-- **The 20 MiB cap:** reading a body stops within one read past 20 MiB, and at most 20 MiB is kept from each decoding stage. A body past the cap, as transferred or at any decoding stage, has `body_truncated` = 1, `transferred_bytes` the bytes read and `size_bytes` NULL, since its full size was never measured. A Page past the cap is not parsed: `parse_error` = `body_too_large`.
-- **A body that fails to decode,** a body labelled gzip that is not, or a stream that ends inside its coding, is recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`, and is not retried.
-- **An unsupported coding,** such as `x-unknown`, is kept as received: the URL is `fetched` with `size_bytes` NULL, and a Page in it is not parsed, `parse_error` = `unsupported_encoding`. Advertising that coding does not install a decoder.
+- **Decoder support.** The Crawl decodes gzip, deflate (zlib or raw deflate), br and zstd,
+  including codings omitted from `Accept-Encoding` or assigned `q=0`. It decodes stacked
+  codings in reverse `Content-Encoding` order, treating repeated fields as one ordered
+  list. It also joins the decoded content of successive gzip members.
+- **zstd frames.** The Crawl joins the decoded content of consecutive data frames and
+  skips skippable frames. It checks the window of each data frame, including single-segment
+  frames. A window above 8 MiB yields `invalid_response`, even when the frame would decode
+  to a small body.
+- **Sizes.** `content_encoding` records the `Content-Encoding` value, with repeated fields
+  joined in order. `transferred_bytes` counts the body bytes read before decoding, and
+  `size_bytes` counts the bytes in the complete decoded body. A 10,000-byte script sent as
+  2,500 bytes of gzip has `size_bytes` = 10000 and `transferred_bytes` = 2500. Images and
+  other Resources also have sizes recorded.
+- **The 20 MiB cap.** The cap applies independently to the body as transferred, the output
+  of each intermediate decoding stage, and the final decoded body. A complete body exactly
+  at the cap is allowed. On exceeding any of these limits, the Crawl stops reading and records
+  `body_truncated` = 1 and `size_bytes` NULL. `transferred_bytes` includes the full last
+  chunk read and can exceed 20 MiB. An oversized Page records `parsed` = 0 and
+  `parse_error` = `body_too_large`.
+- **Failed decoding.** When the Crawl encounters a corrupt or incomplete stream,
+  it records `fetch_state` = `error` and `fetch_error` = `invalid_response` and skips retries.
+- **Unsupported codings.** If `Content-Encoding` includes an unsupported coding such as
+  `x-unknown`, the Crawl keeps the bytes as received up to the cap. For a complete
+  response it records `fetch_state` = `fetched` and `size_bytes` NULL. A Page records
+  `parsed` = 0 and `parse_error` = `unsupported_encoding`, even when the request
+  advertised the coding.
 
 ### URL length
 
