@@ -2,6 +2,7 @@
 
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 from openlinx.services.crawling import CrawlOverrides
 from tests.fixture_site.hosts import StartHosts
@@ -44,6 +45,43 @@ def test_an_origin_that_selects_http_2(
     assert query(result.crawl_file, "SELECT origin, http_version FROM origins") == [
         ("https://site.test", "http_2")
     ]
+
+
+def test_an_origin_that_offers_only_http_1_1(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    crawl_file = _crawl_https(fixture_tls_hosts, alpn=("http/1.1",))
+
+    assert query(crawl_file, "SELECT origin, http_version FROM origins") == [
+        ("https://site.test", "http_1_1")
+    ]
+
+
+def test_a_listener_with_no_alpn_selection_is_http_1_1_capable(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    crawl_file = _crawl_https(fixture_tls_hosts, alpn=())
+
+    assert query(crawl_file, "SELECT origin, http_version FROM origins") == [
+        ("https://site.test", "http_1_1")
+    ]
+
+
+def _crawl_https(fixture_tls_hosts: StartTlsHosts, *, alpn: tuple[str, ...]) -> Path:
+    hosts = fixture_tls_hosts(Site({"/": Page(body="<title>Home</title>")}), OTHER, alpn=alpn)
+    result = crawl_result(
+        "https://site.test/",
+        resolver=hosts.resolver,
+        trust_anchors=hosts.trust_anchors,
+        retries=0,
+        network_wait=0,
+    )
+
+    assert result.summary.state == "completed"
+    assert query(result.crawl_file, "SELECT url, status_code FROM urls") == [
+        ("https://site.test/", 200)
+    ]
+    return result.crawl_file
 
 
 def test_a_plain_http_origin(
