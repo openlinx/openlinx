@@ -217,6 +217,10 @@ Task 14.4 checks the advertised zstd window before decoding each frame. Real
 8 MiB and oversized-window fixtures cover split headers, complete input and
 subsequent frames, with and without a declared content size.
 
+Task 14.5 verifies the exact 20 MiB output and intermediate limits. Real Crawl
+responses establish truncation and Page outcomes, while memory checks exercise
+the finite native output budget.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
