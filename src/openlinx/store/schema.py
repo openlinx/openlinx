@@ -478,7 +478,8 @@ origins = public_table(
     Column(
         "http_version",
         Text,
-        comment="Filled from v0.2. The HTTP version that the origin's requests use.",
+        comment="The origin's offered HTTP capability, selected by a dedicated ALPN probe for "
+        "HTTPS. Plain HTTP origins use http_1_1. Crawler requests use HTTP/1.1.",
         info={"values": literal_values(HttpVersion)},
     ),
     comment="One row for each origin of a URL that the Crawl recorded.",
@@ -631,8 +632,8 @@ pages = public_table(
     Column(
         "http_version",
         Text,
-        comment="Filled from v0.2. The HTTP version that the requests to the Page's origin "
-        "use, equal to origins.http_version.",
+        comment="Filled from v0.2. The offered HTTP capability of the Page's origin, "
+        "equal to origins.http_version.",
         info={"values": literal_values(HttpVersion)},
     ),
     Column(

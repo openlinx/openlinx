@@ -393,7 +393,11 @@ With `--no-check-external`, no External URL is requested. Each one is still reco
 
 ### Origins
 
-Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)), and has `http_version`, the HTTP version that the origin's requests use, which is filled from v0.2 and NULL until then.
+Every URL belongs to an origin, made up of its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are Internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)).
+
+`origins.http_version` reports the origin's offered HTTP capability. A plain HTTP origin
+gets `http_1_1` when the Crawl requests it, without a TLS probe. Unmeasured capability is
+NULL, including in v0.1 Crawl files. Crawler requests use HTTP/1.1.
 
 ### `--scope`
 

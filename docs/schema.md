@@ -162,7 +162,7 @@ One row for each origin of a URL that the Crawl recorded.
 | `robots_txt` | TEXT | yes | | | | The robots.txt body as parsed, up to 512,000 bytes. |
 | `robots_crawl_delay_ms` | INTEGER | yes | | | | The Crawl-delay for the robots user-agent token; recorded, not applied. |
 | `robots_sitemaps` | TEXT | yes | | `json` | | JSON array of the Sitemap: URLs in robots.txt; NULL while robots.txt has not been fetched. |
-| `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the origin's requests use. |
+| `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | The origin's offered HTTP capability, selected by a dedicated ALPN probe for HTTPS. Plain HTTP origins use http_1_1. Crawler requests use HTTP/1.1. |
 
 ### Indexes
 
@@ -201,7 +201,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `redirect_type` | TEXT | yes | | | `http_redirect`, `http_refresh`, `meta_refresh`, `javascript_redirect` | How the Page redirects; http_redirect for every 3xx response, even when redirect_url is NULL; NULL when it does not redirect. javascript_redirect is filled from v1.1. |
 | `set_cookie_count` | INTEGER | no | | | | The number of Set-Cookie headers of the Page's response, equal to its rows in cookies. |
 | `js_cookie_count` | INTEGER | yes | | | | Filled from v1.1. The number of cookies the Page's scripts set, measured with JavaScript rendering. |
-| `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | Filled from v0.2. The HTTP version that the requests to the Page's origin use, equal to origins.http_version. |
+| `http_version` | TEXT | yes | | | `http_2`, `http_1_1` | Filled from v0.2. The offered HTTP capability of the Page's origin, equal to origins.http_version. |
 | `crawl_timestamp` | TEXT | no | | `timestamp` | | The UTC time of the Page's request, equal to urls.fetched_at. |
 | `title_1` | TEXT | yes | | | | The text of the Page's first title element without an svg, math or noscript ancestor, whitespace-normalised; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `title_1_length` | INTEGER | yes | | | | The length of title_1 in Unicode code points; NULL exactly when title_1 is. |

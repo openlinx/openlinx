@@ -1,4 +1,4 @@
-"""Record each URL's origin within the same recording unit."""
+"""Record URL origins and their robots.txt and HTTP capability."""
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
@@ -14,6 +14,11 @@ type OriginRow = dict[str, Any]
 _INSERT_ORIGIN = insert(origins).on_conflict_do_nothing(index_elements=[origins.c.origin])
 # Bound as origin in an insert of urls rows: the origins_origin index finds its id.
 ORIGIN_ID = select(origins.c.id).where(origins.c.origin == bindparam("origin")).scalar_subquery()
+_PLAIN_HTTP = (
+    update(origins)
+    .where(origins.c.origin == bindparam("origin_key"), origins.c.http_version.is_not("http_1_1"))
+    .values(http_version="http_1_1")
+)
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _ROBOTS_TXT = (
     update(origins)
@@ -49,6 +54,16 @@ def record_origins(connection: Connection, rows: Sequence[OriginRow]) -> None:
     """Records each origin the file does not hold yet, in the unit of its first URL."""
     if rows:
         connection.execute(_INSERT_ORIGIN, list(rows))
+
+
+def record_plain_http(origin: str) -> Callable[[Connection], None]:
+    """Record capability for a requested plain HTTP origin that the file holds."""
+    values = {"origin_key": origin}
+
+    def unit(connection: Connection) -> None:
+        connection.execute(_PLAIN_HTTP, values)
+
+    return unit
 
 
 def record_robots_txt(record: RobotsTxtRecord) -> Callable[[Connection], None]:

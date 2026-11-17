@@ -2,7 +2,7 @@
 
 import asyncio
 from collections import deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -107,6 +107,7 @@ class Requester:
         watchdog_seconds: float,
         stop: Stops,
         secrets: SecretValues,
+        on_request_start: Callable[[NormalizedUrl], Awaitable[None]],
     ) -> None:
         self._fetcher = fetcher
         self._limits = limits
@@ -122,6 +123,7 @@ class Requester:
         self._retries = retries
         self._pause_gate = PauseGate()
         self._secrets = secrets
+        self._on_request_start = on_request_start
 
     def close_gate(self) -> None:
         self._pause_gate.close()
@@ -287,6 +289,8 @@ class Requester:
         return semaphore
 
     async def _send(self, request: Request) -> FetchResult | FetchFailure:
+        # Only admitted hops count, including the actual target of a robots.txt redirect.
+        await self._on_request_start(request.url)
         # Each attempt races its own watchdog on the Crawl's Clock, from when it started, which
         # its row keeps as the Fetcher's would.
         started_at = self._clock.now()

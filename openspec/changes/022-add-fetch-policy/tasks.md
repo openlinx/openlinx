@@ -219,7 +219,7 @@ For groups 11–14, each introducing slice updates the required setting/option/c
 
 ## 13. (v0.2) Offered HTTP capability
 
-- [ ] 13.1 [Fixture, 3+6] Drive "A plain http origin": write `http_1_1` without a TLS probe. Update the origin column description and `docs/schema.md` to offered capability; the matching Page description has the same meaning, while its population remains with Page data.
+- [x] 13.1 [Fixture, 3+6] Drive "A plain http origin": write `http_1_1` without a TLS probe. Update the origin column description and `docs/schema.md` to offered capability; the matching Page description has the same meaning, while its population remains with Page data.
 - [ ] 13.2 [Fixture, 3+6] Drive "An origin that selects HTTP/2": add an h2-selecting TLS listener test-first, then the dedicated probe through the existing resolver and trust setup; verify ordinary crawler requests remain HTTP/1.1.
 - [ ] 13.3 [Fixture, 3+6] Drive "An origin that offers only HTTP/1.1" and "A listener with no ALPN selection is HTTP/1.1 capable", with real TLS listeners and literal stored values.
 - [ ] 13.4 [2, 3+6] Drive "One failed probe is not repeated for another URL": run-local dedup at the origins/store seam and bounded active tasks, no public columns or unbounded memo; concurrent URLs and a replay still produce one probe. Retain TLS failure and hostname-verification guards.

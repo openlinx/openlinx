@@ -193,6 +193,10 @@ Task 12.7 documents CONNECT and origin header handling alongside explicit proxy
 precedence, password masking and fresh continue inputs. The published CLI option
 metadata agrees with the Workspace setting and its literal contract.
 
+Task 13.1 records `http_1_1` for each plain HTTP origin when a request starts.
+Discovered origins that receive no request stay NULL. The schema describes offered
+capability on origins and Pages. Page population belongs to 030.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.

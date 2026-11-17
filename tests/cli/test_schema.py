@@ -1,6 +1,8 @@
 """Verify the schema Command exposes the declared crawl-file schema."""
 
+import json
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -76,13 +78,35 @@ def columns_of(table: str) -> dict[str, dict[str, Any]]:
 
 
 def test_the_http_version_is_a_later_column() -> None:
-    column = columns_of("origins")["http_version"]
+    # The v0.1 Command output predates capability measurement.
+    path = Path(__file__).parents[1] / "contract" / "origins-http-version-v0.1.json"
+    recorded = json.loads(path.read_text(encoding="utf-8"))
+    column = recorded["column"]
 
     assert (
+        recorded["schema_version"],
         column["nullable"],
         column["values"],
         column["description"].startswith("Filled from v0.2. "),
-    ) == (True, ["http_2", "http_1_1"], True)
+    ) == (1, True, ["http_2", "http_1_1"], True)
+
+
+def test_http_version_describes_offered_capability_for_origins_and_pages() -> None:
+    origins = columns_of("origins")["http_version"]
+    pages = columns_of("pages")["http_version"]
+
+    assert (origins["nullable"], origins["values"], origins["description"]) == (
+        True,
+        ["http_2", "http_1_1"],
+        "The origin's offered HTTP capability, selected by a dedicated ALPN probe for HTTPS. "
+        "Plain HTTP origins use http_1_1. Crawler requests use HTTP/1.1.",
+    )
+    assert (pages["nullable"], pages["values"], pages["description"]) == (
+        True,
+        ["http_2", "http_1_1"],
+        "Filled from v0.2. The offered HTTP capability of the Page's origin, "
+        "equal to origins.http_version.",
+    )
 
 
 def test_column_formats() -> None:

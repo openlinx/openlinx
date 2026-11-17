@@ -20,7 +20,8 @@ from openlinx.crawl.fetch.politeness import RateGate, RequestLimits, global_cap
 from openlinx.crawl.fetch.requester import Requester, watchdog_seconds
 from openlinx.crawl.robots.loader import RobotsLoader
 from openlinx.crawl.scope import ScopeDecision
-from openlinx.crawl.urls import NormalizedUrl
+from openlinx.crawl.urls import NormalizedUrl, url_origin
+from openlinx.store.origins import record_plain_http
 from openlinx.store.records import QueuedUrl
 from openlinx.store.urls import (
     next_depth,
@@ -56,6 +57,11 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         cap, context.pages.backlog, context.settings.max_urls, started=counts.fetched
     )
     gate = RateGate(context.clock, context.settings.rate)
+
+    async def record_requested_origin(url: NormalizedUrl) -> None:
+        if url.startswith("http://"):
+            await context.writer.run_async(record_plain_http(url_origin(url)))
+
     requester = Requester(
         context.fetcher,
         limits,
@@ -67,6 +73,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         watchdog_seconds=watchdog_seconds(context.fetch_policy.timeout_seconds),
         stop=context.stop,
         secrets=context.secrets,
+        on_request_start=record_requested_origin,
     )
     redispatch = Redispatch()
     robots = RobotsLoader(
