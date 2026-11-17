@@ -236,6 +236,9 @@ Task 13.4 verifies that concurrent requests share a single failed origin probe.
 Replaying a writer unit returns the same claim result and schedules the origin
 once per run.
 
+Task 13.5 measures External origins and origins whose robots.txt request fails
+when the Crawl is configured to ignore robots rules.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
