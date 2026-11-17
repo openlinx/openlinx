@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | Integration branch with tasks 12.1 and 12.4 | v0.1 complete through group 10; v0.2 scoped request identity, safe fresh auth/header continue inputs and explicit proxy routing with authenticated HTTPS tunnel guards implemented. Groups 12–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | Integration branch with explicit proxy routing and CONNECT | v0.1 complete through group 10; v0.2 scoped request identity, safe fresh auth/header continue inputs and explicit proxy routing with authenticated HTTPS tunnel guards implemented. Groups 12–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -173,14 +173,19 @@ requests during teardown. Four failing mutations prove the guards; existing HTTP
 and environment scenarios remain intact. The local full check passed with 2,473
 tests and 14 platform skips.
 
-[Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
-branch, including 030 and developer-check changes. Its checks track actual candidate
-CI; local checks alone do not establish cross-platform runtime compatibility.
+Task 12.2 verifies explicit proxy precedence over the proxy environment variables and
+over both wildcard and named-host `NO_PROXY` entries. All twelve HTTP/HTTPS cases
+cover the CLI flag and Workspace setting. Selecting the environment proxy first
+fails four cases. Applying the bypass to an explicit proxy fails the other eight.
 
-Continue with the HTTP/HTTPS precedence matrix in 12.2, then the remaining proxy tasks,
-offered HTTP capability
-(group 13) and bounded zstd (group 14). Final code review is deferred until the end
-of 022; keep its review tasks open until performed. Keep 060 frozen at task 0.6.
+[Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
+branch, including 030 and developer checks. The authenticated CONNECT checkpoint
+`4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
+[CI run](https://github.com/openlinx/openlinx/actions/runs/44184811562).
+
+Continue with the remaining proxy tasks, offered HTTP capability (group 13) and
+bounded zstd (group 14). Final code review follows implementation of 022.
+060 remains frozen at task 0.6.
 
 Fresh auth and sensitive-header restoration now belong to the continue service.
 The resume Command and its Workspace/provenance adapter remain owned by 060;

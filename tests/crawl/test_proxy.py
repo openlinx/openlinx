@@ -24,6 +24,111 @@ from tests.support.workspace import TempWorkspace
 SHOP = Site({"/": Page(body='<title>Shop</title><a href="/shoes">Shoes</a>')})
 
 
+@pytest.mark.parametrize("source", ["flag", "workspace"])
+@pytest.mark.parametrize("scheme", ["http", "https"])
+def test_the_proxy_flag_overrides_the_proxy_variables(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    scheme: str,
+) -> None:
+    _assert_explicit_proxy_precedence(
+        temp_workspace, fixture_tls_hosts, fixture_proxy, monkeypatch, source, scheme
+    )
+
+
+@pytest.mark.parametrize("source", ["flag", "workspace"])
+@pytest.mark.parametrize(
+    ("scheme", "no_proxy"),
+    [("http", "*"), ("http", "site.test"), ("https", "*"), ("https", "site.test")],
+)
+def test_an_explicit_proxy_overrides_no_proxy(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    scheme: str,
+    no_proxy: str,
+) -> None:
+    monkeypatch.setenv("NO_PROXY", no_proxy)
+    _assert_explicit_proxy_precedence(
+        temp_workspace,
+        fixture_tls_hosts,
+        fixture_proxy,
+        monkeypatch,
+        source,
+        scheme,
+        named_http_origin=scheme == "http" and no_proxy == "site.test",
+    )
+
+
+def _assert_explicit_proxy_precedence(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    scheme: str,
+    *,
+    named_http_origin: bool = False,
+) -> None:
+    hosts = fixture_tls_hosts(Site({"/": Page(body="<title>Shop</title>")}), Site({}))
+    environment_proxy = fixture_proxy(hosts.resolver)
+    explicit_proxy = fixture_proxy(hosts.resolver)
+    monkeypatch.setenv("HTTP_PROXY", environment_proxy.url)
+    monkeypatch.setenv("HTTPS_PROXY", environment_proxy.url)
+    if source == "workspace":
+        (temp_workspace.root / "openlinx.toml").write_text(
+            f'[crawl]\nproxy = "{explicit_proxy.url}"\n', encoding="utf-8"
+        )
+    use_cli = scheme == "http" and not named_http_origin
+    seed = hosts.site.url("/") if use_cli else f"{scheme}://site.test/"
+
+    if use_cli:
+        flags = ["--proxy", explicit_proxy.url] if source == "flag" else []
+        file = crawled(seed, *flags, "--retries", "0", "--network-wait", "0")
+    elif source == "flag":
+        file = crawl_result(
+            seed,
+            proxy=explicit_proxy.url,
+            resolver=hosts.resolver,
+            trust_anchors=hosts.trust_anchors,
+            retries=0,
+            network_wait=0,
+        ).crawl_file
+    else:
+        file = crawl_result(
+            seed,
+            resolver=hosts.resolver,
+            trust_anchors=hosts.trust_anchors,
+            retries=0,
+            network_wait=0,
+        ).crawl_file
+
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    assert query(
+        file, "SELECT url, fetch_state, fetch_error, status_code, attempt_count FROM urls"
+    ) == [(seed, "fetched", None, 200, 1)]
+    assert (environment_proxy.requests, environment_proxy.connect_requests) == ((), ())
+    if scheme == "http":
+        assert explicit_proxy.requests == (
+            seed + "robots.txt",
+            seed,
+        )
+        assert explicit_proxy.connect_requests == ()
+        origin = hosts.site
+    else:
+        assert explicit_proxy.requests == ()
+        assert {(entry.method, entry.target) for entry in explicit_proxy.connect_requests} == {
+            ("CONNECT", "site.test:443")
+        }
+        origin = hosts.secure_site
+    assert [request.path for request in origin.requests] == ["/robots.txt", "/"]
+
+
 def test_https_uses_an_authenticated_proxy_tunnel(
     temp_workspace: TempWorkspace,
     fixture_tls_hosts: StartTlsHosts,
