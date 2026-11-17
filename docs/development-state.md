@@ -198,8 +198,8 @@ capability on origins and Pages. Page population belongs to 030.
 
 Task 14.1 adds single-frame incremental zstd decoding with finite output budgets,
 including stacked codings. A locked conditional backport supplies the backend on
-Python 3.12 and 3.13. Enforcement of the window limit across backend fast paths and
-the cross-platform runtime matrix remain open.
+Python 3.12 and 3.13. Task 14.4 enforces the window limit across backend fast paths.
+The cross-platform runtime matrix remains open.
 
 Task 14.2 reads concatenated and skippable zstd frames across arbitrary input
 boundaries. Each decoding call has a finite output budget. Buffered output is
@@ -212,6 +212,10 @@ name and the same trust anchors. Ordinary requests remain on HTTP/1.1.
 Task 14.3 verifies that incomplete, corrupt and checksum-invalid zstd bodies and
 trailing garbage retain the URL failure classification. Each wire fixture has
 a valid control, including a response served as two frames.
+
+Task 14.4 checks the advertised zstd window before decoding each frame. Real
+8 MiB and oversized-window fixtures cover split headers, complete input and
+subsequent frames, with and without a declared content size.
 
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint

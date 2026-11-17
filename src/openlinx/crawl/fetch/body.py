@@ -19,6 +19,8 @@ SUPPORTED_CODINGS = ("gzip", "deflate", "br", "zstd")
 _GZIP_MAGIC = b"\x1f\x8b"
 _ZSTD_FEED_BYTES = 1024
 _ZSTD_OUTPUT_BYTES = 64 * 1024
+_ZSTD_WINDOW_LOG_MAX = 23
+_ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 
 
 class BodyDecodingError(ValueError):
@@ -118,14 +120,44 @@ class _Brotli:
 
 
 def _zstd_frame() -> zstd.ZstdDecompressor:
-    # RFC 9659 limits an HTTP zstd window to 8 MiB independently of its output size.
-    return zstd.ZstdDecompressor(options={zstd.DecompressionParameter.window_log_max: 23})
+    return zstd.ZstdDecompressor(
+        options={zstd.DecompressionParameter.window_log_max: _ZSTD_WINDOW_LOG_MAX}
+    )
+
+
+def _zstd_window_size(prefix: bytes | memoryview) -> int | None:
+    """Read just the fields that determine the RFC 8878 window, or wait for more bytes."""
+    if len(prefix) < 4:
+        return None
+    magic = prefix[:4]
+    if magic != _ZSTD_MAGIC:
+        # The low nibble identifies the skippable frame, which needs no window.
+        if magic[0] >> 4 == 5 and magic[1:] == b"\x2a\x4d\x18":
+            return 0
+        raise BodyDecodingError("The body has an invalid zstd frame magic.")
+    if len(prefix) < 6:
+        return None
+    descriptor = prefix[4]
+    if not descriptor & 0x20:
+        window = prefix[5]
+        base = 1 << (10 + (window >> 3))
+        return base + (base >> 3) * (window & 7)
+    # For a single segment, the content size after the optional dictionary ID is the window.
+    start = 5 + (0, 1, 2, 4)[descriptor & 3]
+    size_bytes = (1, 2, 4, 8)[descriptor >> 6]
+    end = start + size_bytes
+    if len(prefix) < end:
+        return None
+    size = int.from_bytes(prefix[start:end], "little")
+    return size + 256 if size_bytes == 2 else size
 
 
 class _Zstd:
     def __init__(self) -> None:
         self._inflate = _zstd_frame()
         self._pending = memoryview(b"")
+        # An empty or partial header until the current frame passes the window check.
+        self._frame_prefix: bytes | None = b""
 
     def decode(self, data: bytes, limit: int) -> bytes:
         if data:
@@ -141,17 +173,29 @@ class _Zstd:
                 if not data and not self._pending:
                     break
                 self._inflate = _zstd_frame()
+                self._frame_prefix = b""
             if self._inflate.needs_input and not data:
                 if not self._pending:
                     break
                 # Each frame can copy unused_data. Limit the tail it can copy even when
-                # one read contains many tiny frames.
-                data = self._pending[:_ZSTD_FEED_BYTES]
+                # one read contains many tiny frames or a header spans reads.
+                data = self._pending[: _ZSTD_FEED_BYTES - len(self._frame_prefix or b"")]
                 self._pending = (
                     self._pending[len(data) :]
                     if len(data) < len(self._pending)
                     else memoryview(b"")
                 )
+            if self._frame_prefix is not None:
+                if self._frame_prefix:
+                    data = self._frame_prefix + bytes(data)
+                window_size = _zstd_window_size(data)
+                if window_size is None:
+                    self._frame_prefix = bytes(data)
+                    continue
+                # libzstd can bypass its window limit when decoding a whole frame at once.
+                if window_size > 1 << _ZSTD_WINDOW_LOG_MAX:
+                    raise BodyDecodingError("The zstd frame window exceeds the HTTP 8 MiB limit.")
+                self._frame_prefix = None
             budget = min(limit - len(output), _ZSTD_OUTPUT_BYTES)
             output.extend(self._inflate.decompress(data, max_length=budget))
         return bytes(output)
