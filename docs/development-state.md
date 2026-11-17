@@ -178,6 +178,10 @@ over both wildcard and named-host `NO_PROXY` entries. All twelve HTTP/HTTPS case
 cover the CLI flag and Workspace setting. Selecting the environment proxy first
 fails four cases. Applying the bypass to an explicit proxy fails the other eight.
 
+Task 12.3 preserves credential-free explicit proxy URLs in argv and config, and
+masks both the original and percent-decoded password in diagnostics. Separate
+CLI and Workspace cases retain the environment proxy recording policy.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.

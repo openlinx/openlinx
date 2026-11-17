@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from yarl import URL
+
 from openlinx.store.records import SecretNames
 from openlinx.workspace.tables import SecretPolicy
 
@@ -101,6 +103,8 @@ def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy
             password = value.partition(":")[2] if setting == "crawl.auth" else _password(value)
             if password:
                 found.add(password)
+                if policy == "url" and (decoded := _decoded_url_password(value)):
+                    found.add(decoded)
             if setting == "crawl.auth":
                 # Match the exact UTF-8 wire bytes without re-raising invalid-input errors.
                 try:
@@ -115,6 +119,15 @@ def _password(value: str) -> str | None:
     try:
         return urlsplit(value).password
     except ValueError:
+        return None
+
+
+def _decoded_url_password(value: str) -> str | None:
+    # The HTTP client decodes URL credentials. Errors may quote the decoded password alone.
+    try:
+        return URL(value).password
+    except ValueError:
+        # Keep the spelling collected from the input even if the client rejects the URL.
         return None
 
 
