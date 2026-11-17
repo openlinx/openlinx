@@ -86,6 +86,22 @@ def test_a_compressed_body_is_capped_after_decoding(coding: str) -> None:
     assert (len(body.data), body.truncated) == (BODY_LIMIT, True)
 
 
+@pytest.mark.parametrize(
+    ("padding", "truncated", "transferred"),
+    [(39, False, 64), (40, True, 65)],
+    ids=["exact", "one-over"],
+)
+def test_a_compressed_body_is_capped_as_transferred(
+    padding: int, truncated: bool, transferred: int
+) -> None:
+    # A complete 25-byte gzip member followed by zero padding isolates the wire cap.
+    packed = gzip.compress(b"hello", mtime=0) + b"\0" * padding
+
+    body = _decoded(packed, "gzip", limit=64)
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"hello", truncated, transferred)
+
+
 @pytest.mark.parametrize("coding", ["gzip", "br"])
 def test_a_bomb_in_one_chunk_is_decoded_only_up_to_the_cap(coding: str) -> None:
     # 64 MiB of zeros, packed into one chunk as small as a connection reads at once.
