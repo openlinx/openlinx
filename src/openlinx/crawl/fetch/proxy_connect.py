@@ -10,6 +10,7 @@ _HEADER_END = b"\r\n\r\n"
 # StreamReader.readuntil counts only the bytes before its separator.
 CONNECT_STREAM_LIMIT = 65_536 - len(_HEADER_END)
 _SUCCESS_STATUS = re.compile(rb"HTTP/1\.[01] 2[0-9]{2} [\t\x20-\x7e\x80-\xff]*")
+_FIELD_LINE = re.compile(rb"[!#$%&'*+\-.^_`|~0-9A-Za-z]+:[\t\x20-\x7e\x80-\xff]*")
 
 
 async def establish_tunnel(
@@ -30,4 +31,7 @@ async def establish_tunnel(
         head = await reader.readuntil(_HEADER_END)
     except (asyncio.IncompleteReadError, asyncio.LimitOverrunError):
         return False
-    return _SUCCESS_STATUS.fullmatch(head.split(b"\r\n", 1)[0]) is not None
+    status, *fields = head[: -len(_HEADER_END)].split(b"\r\n")
+    return _SUCCESS_STATUS.fullmatch(status) is not None and all(
+        _FIELD_LINE.fullmatch(field) is not None for field in fields
+    )

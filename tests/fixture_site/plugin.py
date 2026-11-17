@@ -19,7 +19,7 @@ from tests.fixture_site.hosts import (
 from tests.fixture_site.routes import Site
 from tests.fixture_site.server import RunningServer, Serve, ServerHandle
 from tests.fixture_site.tls import SiteOrBuilder, StartTlsHosts, TlsHosts, tls_hosts_for
-from tests.support.proxy import ForwardProxy, StartProxy
+from tests.support.proxy import ConnectReply, ForwardProxy, StartProxy
 
 StartSite = Serve
 
@@ -83,9 +83,12 @@ def fixture_proxy() -> Iterator[StartProxy]:
     with ExitStack() as running:
 
         def start(
-            resolver: AbstractResolver, *, auth: tuple[str, str] | None = None
+            resolver: AbstractResolver,
+            *,
+            auth: tuple[str, str] | None = None,
+            connect_replies: tuple[ConnectReply, ...] = (),
         ) -> ForwardProxy:
-            proxy = ForwardProxy(resolver, auth=auth)
+            proxy = ForwardProxy(resolver, auth=auth, connect_replies=connect_replies)
             running.callback(proxy.stop)
             return proxy
 

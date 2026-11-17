@@ -38,6 +38,19 @@ class ConnectRequest:
     headers: CIMultiDictProxy[str]
 
 
+@dataclass(frozen=True, slots=True)
+class ConnectReply:
+    """Bytes sent by the fixture proxy before relaying or closing the connection."""
+
+    chunks: tuple[bytes, ...] = (b"HTTP/1.1 200 Connection Established\r\n\r\n",)
+    relay: bool = True
+
+    async def send(self, writer: asyncio.StreamWriter) -> None:
+        for chunk in self.chunks:
+            writer.write(chunk)
+            await writer.drain()
+
+
 async def _pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     while data := await reader.read(65_536):
         writer.write(data)
@@ -68,9 +81,16 @@ class ForwardProxy:
     """Relay absolute-form HTTP and CONNECT, resolving fixture names at the proxy:
     the client resolves only the proxy's address, and retains origin TLS verification."""
 
-    def __init__(self, resolver: AbstractResolver, *, auth: tuple[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        resolver: AbstractResolver,
+        *,
+        auth: tuple[str, str] | None = None,
+        connect_replies: tuple[ConnectReply, ...] = (),
+    ) -> None:
         self._resolver = resolver
         self._authorization = aiohttp.encode_basic_auth(*auth) if auth is not None else None
+        self._connect_replies = connect_replies or (ConnectReply(),)
         self._requests: list[str] = []
         self._connect_requests: list[ConnectRequest] = []
         self._lock = threading.Lock()
@@ -145,6 +165,7 @@ class ForwardProxy:
                         name, value = line.split(":", 1)
                         headers.add(name, value.strip())
                 with self._lock:
+                    index = len(self._connect_requests)
                     self._connect_requests.append(
                         ConnectRequest(method, target, CIMultiDictProxy(headers))
                     )
@@ -159,13 +180,16 @@ class ForwardProxy:
                     )
                     await writer.drain()
                     return
+                reply = self._connect_replies[min(index, len(self._connect_replies) - 1)]
+                if not reply.relay:
+                    await reply.send(writer)
+                    return
                 origin = yarl.URL(f"//{target}")
                 [address] = await self._resolver.resolve(origin.host or "", origin.port or 443)
                 upstream, upstream_writer = await asyncio.open_connection(
                     address["host"], address["port"], family=address["family"]
                 )
-                writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-                await writer.drain()
+                await reply.send(writer)
             else:
                 upstream, upstream_writer = await asyncio.open_connection(*self._http_address)
                 upstream_writer.write(head)
@@ -250,5 +274,9 @@ def _relayed(headers: Mapping[str, str]) -> CIMultiDict[str]:
 
 class StartProxy(Protocol):
     def __call__(
-        self, resolver: AbstractResolver, *, auth: tuple[str, str] | None = None
+        self,
+        resolver: AbstractResolver,
+        *,
+        auth: tuple[str, str] | None = None,
+        connect_replies: tuple[ConnectReply, ...] = (),
     ) -> ForwardProxy: ...
