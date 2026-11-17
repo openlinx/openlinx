@@ -214,7 +214,7 @@ For groups 11–14, each introducing slice updates the required setting/option/c
 - [x] 12.4 [Fixture, 3] Drive "HTTPS uses an authenticated proxy tunnel": extend the real local proxy with CONNECT and request logging, including successful credentials and rejection of missing/wrong credentials. Assert that the origin sees no proxy auth.
 - [x] 12.5 [3] Drive "CONNECT does not carry custom origin identity", retaining the Internal/External origin-auth guards through a tunnel; no mock of our request or proxy-choice modules.
 - [x] 12.6 [2+3] Retain 12.1's early refusal from "Continue refuses an explicit proxy password without a fresh value" and drive the successful fresh-proxy counterpart; preserve recorded non-secret config and verify current environment variables are reread without `secrets_required`.
-- [ ] 12.7 Docs: document explicit proxy precedence, CONNECT, secrets and continue inputs in `docs/crawling.md` and `docs/workspace.md`; verify CLI metadata matches settings.
+- [x] 12.7 Docs: document explicit proxy precedence, CONNECT, secrets and continue inputs in `docs/crawling.md` and `docs/workspace.md`; verify CLI metadata matches settings.
 - [ ] 12.8 Review Standards and Spec on group 12's commits, including retained environment/proxy failures; refactor only with the full gate green and prove immediately-green guards by mutation.
 
 ## 13. (v0.2) Offered HTTP capability

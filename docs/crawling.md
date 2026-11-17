@@ -584,11 +584,14 @@ Credentials may be included as `http://u:pw@proxy.corp:3128`. Recorded argv and
 `crawl.config` hide the password as `http://u:***@proxy.corp:3128`; an explicit URL
 without a password remains visible. Warnings and saved failure messages hide an
 explicit proxy password both as written in the URL and after percent decoding.
-See [Continuing a Crawl](#continuing-a-crawl) for the refusal of recorded password markers.
+The continue service accepts a fresh URL through `CrawlOverrides.proxy`.
+See [Continuing a Crawl](#continuing-a-crawl).
 
 HTTPS requests use CONNECT through the HTTP proxy. Proxy URL credentials authenticate
-the tunnel; the origin receives no `Proxy-Authorization`. TLS still verifies the origin's
-certificate and hostname through the tunnel.
+the tunnel. CONNECT carries neither the Crawl’s Authorization header nor its custom
+origin headers. Inside the tunnel, Internal requests receive their configured identity.
+External requests omit it. Proxy credentials stay at the proxy, and TLS verifies the
+origin’s certificate and hostname.
 
 ### Proxy variables
 

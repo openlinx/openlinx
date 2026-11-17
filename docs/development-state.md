@@ -189,6 +189,10 @@ Task 12.6 restores an explicit proxy from fresh continue input. A recorded
 password marker requires a fresh value before writer or network access. The
 Service preserves unrelated recorded settings and rereads the current environment.
 
+Task 12.7 documents CONNECT and origin header handling alongside explicit proxy
+precedence, password masking and fresh continue inputs. The published CLI option
+metadata agrees with the Workspace setting and its literal contract.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
