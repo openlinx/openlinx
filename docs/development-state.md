@@ -205,6 +205,10 @@ Task 14.2 reads concatenated and skippable zstd frames across arbitrary input
 boundaries. Each decoding call has a finite output budget. Buffered output is
 drained before the decoder accepts more input.
 
+Task 13.2 uses a dedicated ALPN handshake to record HTTP/2 capability on a
+direct HTTPS connection. The probe uses Crawl DNS routing, the original host
+name and the same trust anchors. Ordinary requests remain on HTTP/1.1.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.

@@ -6,6 +6,7 @@ from contextlib import closing
 from openlinx.services.crawling import CrawlOverrides
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.tls import StartTlsHosts
 from tests.support.crawling import continued, crawl_result
 from tests.support.crawls import query
 from tests.support.proxy import StartProxy
@@ -13,6 +14,36 @@ from tests.support.workspace import TempWorkspace
 
 SITE = Site({"/": Page(body='<a href="http://other.test/partner">Partner</a>')})
 OTHER = Site({"/partner": Page(body="<title>Partner</title>")})
+
+
+def test_an_origin_that_selects_http_2(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    hosts = fixture_tls_hosts(
+        Site({"/": Page(body="<title>Home</title>")}), OTHER, alpn=("h2", "http/1.1")
+    )
+
+    result = crawl_result(
+        "https://site.test/",
+        resolver=hosts.resolver,
+        trust_anchors=hosts.trust_anchors,
+        retries=0,
+        network_wait=0,
+    )
+
+    assert result.summary.state == "completed"
+    assert query(result.crawl_file, "SELECT url, status_code FROM urls") == [
+        ("https://site.test/", 200)
+    ]
+    requests = hosts.secure_site.requests
+    assert [(request.method, request.path, request.http_version) for request in requests] == [
+        ("GET", "/robots.txt", (1, 1)),
+        ("GET", "/", (1, 1)),
+    ]
+    assert all(request.alpn != "h2" for request in requests)
+    assert query(result.crawl_file, "SELECT origin, http_version FROM origins") == [
+        ("https://site.test", "http_2")
+    ]
 
 
 def test_a_plain_http_origin(

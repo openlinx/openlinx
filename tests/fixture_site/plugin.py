@@ -71,8 +71,8 @@ def fixture_tls_hosts(fixture_site: Serve) -> StartTlsHosts:
     """site.test over http and https, and three https listeners whose certificates fail,
     behind the DNS resolver hook."""
 
-    def start(site: SiteOrBuilder, other: Site) -> TlsHosts:
-        return tls_hosts_for(fixture_site, site, other)
+    def start(site: SiteOrBuilder, other: Site, *, alpn: tuple[str, ...] = ()) -> TlsHosts:
+        return tls_hosts_for(fixture_site, site, other, alpn=alpn)
 
     return start
 

@@ -4,6 +4,7 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path, PurePath
 from typing import Any, Literal
 from urllib.parse import quote
@@ -108,7 +109,11 @@ def _shm_held(error: sqlite3.Error) -> bool:
 
 @contextmanager
 def opening(
-    path: Path, *, role: ConnectionRole, busy_seconds: float | None = None
+    path: Path,
+    *,
+    role: ConnectionRole,
+    busy_seconds: float | None = None,
+    disk_temp_store: bool = False,
 ) -> Iterator[Engine]:
     read_only = role == "read"
     engine = create_engine(
@@ -123,7 +128,7 @@ def opening(
     # Only the writer's: creating the file and reading it keep SQLite's defaults
     # (017-speed-up-crawl-writer D8).
     if role == "write":
-        event.listen(engine, "connect", _writer_settings)
+        event.listen(engine, "connect", partial(_writer_settings, disk_temp_store=disk_temp_store))
     # Disposed at once, so no handle outlives the operation: Windows could not delete the file.
     try:
         yield engine
@@ -147,8 +152,9 @@ def _synchronous_for_the_journal(connection: sqlite3.Connection, _: Any) -> None
     connection.execute(f"PRAGMA synchronous = {synchronous}")
 
 
-def _writer_settings(connection: sqlite3.Connection, _: Any) -> None:
-    connection.execute("PRAGMA temp_store = MEMORY")
+def _writer_settings(connection: sqlite3.Connection, _: Any, *, disk_temp_store: bool) -> None:
+    temp_store = "FILE" if disk_temp_store else "MEMORY"
+    connection.execute(f"PRAGMA temp_store = {temp_store}")
     connection.execute(f"PRAGMA cache_size = -{WRITER_CACHE_KIB}")
     # Rollback-journal mode is chosen for network shares, where a mapping is only as coherent as the
     # share's client cache. Set to 0, not left alone: the default is a build-time option.

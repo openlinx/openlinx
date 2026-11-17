@@ -623,7 +623,10 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
         )
         # Opening and closing the writer block, so they run off the event loop.
         with clock.off_loop():
-            writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
+            # The run can claim an origin per URL; its temporary SQLite store may spill to disk.
+            writer = await asyncio.to_thread(
+                CrawlWriter, crawl_file.path, clock, disk_temp_store=True
+            )
         try:
             # The engine drives the writer, so its commits keep the Crawl's clock.
             async with (

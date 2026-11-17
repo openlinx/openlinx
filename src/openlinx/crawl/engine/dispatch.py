@@ -9,6 +9,7 @@ from openlinx.aio import first_of
 from openlinx.crawl.engine.blocking import BlockingRuns
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.crawl_warnings import url_limit_reached
+from openlinx.crawl.engine.http_versions import HttpVersions
 from openlinx.crawl.engine.outcomes import Outcomes
 from openlinx.crawl.engine.pause import CountedUrl, NetworkPause, PauseEnd, Redispatch
 from openlinx.crawl.engine.progress import UrlCounters, report_progress
@@ -16,12 +17,13 @@ from openlinx.crawl.engine.seed_chain import SeedChain, end_seed_chain
 from openlinx.crawl.engine.stop import StopGrace
 from openlinx.crawl.engine.tasks import Run, TaskFailure
 from openlinx.crawl.engine.units import unit_of, via_resource
+from openlinx.crawl.fetch.fetcher import ProbesHttpVersion
 from openlinx.crawl.fetch.politeness import RateGate, RequestLimits, global_cap
 from openlinx.crawl.fetch.requester import Requester, watchdog_seconds
 from openlinx.crawl.robots.loader import RobotsLoader
 from openlinx.crawl.scope import ScopeDecision
-from openlinx.crawl.urls import NormalizedUrl, url_origin
-from openlinx.store.origins import record_plain_http
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.store.origins import init_http_version_claims
 from openlinx.store.records import QueuedUrl
 from openlinx.store.urls import (
     next_depth,
@@ -58,9 +60,11 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     )
     gate = RateGate(context.clock, context.settings.rate)
 
-    async def record_requested_origin(url: NormalizedUrl) -> None:
-        if url.startswith("http://"):
-            await context.writer.run_async(record_plain_http(url_origin(url)))
+    fetcher = context.fetcher
+    measure = fetcher.probe_http_version if isinstance(fetcher, ProbesHttpVersion) else None
+    http_versions = HttpVersions(context.writer, context.fetch_policy, context.clock, measure)
+    if measure is not None:
+        await context.writer.run_async(init_http_version_claims)
 
     requester = Requester(
         context.fetcher,
@@ -73,7 +77,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         watchdog_seconds=watchdog_seconds(context.fetch_policy.timeout_seconds),
         stop=context.stop,
         secrets=context.secrets,
-        on_request_start=record_requested_origin,
+        on_request_start=http_versions.requested,
     )
     redispatch = Redispatch()
     robots = RobotsLoader(
@@ -83,7 +87,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         lambda url: seed_chain.decide(url, in_chain=seed_chain.is_open).is_internal,
     )
     task_failure = TaskFailure(context.stop)
-    # The tasks that run beside the URLs' own: the network pause's probing, the progress events.
+    # Work beside the URL tasks: the network pause, progress and origin measurements.
     side_tasks: set[asyncio.Task[None]] = set()
 
     async def resumed(end: PauseEnd, count: Sequence[CountedUrl]) -> None:
@@ -139,6 +143,11 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         )
     )
     task_failure.track(side_tasks, progress)
+    measurements = None
+    if measure is not None:
+        measurements = asyncio.create_task(http_versions.run(requester))
+        task_failure.track(side_tasks, measurements)
+        context.stop.on_first_set(lambda _: measurements.cancel())
     depth: int | None = 0
     try:
         while depth is not None:
@@ -167,6 +176,9 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
                     # re-queues the URLs of its count.
                     await run.pause.ended()
                     depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
+        if measurements is not None and not _stopping(run):
+            http_versions.finish()
+            await asyncio.wait({measurements})
     # An ended writer refuses every unit.
     except CrawlWriterClosedError as closed:
         context.stop.write_failed(closed)

@@ -25,7 +25,7 @@ def test_an_https_site_signed_by_a_ca_the_crawl_trusts_is_crawled(
     assert (
         query(crawl_file, "SELECT url, fetch_state, status_code FROM urls"),
         query(crawl_file, "SELECT origin, http_version FROM origins"),
-    ) == ([("https://site.test/", "fetched", 200)], [("https://site.test", None)])
+    ) == ([("https://site.test/", "fetched", 200)], [("https://site.test", "http_1_1")])
 
 
 def test_a_certificate_for_another_name_is_a_tls_error(

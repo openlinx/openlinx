@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Protocol
 from urllib.parse import urlsplit
 
 import trustme
@@ -45,17 +46,27 @@ class TlsHosts:
 
 # A site, or a function that builds it from the untrusted listener's port, to link to it.
 type SiteOrBuilder = Site | Callable[[int], Site]
-StartTlsHosts = Callable[[SiteOrBuilder, Site], TlsHosts]
 
 
-def tls_hosts_for(serve: Serve, site: SiteOrBuilder, other: Site) -> TlsHosts:
+class StartTlsHosts(Protocol):
+    def __call__(
+        self, site: SiteOrBuilder, other: Site, *, alpn: tuple[str, ...] = ()
+    ) -> TlsHosts: ...
+
+
+def tls_hosts_for(
+    serve: Serve, site: SiteOrBuilder, other: Site, *, alpn: tuple[str, ...] = ()
+) -> TlsHosts:
     trusted_ca, untrusted_ca = trustme.CA(), trustme.CA()
     untrusted = serve(other, _listening(untrusted_ca.issue_cert(OTHER_HOST)))
     untrusted_port = urlsplit(untrusted.base_url).port or 0
     if not isinstance(site, Site):
         site = site(untrusted_port)
     plain = serve(site)
-    secure = serve(site, _listening(trusted_ca.issue_cert(*SITE_HOSTS)))
+    secure_context = _listening(trusted_ca.issue_cert(*SITE_HOSTS))
+    if alpn:
+        secure_context.set_alpn_protocols(list(alpn))
+    secure = serve(site, secure_context)
     badcert = serve(other, _listening(trusted_ca.issue_cert(OTHER_HOST)))
     selfsigned_context, selfsigned_certificate = _self_signed()
     selfsigned = serve(other, selfsigned_context)

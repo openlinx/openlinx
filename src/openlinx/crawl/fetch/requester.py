@@ -14,8 +14,8 @@ from openlinx.clock import Clock
 from openlinx.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from openlinx.crawl.fetch.pause_gate import PauseGate
 from openlinx.crawl.fetch.politeness import RateGate, RequestLimits
-from openlinx.crawl.urls import NormalizedUrl, host_key
-from openlinx.store.records import FetchError
+from openlinx.crawl.urls import InvalidUrl, NormalizedUrl, host_key, normalize_url
+from openlinx.store.records import FetchError, HttpVersion
 from openlinx.store.redaction import SecretValues
 
 # DNS, TLS and protocol errors are the name's or server's answer; the watchdog has already
@@ -197,6 +197,16 @@ class Requester:
             started = self._clock.monotonic()
             outcome = await self._send(request)
             return ProbeResult(outcome, self._clock.monotonic() - started)
+
+    async def measure_http_version(
+        self, origin: str, measure: Callable[[str], Awaitable[HttpVersion | None]]
+    ) -> HttpVersion | None:
+        """Share connection permits without creating a URL attempt or a network-pause probe."""
+        url = normalize_url(f"{origin}/")
+        if isinstance(url, InvalidUrl):
+            raise RuntimeError("A claimed origin must form a valid URL")
+        async with self._slots(url, self._new_requests) as passed:
+            return await measure(origin) if passed else None
 
     async def _retried(
         self,

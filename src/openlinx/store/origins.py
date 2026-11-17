@@ -3,10 +3,22 @@
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
-from sqlalchemy import Connection, bindparam, select, update
+from sqlalchemy import (
+    Column,
+    Connection,
+    Float,
+    Integer,
+    MetaData,
+    Table,
+    Text,
+    bindparam,
+    select,
+    update,
+)
 from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.schema import CreateTable
 
-from openlinx.store.records import RobotsTxtRecord
+from openlinx.store.records import HttpVersion, RobotsTxtRecord
 from openlinx.store.schema import origins
 
 type OriginRow = dict[str, Any]
@@ -14,10 +26,29 @@ type OriginRow = dict[str, Any]
 _INSERT_ORIGIN = insert(origins).on_conflict_do_nothing(index_elements=[origins.c.origin])
 # Bound as origin in an insert of urls rows: the origins_origin index finds its id.
 ORIGIN_ID = select(origins.c.id).where(origins.c.origin == bindparam("origin")).scalar_subquery()
-_PLAIN_HTTP = (
+_HTTP_VERSION = (
     update(origins)
-    .where(origins.c.origin == bindparam("origin_key"), origins.c.http_version.is_not("http_1_1"))
-    .values(http_version="http_1_1")
+    .where(
+        origins.c.origin == bindparam("origin_key"),
+        origins.c.http_version.is_distinct_from(bindparam("capability")),
+    )
+    .values(http_version=bindparam("capability"))
+)
+# The writer connection lasts one run. A cursor over claim IDs keeps completed and pending
+# origins deduplicated without retaining either in memory or changing the Crawl schema.
+_claims = Table(
+    "http_version_claims",
+    MetaData(),
+    Column("id", Integer, primary_key=True),
+    Column("origin", Text, nullable=False, unique=True),
+    Column("deadline", Float, nullable=False),
+    schema="temp",
+    prefixes=["TEMPORARY"],
+)
+_CREATE_CLAIMS = CreateTable(_claims, if_not_exists=True)
+_CLAIM = insert(_claims).on_conflict_do_nothing(index_elements=[_claims.c.origin])
+_NEXT_CLAIM = (
+    select(_claims).where(_claims.c.id > bindparam("after")).order_by(_claims.c.id).limit(1)
 )
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _ROBOTS_TXT = (
@@ -56,12 +87,36 @@ def record_origins(connection: Connection, rows: Sequence[OriginRow]) -> None:
         connection.execute(_INSERT_ORIGIN, list(rows))
 
 
-def record_plain_http(origin: str) -> Callable[[Connection], None]:
-    """Record capability for a requested plain HTTP origin that the file holds."""
-    values = {"origin_key": origin}
+def init_http_version_claims(connection: Connection) -> None:
+    connection.execute(_CREATE_CLAIMS)
+
+
+def claim_http_version(origin: str, deadline: float) -> Callable[[Connection], bool]:
+    """Queue only the first request of an origin, clearing any earlier run's measurement."""
+
+    def unit(connection: Connection) -> bool:
+        claimed = connection.execute(_CLAIM, {"origin": origin, "deadline": deadline})
+        if claimed.rowcount != 1:
+            return False
+        connection.execute(_HTTP_VERSION, {"origin_key": origin, "capability": None})
+        return True
+
+    return unit
+
+
+def next_http_version_claim(after: int) -> Callable[[Connection], tuple[int, str, float] | None]:
+    def unit(connection: Connection) -> tuple[int, str, float] | None:
+        row = connection.execute(_NEXT_CLAIM, {"after": after}).one_or_none()
+        return None if row is None else (int(row.id), str(row.origin), float(row.deadline))
+
+    return unit
+
+
+def record_http_version(origin: str, version: HttpVersion) -> Callable[[Connection], None]:
+    values = {"origin_key": origin, "capability": version}
 
     def unit(connection: Connection) -> None:
-        connection.execute(_PLAIN_HTTP, values)
+        connection.execute(_HTTP_VERSION, values)
 
     return unit
 

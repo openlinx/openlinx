@@ -83,9 +83,12 @@ class CrawlWriter:
         clock: Clock,
         on_commit: Callable[[int], None] | None = None,
         busy_seconds: float = WRITER_BUSY_SECONDS,
+        *,
+        disk_temp_store: bool = False,
     ) -> None:
         self._path = path
         self._busy_seconds = busy_seconds
+        self._disk_temp_store = disk_temp_store
         self._clock = clock
         self._on_commit = on_commit
         self._queue: Queue[_Job] = Queue(maxsize=QUEUE_SIZE)
@@ -277,7 +280,12 @@ class CrawlWriter:
     def _serve(self, started: Future[None]) -> None:
         try:
             with (
-                opening(self._path, role="write", busy_seconds=self._busy_seconds) as engine,
+                opening(
+                    self._path,
+                    role="write",
+                    busy_seconds=self._busy_seconds,
+                    disk_temp_store=self._disk_temp_store,
+                ) as engine,
                 engine.connect() as connection,
             ):
                 _check_writable(connection)

@@ -1,25 +1,27 @@
 """Fetch one HTTP hop and return request failures as data."""
 
 from base64 import b64encode
-from collections.abc import AsyncIterator, Callable, Iterable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 import aiohttp
 import yarl
 from aiohttp.abc import AbstractResolver
+from aiohttp.resolver import DefaultResolver
 
 from openlinx import __version__
 from openlinx.clock import Clock
+from openlinx.crawl.fetch.alpn import AlpnProbe
 from openlinx.crawl.fetch.body import BodyDecodingError, read_body
 from openlinx.crawl.fetch.cookies import redacted_header
 from openlinx.crawl.fetch.proxy import ProxyVariables
 from openlinx.crawl.fetch.tls import tls_context
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.naming import CRAWLER_PAGE_URL, PRODUCT_NAME
-from openlinx.store.records import FetchError
+from openlinx.store.records import FetchError, HttpVersion
 
 
 def header_values(headers: Iterable[tuple[str, str]], name: str) -> list[str]:
@@ -82,6 +84,12 @@ class Fetcher(Protocol):
     async def fetch(self, request: Request) -> FetchResult | FetchFailure: ...
 
 
+@runtime_checkable
+class ProbesHttpVersion(Protocol):
+    @property
+    def probe_http_version(self) -> Callable[[str], Awaitable[HttpVersion | None]] | None: ...
+
+
 _CHUNK_BYTES = 64 * 1024
 ACCEPT_ENCODING = "gzip, deflate, br, zstd"
 DEFAULT_USER_AGENT = f"{PRODUCT_NAME}/{__version__} (+{CRAWLER_PAGE_URL})"
@@ -100,6 +108,9 @@ class FetchPolicy:
     custom_user_agent: bool = False
     auth: str | None = None
     proxy: str | None = None
+
+    def proxy_for(self, url: NormalizedUrl) -> str | None:
+        return self.proxy or self.proxies.for_url(url)
 
 
 def request_headers(policy: FetchPolicy, *, is_internal: bool) -> tuple[tuple[str, str], ...]:
@@ -125,21 +136,27 @@ type FetcherFactory = Callable[[FetchPolicy, Clock], AbstractAsyncContextManager
 
 
 class AiohttpFetcher:
-    def __init__(self, session: aiohttp.ClientSession, clock: Clock, policy: FetchPolicy) -> None:
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        clock: Clock,
+        policy: FetchPolicy,
+        alpn: AlpnProbe | None = None,
+    ) -> None:
         self._session = session
         self._clock = clock
         self._policy = policy
+        self.probe_http_version = alpn.measure if alpn is not None else None
 
     async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         # As given: yarl would decode a %2F in the query and request another URL than recorded.
         url = yarl.URL(request.url, encoded=True)
         fetched_at, started = self._clock.now(), self._clock.monotonic()
         try:
-            proxy = self._policy.proxy or self._policy.proxies.for_url(request.url)
             async with self._session.get(
                 url,
                 allow_redirects=False,
-                proxy=proxy,
+                proxy=self._policy.proxy_for(request.url),
                 headers=request_headers(self._policy, is_internal=request.is_internal),
             ) as response:
                 headers = tuple(
@@ -202,13 +219,21 @@ async def aiohttp_fetcher(
 ) -> AsyncIterator[AiohttpFetcher]:
     """`resolver` and `trust_anchors` (PEM certificates trusted besides the OS store) are for
     tests: the DNS resolver hook and the test CA."""
-    async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
-        timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
-        skip_auto_headers={"User-Agent", "Accept-Encoding"},
-        # No cookie session: a cookie set by one response would change what later ones return.
-        cookie_jar=aiohttp.DummyCookieJar(),
-        # read_body decodes, so it measures the body both as transferred and as decoded.
-        auto_decompress=False,
-    ) as session:
-        yield AiohttpFetcher(session, clock, policy)
+    async with AsyncExitStack() as stack:
+        if resolver is None:
+            resolver = DefaultResolver()
+            stack.push_async_callback(resolver.close)
+        session = await stack.enter_async_context(
+            aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
+                timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
+                skip_auto_headers={"User-Agent", "Accept-Encoding"},
+                # A cookie set by one response must not change what later ones return.
+                cookie_jar=aiohttp.DummyCookieJar(),
+                # read_body measures the body both as transferred and as decoded.
+                auto_decompress=False,
+            )
+        )
+        yield AiohttpFetcher(
+            session, clock, policy, AlpnProbe(resolver, trust_anchors, policy.timeout_seconds)
+        )
