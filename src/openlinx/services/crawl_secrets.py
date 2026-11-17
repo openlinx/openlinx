@@ -1,11 +1,35 @@
-"""Restore recorded sensitive header slots without replacing harmless Crawl settings."""
+"""Validate fresh secrets for a continue and restore recorded sensitive header slots."""
 
 from collections import Counter
+from urllib.parse import unquote, urlsplit
 
 from openlinx.crawl.setting_rules import as_headers
 from openlinx.output.codes import INVALID_VALUE, SECRETS_REQUIRED
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.redaction import REDACTED, is_sensitive_header
+
+
+def check_fresh_proxy(proxy: str | None) -> None:
+    """Refuse a malformed URL or a replay of a marker before opening resources."""
+    if proxy is None:
+        return
+    try:
+        parts = urlsplit(proxy)
+        _ = parts.port
+        if (
+            parts.scheme
+            and parts.hostname not in (None, REDACTED)
+            and not any(ord(char) <= 32 for char in proxy)
+            and unquote(parts.password or "") != REDACTED
+        ):
+            return
+    except ValueError:
+        pass
+    raise OpenLinxError(
+        INVALID_VALUE,
+        "Invalid value for crawl.proxy: supply a valid proxy URL without redaction markers.",
+        details={"key": "crawl.proxy"},
+    )
 
 
 def restored_headers(recorded: list[str], fresh: tuple[str, ...]) -> list[str]:

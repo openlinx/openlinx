@@ -55,7 +55,7 @@ from openlinx.output.diagnostics import Diagnostic, OpenLinxError
 from openlinx.output.events import timestamp_text
 from openlinx.output.reporter import Reporter
 from openlinx.services.crawl_failures import NETWORK_FAILURES, interrupted, write_failed
-from openlinx.services.crawl_secrets import restored_headers
+from openlinx.services.crawl_secrets import check_fresh_proxy, restored_headers
 from openlinx.services.crawls import create_crawl
 from openlinx.services.hooks import default_page_executor
 from openlinx.services.interrupts import interrupts_stop
@@ -135,8 +135,9 @@ KEEP = _Override.KEEP
 class CrawlOverrides:
     """Continue settings and fresh credentials that recording cannot retain.
 
-    KEEP preserves recorded values, except enabled auth needs fresh input; None or empty
-    auth disables it. Header entries restore only recorded sensitive name/occurrence slots;
+    KEEP preserves recorded values. Enabled auth and masked proxy credentials need fresh
+    input. None or empty auth disables it, and None or empty proxy selects current
+    environment handling. Header entries restore only recorded sensitive name/occurrence slots;
     they cannot override harmless headers. The planned resume Command also requires that the
     URL limit can only be raised (060 D8).
     """
@@ -146,6 +147,7 @@ class CrawlOverrides:
     rate: float | Literal[_Override.KEEP] | None = KEEP
     auth: str | Literal[_Override.KEEP] | None = KEEP
     header: tuple[str, ...] | Literal[_Override.KEEP] = KEEP
+    proxy: str | Literal[_Override.KEEP] | None = KEEP
 
     def given(self) -> dict[str, Any]:
         values = {field.name: getattr(self, field.name) for field in fields(self)}
@@ -374,14 +376,19 @@ def continue_crawl(
     custom_user_agent = _recorded_user_agent(recorded.config, crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
-    proxy = recorded.config["crawl"].get("proxy")
-    if proxy is not None and (proxy == REDACTED or urlsplit(proxy).password == REDACTED):
+    given = overrides.given()
+    recorded_proxy = recorded.config["crawl"].get("proxy")
+    if (
+        "proxy" not in given
+        and recorded_proxy is not None
+        and (recorded_proxy == REDACTED or urlsplit(recorded_proxy).password == REDACTED)
+    ):
         raise OpenLinxError(
             SECRETS_REQUIRED,
             "Continuing this Crawl requires fresh proxy credentials.",
-            hint="Fresh --proxy or crawl.proxy input for a continue is not supported yet.",
+            hint="Pass a fresh URL in CrawlOverrides.proxy, the Service input for --proxy "
+            "or crawl.proxy.",
         )
-    given = overrides.given()
     if recorded.config["crawl"].get("auth") is not None and "auth" not in given:
         raise OpenLinxError(
             SECRETS_REQUIRED,
@@ -399,6 +406,8 @@ def continue_crawl(
         if refused is None:
             raise
         raise refused from error
+    if "proxy" in given:
+        check_fresh_proxy(settings.proxy)
     strip_params = strip_params_pattern(settings.strip_params)
     # The proxy variables of the continue's own environment, as a start reads them, recorded in
     # place of the start's.

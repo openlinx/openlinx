@@ -248,10 +248,16 @@ diagnostics and recorded again as `Name: ***`. Restoring secrets preserves the r
 Internal User-Agent winner, global dedicated User-Agent and literal Accept-Encoding
 entries, and revalidates the auth/Authorization conflict before opening resources.
 
-A continue keeps a recorded explicit proxy without a password. A recorded proxy password
-is `***`, so the service refuses the continue as `secrets_required` (exit 2), with a hint
-naming `--proxy` and `crawl.proxy`, before opening a writer or network connection.
-Fresh proxy input for a continue is not supported yet.
+A continue keeps a recorded explicit proxy without a password when the caller omits
+`CrawlOverrides.proxy`. If the recorded proxy is masked, omitting the input produces
+`secrets_required` (exit 2) with a hint naming `--proxy` and `crawl.proxy`. The caller
+can supply a fresh proxy URL through `CrawlOverrides.proxy`. The service masks its
+password again in the recorded config and in diagnostics. It rejects redaction
+markers, including percent-encoded password markers, and basic URL errors such as
+a missing host or an invalid port as `invalid_value` (exit 2,
+`details.key = "crawl.proxy"`). These checks run before the service opens a writer
+or network connection. An explicit empty string or `None` replaces the recorded
+proxy with environment handling, including `NO_PROXY`.
 
 With no explicit proxy, a continue fetches through the proxy variables of its own
 process, not the start's. It records the current variables in `crawl.config`'s
