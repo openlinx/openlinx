@@ -111,6 +111,25 @@ def test_stacked_codings_are_decoded_last_first() -> None:
     assert body.data == page
 
 
+def test_a_stacked_zstd_body_cannot_exceed_the_intermediate_cap() -> None:
+    # One zstd frame in two reads: a raw block holding a 25-byte gzip member for
+    # "hello", followed by an RLE block holding 100 bytes of zero padding.
+    first = bytes.fromhex("28b52ffd207dc800001f8b08000000000002ffcb48cdc9c9070086a6103605000000")
+    last = bytes.fromhex("23030000")
+
+    body = asyncio.run(read_body(_pieces(first, last), "gzip, zstd", limit=55))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"hello", True, 38)
+
+
+def test_a_zstd_decoder_refuses_a_window_above_the_http_limit() -> None:
+    # A 16 MiB window enclosing a five-byte raw block, without a content-size field.
+    packed = bytes.fromhex("28b52ffd007029000068656c6c6f")
+
+    with pytest.raises(BodyDecodingError):
+        _decoded(packed, "zstd")
+
+
 @pytest.mark.parametrize(
     ("packed", "coding"),
     [
@@ -125,10 +144,10 @@ def test_a_body_that_fails_to_decode_is_refused(packed: bytes, coding: str) -> N
         _decoded(packed, coding)
 
 
-def test_a_coding_that_was_not_offered_is_kept_as_received() -> None:
+def test_an_unsupported_coding_is_kept_as_received() -> None:
     packed = ROW * 10
 
-    body = _decoded(packed, "zstd")
+    body = _decoded(packed, "x-unknown")
 
     assert (body.data, body.transferred_bytes) == (packed, len(packed))
 

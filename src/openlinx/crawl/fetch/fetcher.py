@@ -13,7 +13,7 @@ from aiohttp.abc import AbstractResolver
 
 from openlinx import __version__
 from openlinx.clock import Clock
-from openlinx.crawl.fetch.body import SUPPORTED_CODINGS, BodyDecodingError, read_body
+from openlinx.crawl.fetch.body import BodyDecodingError, read_body
 from openlinx.crawl.fetch.cookies import redacted_header
 from openlinx.crawl.fetch.proxy import ProxyVariables
 from openlinx.crawl.fetch.tls import tls_context
@@ -83,7 +83,7 @@ class Fetcher(Protocol):
 
 
 _CHUNK_BYTES = 64 * 1024
-ACCEPT_ENCODING = ", ".join(SUPPORTED_CODINGS)
+ACCEPT_ENCODING = "gzip, deflate, br, zstd"
 DEFAULT_USER_AGENT = f"{PRODUCT_NAME}/{__version__} (+{CRAWLER_PAGE_URL})"
 
 

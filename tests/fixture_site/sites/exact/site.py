@@ -21,7 +21,7 @@ SITE = Site(
             content_type="text/javascript",
             headers=[("Content-Encoding", "gzip, br")],
         ),
-        # A server that compresses with zstd, which no request offers.
+        # A server that sends a precompressed HTML page.
         "/trail-shoes.html": Page(
             file="trail-shoes.html.zst",
             content_type="text/html",

@@ -67,7 +67,7 @@ def test_invalid_negotiation_syntax_is_refused_before_network(
 @pytest.mark.parametrize(
     ("workspace", "flags", "internal", "recorded"),
     [
-        ([], [], ["gzip, deflate, br"], []),
+        ([], [], ["gzip, deflate, br, zstd"], []),
         ([], ["Accept-Encoding: identity"], ["identity"], ["Accept-Encoding: identity"]),
         ([], ["accept-encoding:gzip"], ["gzip"], ["accept-encoding:gzip"]),
         (
@@ -123,8 +123,8 @@ def test_accept_encoding_overrides_have_literal_internal_and_external_outcomes(
     ]
     assert {r.path for r in hosts.other.requests} == {"/robots.txt", "/page"}
     assert [r.headers.getall("Accept-Encoding") for r in hosts.other.requests] == [
-        ["gzip, deflate, br"],
-        ["gzip, deflate, br"],
+        ["gzip, deflate, br, zstd"],
+        ["gzip, deflate, br, zstd"],
     ]
     assert json.loads(crawl_row(result.crawl_file)["config"])["crawl"]["header"] == recorded
 

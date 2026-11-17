@@ -79,8 +79,8 @@ passed independent review and the local full check (2,107 tests passed, 14 skipp
 98.59% coverage). Remaining runtime work and whole-change acceptance are open.
 Task 11.2a adds source-boundary Accept-Encoding validation and literal wire checks
 for overrides, including empty and repeated fields. Supported response decoding
-remains independent of the advertised preference. The default is still
-`gzip, deflate, br`; zstd remains in group 14.
+remains independent of the advertised preference. Task 14.1 expands the default to
+`gzip, deflate, br, zstd`.
 Task 14.8 requires actual Python 3.12–3.14 runtime evidence on Windows,
 macOS and Linux; local checks and mypy platform targets do not satisfy it. The resume
 Command adapter belongs to 060; Page capability population belongs to 030.
@@ -146,8 +146,7 @@ retaining recorded name case, positions and harmless bytes. Missing values fail 
 Real requests and stored records guard repeated continues, both User-Agent winners,
 Internal Accept-Encoding overrides, unchanged Workspace-independent settings,
 auth/Authorization conflicts and diagnostic masking. Named mutations prove the
-guards. External Accept-Encoding still uses the current `gzip, deflate, br` default;
-adding zstd remains group 14.
+guards. External Accept-Encoding uses the default, expanded to include zstd in 14.1.
 Confirm the actual branch, task marks and checks before continuing.
 Task 11.15 verifies the header/auth examples, Workspace and CLI metadata, and config
 JSON documentation. The docs distinguish the implemented continue service from the
@@ -196,6 +195,11 @@ metadata agrees with the Workspace setting and its literal contract.
 Task 13.1 records `http_1_1` for each plain HTTP origin when a request starts.
 Discovered origins that receive no request stay NULL. The schema describes offered
 capability on origins and Pages. Page population belongs to 030.
+
+Task 14.1 adds single-frame incremental zstd decoding with finite output budgets,
+including stacked codings. A locked conditional backport supplies the backend on
+Python 3.12 and 3.13. Multi-frame support, enforcement of the window limit across
+backend fast paths and the cross-platform runtime matrix remain open.
 
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint

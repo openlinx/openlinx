@@ -450,7 +450,7 @@ def test_continue_preserves_an_internal_accept_encoding_override(
         internal
     ] * 2
     assert [r.headers.getall("Accept-Encoding") for r in hosts.other.requests] == [
-        ["gzip, deflate, br"]
+        ["gzip, deflate, br, zstd"]
     ] * 2
     assert json.loads(crawl_row(result.crawl_file)["config"])["crawl"]["header"] == [
         *headers,
