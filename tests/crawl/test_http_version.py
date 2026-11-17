@@ -8,6 +8,7 @@ from openlinx.services.crawling import CrawlOverrides
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.tls import StartTlsHosts
+from tests.support.alpn import with_wrong_name_for_probe
 from tests.support.crawling import continued, crawl_result
 from tests.support.crawls import query
 from tests.support.proxy import StartProxy
@@ -82,6 +83,40 @@ def _crawl_https(fixture_tls_hosts: StartTlsHosts, *, alpn: tuple[str, ...]) -> 
         ("https://site.test/", 200)
     ]
     return result.crawl_file
+
+
+def test_one_failed_probe_is_not_repeated_for_another_url(
+    temp_workspace: TempWorkspace, fixture_tls_hosts: StartTlsHosts
+) -> None:
+    site = Site(
+        {
+            "/": Page(body='<a href="/a">A</a><a href="/b">B</a>'),
+            "/a": Page(body="<p>A</p>", after="/b"),
+            "/b": Page(body="<p>B</p>", after="/a"),
+        }
+    )
+    hosts = fixture_tls_hosts(site, OTHER)
+
+    result = crawl_result(
+        "https://site.test/",
+        fetchers=with_wrong_name_for_probe(hosts),
+        concurrency=2,
+        network_wait=0,
+        retries=0,
+    )
+
+    assert result.summary.state == "completed"
+    assert hosts.secure_site.most_simultaneous == 2
+    assert query(result.crawl_file, "SELECT url, status_code FROM urls ORDER BY url") == [
+        ("https://site.test/", 200),
+        ("https://site.test/a", 200),
+        ("https://site.test/b", 200),
+    ]
+    assert hosts.badcert.requests == ()
+    assert hosts.badcert_sni.names == ("site.test",)
+    assert query(result.crawl_file, "SELECT origin, http_version FROM origins") == [
+        ("https://site.test", None)
+    ]
 
 
 def test_a_plain_http_origin(

@@ -50,6 +50,7 @@ def crawl_result(
     reporter: Reporter | None = None,
     clock: Clock | None = None,
     fetcher: Fetcher | None = None,
+    fetchers: FetcherFactory | None = None,
     stop: StopSignal | None = None,
     tables: SettingsTables | None = None,
     **crawl: Any,
@@ -82,7 +83,7 @@ def crawl_result(
         reporter or Collected(),
         hooks or default_hooks(),
         pages=pages,
-        fetchers=_fetchers(resolver, trust_anchors, fetcher),
+        fetchers=fetchers or _fetchers(resolver, trust_anchors, fetcher),
         stop=stop,
     )
 
