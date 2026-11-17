@@ -196,6 +196,57 @@ async def _pieces(*pieces: bytes) -> AsyncIterator[bytes]:
         yield piece
 
 
+_ZSTD_HELLO = bytes.fromhex("28b52ffd200529000068656c6c6f")
+_ZSTD_SKIPPABLE = bytes.fromhex("5f2a4d180400000028b52ffd")
+
+
+@pytest.mark.parametrize("split", range(29))
+def test_concatenated_zstd_frames_are_decoded_across_input_boundaries(split: int) -> None:
+    packed = _ZSTD_HELLO * 2
+
+    body = asyncio.run(read_body(_pieces(packed[:split], packed[split:]), "zstd"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"hellohello", False, 28)
+
+
+@pytest.mark.parametrize("chunk_size", [1, 64])
+def test_zstd_skippable_frames_leave_only_the_decoded_body(chunk_size: int) -> None:
+    # The skippable payload itself looks like zstd magic and must be ignored.
+    packed = _ZSTD_SKIPPABLE + _ZSTD_HELLO + _ZSTD_SKIPPABLE + _ZSTD_HELLO + _ZSTD_SKIPPABLE
+
+    body = asyncio.run(read_body(_chunks(packed, chunk_size), "zstd"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"hellohello", False, 64)
+
+
+def test_many_zstd_skippable_frames_can_form_an_empty_body() -> None:
+    packed = _ZSTD_SKIPPABLE * 257
+
+    body = asyncio.run(read_body(_pieces(packed), "zstd"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"", False, 3084)
+
+
+@pytest.mark.parametrize(
+    ("limit", "tail", "truncated"),
+    [(65_542, b"hello", False), (65_539, b"he", True)],
+    ids=["exact-budget", "budget-inside-next-frame"],
+)
+def test_zstd_drains_buffered_output_before_advancing_to_the_next_frame(
+    limit: int, tail: bytes, truncated: bool
+) -> None:
+    # A 13-byte frame with an RLE block of 65,537 copies of "x".
+    packed = bytes.fromhex("28b52ffda0010001000b000878") + _ZSTD_HELLO
+
+    body = asyncio.run(read_body(_pieces(packed), "zstd", limit))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (
+        b"x" * 65_537 + tail,
+        truncated,
+        27,
+    )
+
+
 @pytest.mark.parametrize("coding", ["gzip", "deflate", "br"])
 def test_bytes_after_a_finished_stream_are_ignored(coding: str) -> None:
     # A server that ends every response with a line break after the compressed body.

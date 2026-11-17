@@ -17,6 +17,8 @@ BODY_LIMIT = 20 * 1024 * 1024
 # Decoder capabilities do not depend on a request's Accept-Encoding preference.
 SUPPORTED_CODINGS = ("gzip", "deflate", "br", "zstd")
 _GZIP_MAGIC = b"\x1f\x8b"
+_ZSTD_FEED_BYTES = 1024
+_ZSTD_OUTPUT_BYTES = 64 * 1024
 
 
 class BodyDecodingError(ValueError):
@@ -115,30 +117,47 @@ class _Brotli:
         return finished
 
 
+def _zstd_frame() -> zstd.ZstdDecompressor:
+    # RFC 9659 limits an HTTP zstd window to 8 MiB independently of its output size.
+    return zstd.ZstdDecompressor(options={zstd.DecompressionParameter.window_log_max: 23})
+
+
 class _Zstd:
     def __init__(self) -> None:
-        # RFC 9659 limits an HTTP zstd window to 8 MiB independently of its output size.
-        self._inflate = zstd.ZstdDecompressor(
-            options={zstd.DecompressionParameter.window_log_max: 23}
-        )
+        self._inflate = _zstd_frame()
+        self._pending = memoryview(b"")
 
     def decode(self, data: bytes, limit: int) -> bytes:
-        if self._inflate.eof:
-            if data:
-                raise BodyDecodingError("The body contains data after its zstd frame.")
-            return b""
-        output = self._inflate.decompress(data, max_length=limit)
-        if self._inflate.unused_data:
-            raise BodyDecodingError("The body contains data after its zstd frame.")
-        return output
+        if data:
+            self._pending = memoryview(self._pending.tobytes() + data if self._pending else data)
+        return self.drain(limit)
 
     def drain(self, limit: int) -> bytes:
-        if self._inflate.eof or self._inflate.needs_input:
-            return b""
-        return self.decode(b"", limit)
+        output = bytearray()
+        while len(output) < limit:
+            data: bytes | memoryview = b""
+            if self._inflate.eof:
+                data = self._inflate.unused_data
+                if not data and not self._pending:
+                    break
+                self._inflate = _zstd_frame()
+            if self._inflate.needs_input and not data:
+                if not self._pending:
+                    break
+                # Each frame can copy unused_data. Limit the tail it can copy even when
+                # one read contains many tiny frames.
+                data = self._pending[:_ZSTD_FEED_BYTES]
+                self._pending = (
+                    self._pending[len(data) :]
+                    if len(data) < len(self._pending)
+                    else memoryview(b"")
+                )
+            budget = min(limit - len(output), _ZSTD_OUTPUT_BYTES)
+            output.extend(self._inflate.decompress(data, max_length=budget))
+        return bytes(output)
 
     def finished(self) -> bool:
-        return self._inflate.eof
+        return self._inflate.eof and not self._inflate.unused_data and not self._pending
 
 
 class _Chain:

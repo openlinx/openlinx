@@ -106,6 +106,33 @@ def test_a_zstd_resource_records_both_sizes(
     }
 
 
+def test_concatenated_zstd_frames_form_one_body(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, tmp_path: Path
+) -> None:
+    (tmp_path / "app.js.zst").write_bytes(bytes.fromhex("28b52ffd200529000068656c6c6f") * 2)
+    server = fixture_site(
+        Site(
+            root=tmp_path,
+            routes={
+                "/": Page(body='<script src="/app.js"></script>'),
+                "/app.js": Page(
+                    file="app.js.zst",
+                    content_type="text/javascript",
+                    headers=[("Content-Encoding", "zstd")],
+                ),
+            },
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT size_bytes, transferred_bytes, content_encoding FROM urls WHERE url = ?",
+        [server.url("/app.js")],
+    ) == [(10, 28, "zstd")]
+
+
 def test_stacked_encodings_are_decoded_in_reverse_order(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

@@ -198,8 +198,12 @@ capability on origins and Pages. Page population belongs to 030.
 
 Task 14.1 adds single-frame incremental zstd decoding with finite output budgets,
 including stacked codings. A locked conditional backport supplies the backend on
-Python 3.12 and 3.13. Multi-frame support, enforcement of the window limit across
-backend fast paths and the cross-platform runtime matrix remain open.
+Python 3.12 and 3.13. Enforcement of the window limit across backend fast paths and
+the cross-platform runtime matrix remain open.
+
+Task 14.2 reads concatenated and skippable zstd frames across arbitrary input
+boundaries. Each decoding call has a finite output budget. Buffered output is
+drained before the decoder accepts more input.
 
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
