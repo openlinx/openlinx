@@ -182,6 +182,10 @@ Task 12.3 preserves credential-free explicit proxy URLs in argv and config, and
 masks both the original and percent-decoded password in diagnostics. Separate
 CLI and Workspace cases retain the environment proxy recording policy.
 
+Task 12.5 verifies that CONNECT carries neither Authorization nor X-Env through
+an authenticated proxy. The Internal origin receives both headers, while the
+External origin receives neither on its robots.txt and Page requests.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
