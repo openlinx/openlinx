@@ -103,7 +103,9 @@ def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy
             password = value.partition(":")[2] if setting == "crawl.auth" else _password(value)
             if password:
                 found.add(password)
-                if policy == "url" and (decoded := _decoded_url_password(value)):
+                if (policy is True or policy == "url") and (
+                    decoded := _decoded_url_password(value)
+                ):
                     found.add(decoded)
             if setting == "crawl.auth":
                 # Match the exact UTF-8 wire bytes without re-raising invalid-input errors.

@@ -10,9 +10,10 @@ from openlinx.crawl.engine.hooks import Hooks, UrlResult, handler
 from openlinx.output.reporter import Collected
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.tls import StartTlsHosts
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
-from tests.support.proxy import StartProxy
+from tests.support.proxy import ConnectReply, StartProxy
 from tests.support.workspace import TempWorkspace
 
 
@@ -48,6 +49,43 @@ def test_a_quoted_proxy_password_is_hidden_in_request_failures(
         assert "proxy refused '***' (decoded '***')" in message
         assert "relay%40pass" not in message
         assert "relay@pass" not in message
+
+
+def test_an_environment_proxy_password_is_hidden_in_connect_failures(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hosts = fixture_tls_hosts(Site({"/": Page(body="<title>Shop</title>")}), Site({}))
+    rejection = ConnectReply(
+        (b"HTTP/1.1 407 Refused 'relay%40pass' (decoded 'relay@pass')\r\n\r\n",),
+        relay=False,
+    )
+    proxy = fixture_proxy(hosts.resolver, connect_replies=(rejection,))
+    monkeypatch.setenv("HTTPS_PROXY", f"u:relay%40pass@{proxy.url.removeprefix('http://')}")
+
+    result = crawl_result(
+        "https://site.test/", trust_anchors=hosts.trust_anchors, retries=0, network_wait=0
+    )
+
+    assert proxy.connect_requests
+    assert {request.headers.get("Proxy-Authorization") for request in proxy.connect_requests} == {
+        "Basic dTpyZWxheUBwYXNz"
+    }
+    assert hosts.secure_site.requests == ()
+    [(url_error, url_message)] = query(
+        result.crawl_file, "SELECT fetch_error, fetch_error_message FROM urls"
+    )
+    [(robots_error, robots_message)] = query(
+        result.crawl_file, "SELECT robots_fetch_error, robots_fetch_error_message FROM origins"
+    )
+    assert (url_error, robots_error) == ("invalid_response", "invalid_response")
+    for message in (url_message, robots_message):
+        assert "Refused '***' (decoded '***')" in message
+    recorded = result.crawl_file.read_bytes()
+    assert b"relay%40pass" not in recorded
+    assert b"relay@pass" not in recorded
 
 
 def _quote_proxy_password(_result: UrlResult) -> tuple[str, ...]:
