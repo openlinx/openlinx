@@ -8,7 +8,8 @@ Grouped Commands appear by their full path in `linx commands`. Use `linx rules l
 
 `linx rules show <id>` prints one Rule as a JSON object with the same fields as a list item.
 Use `--format table` for a table. In both Commands, `thresholds` maps each name to an object
-with `value`, `default` and `unit`, or is empty for a Rule without thresholds.
+with `value`, `default` and `unit`. A Rule without thresholds, such as `title-missing`, has
+`"thresholds": {}`.
 The current `value` for each threshold is its catalogue `default`. For `title-too-long`,
 `max_chars` is 60 characters.
 An unknown id returns `rule_not_found` and directs you to `linx rules list`.

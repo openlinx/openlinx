@@ -2,6 +2,23 @@
 
 from openlinx.rules.model import NO_ROWS, Rule, Threshold
 
+TITLE_MISSING = Rule(
+    id="title-missing",
+    category="titles",
+    issue_type="issue",
+    priority="high",
+    applies_to="internal_pages",
+    description="A Page has no title, or its first title is empty.",
+    why_it_matters=(
+        "A descriptive title helps people identify the Page in search results and browser tabs."
+    ),
+    how_to_fix=(
+        "If the Page has no title, add a <title> element to its <head>. If the first "
+        "<title> is empty, fill it in. Use words that describe the Page and set it "
+        "apart from the site's other Pages."
+    ),
+    reproduce_sql=NO_ROWS,
+)
 TITLE_TOO_LONG = Rule(
     id="title-too-long",
     category="titles",
@@ -18,4 +35,4 @@ TITLE_TOO_LONG = Rule(
     thresholds=(Threshold("max_chars", 60, "characters"),),
 )
 
-RULES = (TITLE_TOO_LONG,)
+RULES = (TITLE_MISSING, TITLE_TOO_LONG)

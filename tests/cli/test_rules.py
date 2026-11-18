@@ -55,6 +55,33 @@ def test_show_a_rule_with_thresholds() -> None:
     )
 
 
+def test_rule_without_thresholds() -> None:
+    result = run_cli("rules", "list", "--limit", "50")
+
+    assert result.exit_code == 0, result.stderr
+    items = result.json()["items"]
+    assert [item for item in items if item["id"] == "title-missing"] == [
+        {
+            "id": "title-missing",
+            "category": "titles",
+            "issue_type": "issue",
+            "priority": "high",
+            "applies_to": "internal_pages",
+            "thresholds": {},
+            "description": "A Page has no title, or its first title is empty.",
+            "why_it_matters": (
+                "A descriptive title helps people identify the Page in search results "
+                "and browser tabs."
+            ),
+            "how_to_fix": (
+                "If the Page has no title, add a <title> element to its <head>. If the first "
+                "<title> is empty, fill it in. Use words that describe the Page and set it "
+                "apart from the site's other Pages."
+            ),
+        }
+    ]
+
+
 def test_unknown_rule_id() -> None:
     result = run_cli("rules", "show", "nope")
     error = result.stderr_json_lines()[-1]
@@ -77,10 +104,13 @@ def test_show_matches_the_rule_in_the_catalogue() -> None:
     assert isinstance(cursor, str)
     assert cursor
 
-    following = run_cli("rules", "list", "--cursor", cursor, "--limit", "1")
-    shown = run_cli("rules", "show", "title-too-long")
-    assert following.exit_code == shown.exit_code == 0
-    assert following.json()["items"] == [shown.json()]
+    following = run_cli("rules", "list", "--cursor", cursor, "--limit", "2")
+    missing = run_cli("rules", "show", "title-missing")
+    too_long = run_cli("rules", "show", "title-too-long")
+    assert following.exit_code == 0, following.stderr
+    assert missing.exit_code == 0, missing.stderr
+    assert too_long.exit_code == 0, too_long.stderr
+    assert following.json()["items"] == [missing.json(), too_long.json()]
 
 
 def test_the_bare_group_lists_the_rules() -> None:
