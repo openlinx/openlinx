@@ -8,6 +8,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from yarl import URL
 
+from openlinx.proxy_urls import proxy_url, split_absolute_url
 from openlinx.store.records import SecretNames
 from openlinx.workspace.tables import SecretPolicy
 
@@ -99,12 +100,13 @@ def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy
                 if secret:
                     found.add(secret)
         elif isinstance(value, str) and value:
-            found.add(value)
-            password = value.partition(":")[2] if setting == "crawl.auth" else _password(value)
+            url = _secret_url(value, policy)
+            found.update((value, url))
+            password = value.partition(":")[2] if setting == "crawl.auth" else _password(url)
             if password:
                 found.add(password)
-                if (policy is True or policy == "url") and (
-                    decoded := _decoded_url_password(value)
+                if (policy is True or policy in ("url", "proxy")) and (
+                    decoded := _decoded_url_password(url)
                 ):
                     found.add(decoded)
             if setting == "crawl.auth":
@@ -115,6 +117,12 @@ def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy
                     continue
                 found.update((encoded, f"Basic {encoded}"))
     return SecretValues(tuple(sorted(found, key=len, reverse=True)))
+
+
+def _secret_url(value: str, policy: SecretPolicy) -> str:
+    if policy == "proxy":
+        return proxy_url(value) or value
+    return value
 
 
 def _password(value: str) -> str | None:
@@ -192,18 +200,18 @@ def _redact_value(value: str, policy: SecretPolicy) -> str:
         if not colon:
             return REDACTED
         return f"{name}: {REDACTED}" if is_sensitive_header(name) else value
+    keep_url = policy in ("url", "proxy")
     try:
-        parts = urlsplit(value)
-        password = parts.password
-        if policy == "url":
-            # urlsplit tolerates missing hosts, bad ports and whitespace; keep no malformed URL.
-            if not parts.scheme or not parts.hostname or any(ord(char) <= 32 for char in value):
-                return REDACTED
-            _ = parts.port
+        parts = split_absolute_url(_secret_url(value, policy)) if keep_url else urlsplit(value)
     except ValueError:
-        # A malformed URL, such as an unclosed [ in its host: nothing of it is kept.
         return REDACTED
-    if password is None:
-        return value if policy == "url" else REDACTED
+    if parts is None:
+        return REDACTED
+    if parts.password is None:
+        return value if keep_url else REDACTED
     host = parts.netloc.rpartition("@")[2]
-    return urlunsplit(parts._replace(netloc=f"{parts.username}:{REDACTED}@{host}"))
+    netloc = f"{parts.username}:{REDACTED}@{host}"
+    if policy == "proxy":
+        # The authority with userinfo can only occur after the scheme, if one was supplied.
+        return value.replace(parts.netloc, netloc, 1)
+    return urlunsplit(parts._replace(netloc=netloc))

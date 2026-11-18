@@ -618,10 +618,12 @@ environment handling, including `NO_PROXY`; it does not disable environment prox
 An empty Workspace proxy also uses the environment. The resolved setting records as
 `null` for empty input, or as the normalized URL otherwise.
 
-Credentials may be included as `http://u:pw@proxy.corp:3128`. Recorded argv and
-`crawl.config` hide the password as `http://u:***@proxy.corp:3128`; an explicit URL
-without a password remains visible. Warnings and saved failure messages hide an
-explicit proxy password both as written in the URL and after percent decoding.
+Credentials may be included as `http://u:pw@proxy.corp:3128`. Recorded argv keeps
+the spelling of the proxy argument, so `u:pw@proxy.corp:3128` becomes
+`u:***@proxy.corp:3128`. The normalized `crawl.config` value is
+`http://u:***@proxy.corp:3128`. A valid explicit proxy without a password remains visible.
+Warnings and saved failure messages hide an explicit proxy password both as
+written in the URL and after percent decoding.
 The continue service accepts a fresh URL through `CrawlOverrides.proxy`.
 See [Continuing a Crawl](#continuing-a-crawl).
 

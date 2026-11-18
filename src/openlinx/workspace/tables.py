@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     # Only for typing: pydantic must stay off the CLI's startup path.
     from pydantic import BaseModel
 
-type SecretPolicy = bool | Literal["whole", "header", "url"]
+type SecretPolicy = bool | Literal["whole", "header", "url", "proxy"]
 
 
 # A table model, or a keyed table: dict[str, V] whose V is a table model.
@@ -37,7 +37,7 @@ class SettingsTables:
         model: Any = _resolve(self._references[name])
         extra = model.model_fields[key].json_schema_extra
         policy = extra.get("secret", False) if isinstance(extra, dict) else False
-        if isinstance(policy, bool) or policy in ("whole", "header", "url"):
+        if isinstance(policy, bool) or policy in ("whole", "header", "url", "proxy"):
             return cast(SecretPolicy, policy)
         raise TypeError(f"Setting {setting} has an invalid secret policy.")
 

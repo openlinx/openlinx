@@ -123,7 +123,9 @@ def test_a_quoted_proxy_password_is_hidden_in_emitted_and_recorded_warnings(
     )
 
 
-@pytest.mark.parametrize("source", ["split", "joined", "workspace"])
+@pytest.mark.parametrize(
+    "source", ["split", "joined", "schemeless-split", "schemeless-joined", "workspace"]
+)
 @pytest.mark.parametrize(
     ("userinfo", "recorded_userinfo"),
     [("relay:p%40ss%3Aword@", "relay:***@"), ("", "")],
@@ -142,24 +144,28 @@ def test_a_proxy_password_is_redacted(
     proxy = fixture_proxy(hosts.resolver)
     address = proxy.url.removeprefix("http://")
     explicit = f"http://{userinfo}{address}"
+    schemeless = source.startswith("schemeless-")
+    argument = f"{userinfo}{address}" if schemeless else explicit
     recorded = f"http://{recorded_userinfo}{address}"
+    recorded_argument = f"{recorded_userinfo}{address}" if schemeless else recorded
     monkeypatch.setenv("HTTP_PROXY", "http://worker:env-pass@proxy.test:3128")
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.test:3128")
     monkeypatch.setenv("NO_PROXY", "other.test")
     flags: tuple[str, ...] = ()
     recorded_flags: tuple[str, ...] = ()
-    if source == "split":
-        flags = ("--proxy", explicit)
-        recorded_flags = ("--proxy", recorded)
-    elif source == "joined":
-        flags = (f"--proxy={explicit}",)
-        recorded_flags = (f"--proxy={recorded}",)
+    if source.endswith("split"):
+        flags = ("--proxy", argument)
+        recorded_flags = ("--proxy", recorded_argument)
+    elif source.endswith("joined"):
+        flags = (f"--proxy={argument}",)
+        recorded_flags = (f"--proxy={recorded_argument}",)
     else:
         (temp_workspace.root / "openlinx.toml").write_text(
             f'[crawl]\nproxy = "{explicit}"\n', encoding="utf-8"
         )
 
     file = crawled("http://site.test/", *flags)
+    assert "http://site.test/" in proxy.requests
     [(argv, config)] = query(file, "SELECT command_argv, config FROM crawl")
     settings = json.loads(config)
 

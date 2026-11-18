@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from openlinx.crawl.setting_rules import proxy_url
+from openlinx.proxy_urls import proxy_url
 
 # The keys of the environment table of crawl.config whose proxy URL may hold a password.
 SECRET_KEYS = ("http_proxy", "https_proxy")

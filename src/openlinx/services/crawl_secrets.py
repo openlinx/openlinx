@@ -4,9 +4,10 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import unquote
 
-from openlinx.crawl.setting_rules import as_headers, proxy_url, split_absolute_url
+from openlinx.crawl.setting_rules import as_headers
 from openlinx.output.codes import CRAWL_FILE_INVALID, INVALID_VALUE, SECRETS_REQUIRED
 from openlinx.output.diagnostics import OpenLinxError
+from openlinx.proxy_urls import proxy_url, split_absolute_url
 from openlinx.store.redaction import REDACTED, is_sensitive_header
 
 

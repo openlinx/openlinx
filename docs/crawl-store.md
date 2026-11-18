@@ -117,6 +117,7 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
   | `"url"` | a valid URL with a password | the URL with only its password replaced by `***` |
   | `"url"` | a valid credential-free URL | unchanged |
   | `"url"` | a malformed URL | `***` |
+  | `"proxy"` | an explicit proxy, including `ann:s3cret@proxy.test:8080` | `ann:***@proxy.test:8080` in argv and `http://ann:***@proxy.test:8080` in the normalized config |
   | `False` | any value | unchanged |
 
   Header lists retain order and repeated entries. A header is sensitive when its name

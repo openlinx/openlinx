@@ -9,9 +9,9 @@ from openlinx.crawl.setting_rules import (
     as_robots_token,
     as_timeout,
     as_user_agent,
-    proxy_url,
 )
 from openlinx.naming import DEFAULT_ROBOTS_TOKEN
+from openlinx.proxy_urls import proxy_url
 from openlinx.store.records import ScopeKind
 
 
@@ -83,7 +83,7 @@ class CrawlSettings(BaseModel):
         description="The HTTP proxy URL for every request, robots.txt's included; a nonempty "
         "value overrides proxy environment variables. A schemeless URL uses HTTP; empty uses "
         "the environment. Its password is hidden in records.",
-        json_schema_extra={"secret": "url"},
+        json_schema_extra={"secret": "proxy"},
     )
     timeout: float = Field(
         20,
