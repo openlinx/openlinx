@@ -1381,7 +1381,12 @@ def fake_clock_with_real_io(sources: Mapping[str, str]) -> list[str]:
             unfaked_crawl = any(
                 _called(call) in CRAWLS
                 and not any(
-                    keyword.arg == "fetcher"
+                    (
+                        keyword.arg == "fetcher"
+                        and not (
+                            isinstance(keyword.value, ast.Constant) and keyword.value.value is None
+                        )
+                    )
                     or (keyword.arg == "fetchers" and _is_fake_fetcher_factory(keyword.value))
                     for keyword in call.keywords
                 )
@@ -1414,6 +1419,8 @@ def test_no_test_pairs_the_virtual_clock_with_real_io() -> None:
     [
         "start_crawl(plan, clock, reporter, hooks",
         "continue_crawl(file, overrides, clock, reporter, hooks",
+        pytest.param("crawl_result(seed, clock=clock, fetcher=None", id="start-with-none"),
+        pytest.param("continued(result, clock=clock, fetcher=None", id="continue-with-none"),
     ],
 )
 def test_a_virtual_clock_with_an_explicit_fake_fetcher_factory_is_allowed(crawl: str) -> None:
@@ -1447,6 +1454,22 @@ def test_a_virtual_clock_with_an_unproven_fetcher_factory_is_named(factory: str)
 
     assert fake_clock_with_real_io(sources) == [
         "tests/crawl/test_timing.py:1 test_factory pairs FakeClock with real I/O"
+    ]
+
+
+@pytest.mark.parametrize(
+    "crawl",
+    ["crawl_result(seed", "continued(result"],
+    ids=["start", "continue"],
+)
+def test_a_virtual_clock_with_an_explicit_default_fetcher_is_named(crawl: str) -> None:
+    sources = {
+        "tests/crawl/test_timing.py": "def test_default_fetcher():\n"
+        f"    {crawl}, clock=FakeClock(), fetcher=None)\n",
+    }
+
+    assert fake_clock_with_real_io(sources) == [
+        "tests/crawl/test_timing.py:1 test_default_fetcher pairs FakeClock with real I/O"
     ]
 
 
