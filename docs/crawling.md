@@ -410,7 +410,7 @@ limits. One `--timeout` budget starts at scheduling and covers waiting for a con
 slot, DNS, TCP, any proxy CONNECT and TLS. The CONNECT response head can total up to
 65,536 bytes, including the status line and final blank line. On normal completion the
 Crawl waits for probes to end. On stop it cancels pending and active probes, then waits
-for them to close any open connections and exit.
+for them to release their DNS and connection resources and exit.
 
 ### `--scope`
 

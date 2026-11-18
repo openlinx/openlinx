@@ -12,6 +12,7 @@ from aiohttp.abc import AbstractResolver, ResolveResult
 from aiohttp.helpers import is_ip_address
 
 from openlinx.crawl.fetch.proxy_connect import CONNECT_STREAM_LIMIT, establish_tunnel
+from openlinx.crawl.fetch.system_dns import resolve_system
 from openlinx.crawl.fetch.tls import tls_context
 from openlinx.store.records import HttpVersion
 
@@ -19,7 +20,7 @@ from openlinx.store.records import HttpVersion
 class AlpnProbe:
     def __init__(
         self,
-        resolver: AbstractResolver,
+        resolver: AbstractResolver | None,
         trust_anchors: str | None,
         timeout_seconds: float,
         proxy_for: Callable[[str], str | None],
@@ -113,6 +114,8 @@ class AlpnProbe:
 
     async def _addresses(self, host: str, port: int) -> list[ResolveResult]:
         if not is_ip_address(host):
+            if self._resolver is None:
+                return await resolve_system(host, port)
             return await self._resolver.resolve(host, port, family=socket.AF_UNSPEC)
         # Match aiohttp's literal routing and rejection of noncanonical numeric IPv4.
         try:

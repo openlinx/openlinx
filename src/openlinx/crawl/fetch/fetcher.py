@@ -12,7 +12,7 @@ import aiohttp
 import yarl
 from aiohttp.abc import AbstractResolver
 from aiohttp.connector import Connection
-from aiohttp.resolver import DefaultResolver
+from aiohttp.resolver import DefaultResolver, ThreadedResolver
 from aiohttp.typedefs import LooseHeaders
 
 from openlinx import __version__
@@ -249,10 +249,13 @@ async def aiohttp_fetcher(
 ) -> AsyncIterator[AiohttpFetcher]:
     """`resolver` and `trust_anchors` (PEM certificates trusted besides the OS store) are for
     tests: the DNS resolver hook and the test CA."""
+    probe_resolver = resolver
     async with AsyncExitStack() as stack:
         if resolver is None:
             resolver = DefaultResolver()
             stack.push_async_callback(resolver.close)
+            if not isinstance(resolver, ThreadedResolver):
+                probe_resolver = resolver
         request_tls = tls_context(trust_anchors)
         session = await stack.enter_async_context(
             aiohttp.ClientSession(
@@ -272,7 +275,7 @@ async def aiohttp_fetcher(
             clock,
             policy,
             AlpnProbe(
-                resolver,
+                probe_resolver,
                 trust_anchors,
                 policy.timeout_seconds,
                 policy.proxy_for,
