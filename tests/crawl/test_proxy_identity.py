@@ -32,7 +32,7 @@ def test_connect_does_not_carry_custom_origin_identity(
         proxy=proxy.url.replace("http://", "http://u:pw@"),
         trust_anchors=ca.cert_pem.bytes().decode("ascii"),
         auth="alice:s3cret",
-        header=["X-Env: staging"],
+        header=["X-Env: staging", "Host: staging-vhost.test"],
         retries=0,
         network_wait=0,
     )
@@ -42,27 +42,33 @@ def test_connect_does_not_carry_custom_origin_identity(
         (
             request.method,
             request.target,
+            tuple(host.removesuffix(":443") for host in request.headers.getall("Host", [])),
             tuple(request.headers.getall("Authorization", [])),
             tuple(request.headers.getall("X-Env", [])),
         )
         for request in proxy.connect_requests
-    } == {("CONNECT", "site.test:443", (), ()), ("CONNECT", "other.test:443", (), ())}
+    } == {
+        ("CONNECT", "site.test:443", ("site.test",), (), ()),
+        ("CONNECT", "other.test:443", ("other.test",), (), ()),
+    }
     assert [
         (
             request.path,
+            request.headers.get("Host"),
             request.headers.getall("Authorization", []),
             request.headers.getall("X-Env", []),
         )
         for request in internal.requests
     ] == [
-        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"], ["staging"]),
-        ("/", ["Basic YWxpY2U6czNjcmV0"], ["staging"]),
+        ("/robots.txt", "staging-vhost.test", ["Basic YWxpY2U6czNjcmV0"], ["staging"]),
+        ("/", "staging-vhost.test", ["Basic YWxpY2U6czNjcmV0"], ["staging"]),
     ]
     assert sorted(
         (
             request.path,
+            request.headers.get("Host"),
             request.headers.getall("Authorization", []),
             request.headers.getall("X-Env", []),
         )
         for request in external.requests
-    ) == [("/partner", [], []), ("/robots.txt", [], [])]
+    ) == [("/partner", "other.test", [], []), ("/robots.txt", "other.test", [], [])]

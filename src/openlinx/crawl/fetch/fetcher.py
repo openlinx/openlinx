@@ -10,7 +10,9 @@ from typing import Protocol, runtime_checkable
 import aiohttp
 import yarl
 from aiohttp.abc import AbstractResolver
+from aiohttp.connector import Connection
 from aiohttp.resolver import DefaultResolver
+from aiohttp.typedefs import LooseHeaders
 
 from openlinx import __version__
 from openlinx.clock import Clock
@@ -135,6 +137,33 @@ def request_headers(policy: FetchPolicy, *, is_internal: bool) -> tuple[tuple[st
 type FetcherFactory = Callable[[FetchPolicy, Clock], AbstractAsyncContextManager[Fetcher]]
 
 
+class _TunnelRequest(aiohttp.ClientRequest):
+    """Keep an origin Host override out of aiohttp's proxy CONNECT."""
+
+    _origin_host: str | None = None
+
+    def update_proxy(
+        self,
+        proxy: yarl.URL | None,
+        proxy_auth: aiohttp.BasicAuth | None,
+        proxy_headers: LooseHeaders | None,
+    ) -> None:
+        super().update_proxy(proxy, proxy_auth, proxy_headers)
+        if proxy is not None and self.is_ssl():
+            authority = self.url.host_port_subcomponent
+            if authority is None:
+                raise RuntimeError("A tunnel request needs an origin authority")
+            # The connector takes Host from this request when building CONNECT.
+            self._origin_host = self.headers["Host"]
+            self.headers["Host"] = authority
+
+    async def send(self, conn: Connection) -> aiohttp.ClientResponse:
+        # The connection (including any CONNECT and TLS) has already been established.
+        if self._origin_host is not None:
+            self.headers["Host"] = self._origin_host
+        return await super().send(conn)
+
+
 class AiohttpFetcher:
     def __init__(
         self,
@@ -227,6 +256,7 @@ async def aiohttp_fetcher(
             aiohttp.ClientSession(
                 connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
                 timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
+                request_class=_TunnelRequest,
                 skip_auto_headers={"User-Agent", "Accept-Encoding"},
                 # A cookie set by one response must not change what later ones return.
                 cookie_jar=aiohttp.DummyCookieJar(),
