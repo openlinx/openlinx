@@ -1,10 +1,11 @@
 """Validate fresh secrets for a continue and restore recorded sensitive header slots."""
 
 from collections import Counter
-from urllib.parse import unquote, urlsplit
+from pathlib import Path
+from urllib.parse import unquote
 
-from openlinx.crawl.setting_rules import as_headers
-from openlinx.output.codes import INVALID_VALUE, SECRETS_REQUIRED
+from openlinx.crawl.setting_rules import as_headers, proxy_url, split_absolute_url
+from openlinx.output.codes import CRAWL_FILE_INVALID, INVALID_VALUE, SECRETS_REQUIRED
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.redaction import REDACTED, is_sensitive_header
 
@@ -13,23 +14,36 @@ def check_fresh_proxy(proxy: str | None) -> None:
     """Refuse a malformed URL or a replay of a marker before opening resources."""
     if proxy is None:
         return
-    try:
-        parts = urlsplit(proxy)
-        _ = parts.port
-        if (
-            parts.scheme
-            and parts.hostname not in (None, REDACTED)
-            and not any(ord(char) <= 32 for char in proxy)
-            and unquote(parts.password or "") != REDACTED
-        ):
-            return
-    except ValueError:
-        pass
+    parts = split_absolute_url(proxy)
+    if parts and parts.hostname != REDACTED and unquote(parts.password or "") != REDACTED:
+        return
     raise OpenLinxError(
         INVALID_VALUE,
         "Invalid value for crawl.proxy: supply a valid proxy URL without redaction markers.",
         details={"key": "crawl.proxy"},
     )
+
+
+def check_recorded_proxy(proxy: object, path: Path) -> None:
+    """Validate a retained proxy and require fresh input for recorded credentials."""
+    if proxy is None or proxy == "":
+        return
+    normalized = proxy_url(proxy) if isinstance(proxy, str) else None
+    parts = split_absolute_url(normalized) if normalized is not None else None
+    if proxy == REDACTED or (parts and parts.password is not None):
+        raise OpenLinxError(
+            SECRETS_REQUIRED,
+            "Continuing this Crawl requires fresh proxy credentials.",
+            hint="Pass a fresh URL in CrawlOverrides.proxy, the Service input for --proxy "
+            "or crawl.proxy.",
+        )
+    if parts is None or parts.hostname == REDACTED:
+        raise OpenLinxError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} has an invalid crawl.proxy value.",
+            hint="Supply a replacement in CrawlOverrides.proxy or start a new Crawl.",
+            details={"file": str(path)},
+        )
 
 
 def restored_headers(recorded: list[str], fresh: tuple[str, ...]) -> list[str]:

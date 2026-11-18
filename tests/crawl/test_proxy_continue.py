@@ -2,6 +2,8 @@
 
 import json
 import socket
+import sqlite3
+from contextlib import closing
 
 import pytest
 from aiohttp.abc import AbstractResolver, ResolveResult
@@ -135,6 +137,78 @@ def test_unusable_fresh_proxy_is_refused_before_writer_or_network(
     assert reporter.events == []
     assert proxy.requests == requests
     assert {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()} == files
+
+
+@pytest.mark.parametrize(
+    "bad_proxy",
+    [
+        "http://u:damage-secret@[",
+        "http://u:damage-secret@127.0.0.1:65536",
+        "http:///damage-secret",
+        3128,
+    ],
+    ids=["bad-ipv6", "bad-port", "no-host", "not-a-string"],
+)
+def test_continue_refuses_a_damaged_recorded_proxy_and_allows_replacement(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts, bad_proxy: str | int
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    stopped = crawl_result("http://site.test/", max_urls=1, resolver=hosts.resolver)
+    assert stopped.summary.state == "stopped"
+    config = json.loads(crawl_row(stopped.crawl_file)["config"])
+    config["crawl"]["proxy"] = bad_proxy
+    with closing(sqlite3.connect(stopped.crawl_file)) as connection:
+        connection.execute("UPDATE crawl SET config = ?", (json.dumps(config),))
+        connection.commit()
+    # Establish the normal SQLite sidecars before checking that refusal writes nothing.
+    assert json.loads(crawl_row(stopped.crawl_file)["config"]) == config
+    files = {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()}
+    requests = hosts.site.requests
+    reporter = Collected()
+
+    with read_only_file(stopped.crawl_file), pytest.raises(OpenLinxError) as caught:
+        continued(stopped, resolver=hosts.resolver, reporter=reporter)
+
+    assert (caught.value.code, caught.value.exit_code, caught.value.diagnostic.details) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(stopped.crawl_file)},
+    )
+    assert "damage-secret" not in json.dumps(caught.value.diagnostic.to_json())
+    assert reporter.events == []
+    assert hosts.site.requests == requests
+    assert {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()} == files
+
+    result = continued(stopped, CrawlOverrides(max_urls=None, proxy=""), resolver=hosts.resolver)
+
+    assert result.summary.state == "completed"
+    assert [request.path for request in hosts.site.requests[len(requests) :]] == [
+        "/robots.txt",
+        "/next",
+        "/last",
+    ]
+    config["crawl"].update(max_urls=None, proxy=None)
+    assert json.loads(crawl_row(result.crawl_file)["config"]) == config
+
+
+def test_continue_keeps_a_credential_free_recorded_proxy(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts, fixture_proxy: StartProxy
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    stopped = crawl_result("http://site.test/", proxy=proxy.url, max_urls=1)
+    assert stopped.summary.state == "stopped"
+    before = proxy.requests
+
+    result = continued(stopped, CrawlOverrides(max_urls=None), resolver=hosts.resolver)
+
+    assert result.summary.state == "completed"
+    assert proxy.requests[len(before) :] == (
+        "http://site.test/robots.txt",
+        "http://site.test/next",
+        "http://site.test/last",
+    )
+    assert json.loads(crawl_row(result.crawl_file)["config"])["crawl"]["proxy"] == proxy.url
 
 
 @pytest.mark.parametrize("clear_explicit", [False, True], ids=["environment", "empty-override"])

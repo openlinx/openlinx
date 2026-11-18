@@ -2,6 +2,7 @@
 
 import math
 import re
+from urllib.parse import SplitResult, urlsplit
 
 # RFC 9309 2.2.1: a product token.
 _ROBOTS_USER_AGENT = re.compile(r"[a-zA-Z_-]+")
@@ -56,6 +57,18 @@ def proxy_url(value: str | None) -> str | None:
     if "://" in value:
         return value
     return f"http://{value}"
+
+
+def split_absolute_url(value: str) -> SplitResult | None:
+    """Check for a scheme, a host and an in-range port without ASCII whitespace."""
+    if any(ord(char) <= 32 for char in value):
+        return None
+    try:
+        parts = urlsplit(value)
+        _ = parts.port
+    except ValueError:
+        return None
+    return parts if parts.scheme and parts.hostname else None
 
 
 def as_robots_token(token: str) -> str:
