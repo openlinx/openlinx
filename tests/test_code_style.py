@@ -1523,12 +1523,13 @@ def test_only_the_streams_and_click_compat_suppress_tid251() -> None:
 
 def test_no_per_file_ignore_silences_tid251_in_src() -> None:
     lint = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"]["ruff"]["lint"]
-    ignores = {**lint.get("per-file-ignores", {}), **lint.get("extend-per-file-ignores", {})}
 
+    # Ruff keeps both rule lists even when the tables share a glob.
     # A prefix such as TID or ALL selects TID251 too.
     assert [
         pattern
-        for pattern, codes in ignores.items()
+        for table in ("per-file-ignores", "extend-per-file-ignores")
+        for pattern, codes in lint.get(table, {}).items()
         if not pattern.startswith(("tests/", "scripts/"))
         and any("TID251".startswith(code) or code == "ALL" for code in codes)
     ] == [], (
