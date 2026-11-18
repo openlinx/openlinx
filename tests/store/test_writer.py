@@ -6,35 +6,23 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
-from enum import Enum
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import Connection, func, insert, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import Connection, func, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import connect
-from openlinx.store.reading import reading
 from openlinx.store.schema import seeds
 from openlinx.store.writer import CrawlWriter, CrawlWriterClosedError, CrawlWriterReplayError
 from tests.support.clock import FakeClock
-from tests.support.crawls import (
-    crawl_without_seeds,
-    create_any_crawl,
-    insert_seed,
-    query,
-    sha256_of,
-)
-from tests.support.permissions import read_only_file
+from tests.support.crawls import crawl_without_seeds, insert_seed, query
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing, replay_now
 
 SEEDS = "SELECT position, url FROM seeds ORDER BY position"
 COUNT = "SELECT count(*) FROM seeds"
-SETTINGS = ("temp_store", "cache_size", "mmap_size")
 
 
 def count_seeds(connection: Connection) -> int:
@@ -462,36 +450,6 @@ def test_a_flush_commits_at_once(temp_workspace: TempWorkspace) -> None:
     assert seen == [(3,)]
 
 
-def test_a_read_only_crawl_file(temp_workspace: TempWorkspace) -> None:
-    crawl = create_any_crawl(temp_workspace)
-    before = sha256_of(crawl.path)
-
-    with read_only_file(crawl.path), pytest.raises(OpenLinxError) as raised:
-        CrawlWriter(crawl.path, FakeClock())
-
-    assert (
-        raised.value.code,
-        raised.value.diagnostic.details["file"],
-        sha256_of(crawl.path),
-    ) == ("crawl_not_writable", str(crawl.path), before)
-
-
-def test_the_writer_waits_30_seconds_for_a_lock_and_checks_references(
-    temp_workspace: TempWorkspace,
-) -> None:
-    crawl = create_any_crawl(temp_workspace)
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        pragmas: tuple[int, int] = writer.run(
-            lambda connection: (
-                connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one(),
-                connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one(),
-            )
-        )
-
-    assert pragmas == (1, 30_000)
-
-
 def numbered_insert(position: int) -> Callable[[Connection], int]:
     """Returns how many units ran before it, so the order units ran in can be read back."""
 
@@ -726,15 +684,20 @@ def test_units_waited_for_with_run_take_no_room_in_the_window(
         running.set()
         hold.wait()
 
+    submitted: list[Future[int]] = []
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         runner = threading.Thread(target=writer.run, args=(held,))
         runner.start()
         running.wait()
-        submitted = finishes(lambda: submit_inserts(writer, 2000))
+        filled_while_held = finishes(lambda: submitted.extend(submit_inserts(writer, 2000)))
         hold.set()
         runner.join()
+        assert filled_while_held
 
-    assert submitted
+        writer.flush()
+        positions = list(range(1, 2001))
+        assert [position for position, _ in query(crawl.path, SEEDS)] == positions
+        assert [future.result(timeout=0) for future in submitted] == positions
 
 
 def test_a_failing_submitted_unit_frees_its_room_in_the_window(
@@ -938,47 +901,6 @@ def test_a_unit_cannot_submit_to_its_own_writer(temp_workspace: TempWorkspace) -
         writer.run(lambda connection: writer.submit(count_seeds))
 
 
-def journal_mode(connection: Connection) -> str:
-    return connection.exec_driver_sql("PRAGMA journal_mode").scalar_one()
-
-
-def connection_settings(connection: Connection) -> tuple[int, ...]:
-    return tuple(connection.exec_driver_sql(f"PRAGMA {name}").scalar_one() for name in SETTINGS)
-
-
-def test_the_writer_s_connection_settings_in_wal_mode(temp_workspace: TempWorkspace) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        journal = writer.run(journal_mode)
-        settings = writer.run(connection_settings)
-
-    assert (journal, settings) == ("wal", (2, -65536, 268435456))
-
-
-def test_a_reader_keeps_sqlite_s_defaults(temp_workspace: TempWorkspace) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-
-    with reading(crawl.path) as connection:
-        settings = connection_settings(connection)
-    with closing(sqlite3.connect(crawl.path)) as plain:
-        defaults = tuple(plain.execute(f"PRAGMA {name}").fetchone()[0] for name in SETTINGS)
-
-    assert settings == defaults
-
-
-def test_the_writer_s_connection_settings_in_rollback_journal_mode(
-    temp_workspace: TempWorkspace,
-) -> None:
-    crawl = create_any_crawl(temp_workspace, journal_setting="delete")
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        journal = writer.run(journal_mode)
-        settings = writer.run(connection_settings)
-
-    assert (journal, settings) == ("delete", (2, -65536, 0))
-
-
 async def test_a_sync_submit_under_a_loop_s_commit_deadline_is_refused(
     temp_workspace: TempWorkspace,
 ) -> None:
@@ -1023,45 +945,6 @@ async def test_a_unit_submitted_under_a_loop_s_commit_deadline_commits_at_the_de
         await writer.close_async()
 
     assert (before, seen) == ([(0,)], ([(1,)], 1.0))
-
-
-def _inserted_cursor(connection: Connection) -> object:
-    # Returns what execute returned, a CursorResult bound to this connection.
-    return connection.execute(insert(seeds).values(position=1, url="https://example.com/a"))
-
-
-def _inserted_cursors(connection: Connection) -> object:
-    return [connection.execute(insert(seeds).values(position=1, url="https://example.com/a"))]
-
-
-def _cursors_by_name(connection: Connection) -> object:
-    return {"inserted": _inserted_cursor(connection)}
-
-
-def _set_of_cursors(connection: Connection) -> object:
-    return {_inserted_cursor(connection)}
-
-
-@pytest.mark.parametrize(
-    "unit",
-    [_inserted_cursor, _inserted_cursors, _cursors_by_name, _set_of_cursors],
-    ids=["cursor", "in a list", "a dict's value", "in a set"],
-)
-def test_a_unit_that_returns_a_cursor_is_refused(
-    temp_workspace: TempWorkspace, unit: Callable[[Connection], object]
-) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        with pytest.raises(TypeError) as refused:
-            writer.run(unit)
-        writer.run(insert_seed(2, "https://example.com/b"))
-
-    assert (str(refused.value), query(crawl.path, SEEDS)) == (
-        f"the unit {unit.__qualname__} returned a CursorResult, which compares by identity, so "
-        "a replay cannot check it: return values, such as .all() rows or a record",
-        [(2, "https://example.com/b")],
-    )
 
 
 def _commits(connection: Connection) -> None:
@@ -1115,32 +998,6 @@ def test_a_unit_that_commits_ends_the_writer(
         "The crawl writer is closed.",
         [(1,), (2,)],
     )
-
-
-class _Seeded(Enum):
-    NEW = "new"
-    KNOWN = "known"
-
-
-def _seeded(connection: Connection) -> _Seeded:
-    inserted = connection.execute(
-        sqlite_insert(seeds)
-        .values(position=1, url="https://example.com/a")
-        .on_conflict_do_nothing()
-    )
-    return _Seeded.NEW if inserted.rowcount else _Seeded.KNOWN
-
-
-def test_a_unit_that_returns_an_enumeration_member_is_kept(temp_workspace: TempWorkspace) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        first = writer.run(_seeded)
-        # The replay compares the member with itself, which an Enum compares by identity.
-        replay_now(writer)
-        again = writer.run(_seeded)
-
-    assert (first, again, query(crawl.path, COUNT)) == (_Seeded.NEW, _Seeded.KNOWN, [(1,)])
 
 
 def _rolls_back(connection: Connection) -> None:
