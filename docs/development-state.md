@@ -267,6 +267,12 @@ schema Command. The v0.1 deferred wording stays in the historical snapshot.
 Task 13.13 documents offered HTTP capability, HTTP/1.1 request transport,
 the shared probe deadline and cleanup on completion or stop.
 
+Task 14.8 verified the locked zstd installation, mypy and all 186
+focused decoder, Resource and negotiation cases in each of the nine runtime
+cells across Linux, macOS and Windows. Python 3.12 and 3.13 used
+`backports.zstd` 1.8.0. Python 3.14 used `compression.zstd`.
+All focused tests ran and passed at `bd5c37b1`. [CI run](https://github.com/openlinx/openlinx/actions/runs/44200525556).
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
