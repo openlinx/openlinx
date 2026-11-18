@@ -2,7 +2,9 @@
 
 from collections import Counter
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import SplitResult, unquote
+
+from yarl import URL
 
 from openlinx.crawl.setting_rules import as_headers
 from openlinx.output.codes import CRAWL_FILE_INVALID, INVALID_VALUE, SECRETS_REQUIRED
@@ -15,7 +17,7 @@ def check_fresh_proxy(proxy: str | None) -> None:
     """Refuse a malformed URL or a replay of a marker before opening resources."""
     if proxy is None:
         return
-    parts = split_absolute_url(proxy)
+    parts = _split_usable_proxy(proxy)
     if parts and parts.hostname != REDACTED and unquote(parts.password or "") != REDACTED:
         return
     raise OpenLinxError(
@@ -30,7 +32,7 @@ def check_recorded_proxy(proxy: object, path: Path) -> None:
     if proxy is None or proxy == "":
         return
     normalized = proxy_url(proxy) if isinstance(proxy, str) else None
-    parts = split_absolute_url(normalized) if normalized is not None else None
+    parts = _split_usable_proxy(normalized) if normalized is not None else None
     if proxy == REDACTED or (parts and parts.password is not None):
         raise OpenLinxError(
             SECRETS_REQUIRED,
@@ -45,6 +47,18 @@ def check_recorded_proxy(proxy: object, path: Path) -> None:
             hint="Supply a replacement in CrawlOverrides.proxy or start a new Crawl.",
             details={"file": str(path)},
         )
+
+
+def _split_usable_proxy(value: str) -> SplitResult | None:
+    parts = split_absolute_url(value)
+    if parts is None:
+        return None
+    try:
+        # Both request and ALPN transports parse with yarl, which can reject this authority.
+        URL(value)
+    except ValueError:
+        return None
+    return parts
 
 
 def restored_headers(recorded: list[str], fresh: tuple[str, ...]) -> list[str]:

@@ -102,8 +102,14 @@ def test_continue_uses_fresh_proxy_credentials_and_keeps_recorded_config(
 
 @pytest.mark.parametrize(
     "fresh_proxy",
-    ["***", "http://u:***@127.0.0.1:1", "u:%2A%2A%2A@127.0.0.1:1", "http://u:malformed126@["],
-    ids=["whole-marker", "password-marker", "encoded-marker", "invalid-url"],
+    [
+        "***",
+        "http://u:***@127.0.0.1:1",
+        "u:%2A%2A%2A@127.0.0.1:1",
+        "http://u:malformed126@[",
+        r"http://u:malformed126@invalid\authority:3128",
+    ],
+    ids=["whole-marker", "password-marker", "encoded-marker", "invalid-url", "invalid-authority"],
 )
 def test_unusable_fresh_proxy_is_refused_before_writer_or_network(
     temp_workspace: TempWorkspace,
@@ -145,9 +151,10 @@ def test_unusable_fresh_proxy_is_refused_before_writer_or_network(
         "http://u:damage-secret@[",
         "http://u:damage-secret@127.0.0.1:65536",
         "http:///damage-secret",
+        r"http://invalid\authority:3128",
         3128,
     ],
-    ids=["bad-ipv6", "bad-port", "no-host", "not-a-string"],
+    ids=["bad-ipv6", "bad-port", "no-host", "invalid-authority", "not-a-string"],
 )
 def test_continue_refuses_a_damaged_recorded_proxy_and_allows_replacement(
     temp_workspace: TempWorkspace, fixture_hosts: StartHosts, bad_proxy: str | int

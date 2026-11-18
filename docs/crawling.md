@@ -253,8 +253,8 @@ A continue keeps a recorded explicit proxy without a password when the caller om
 `secrets_required` (exit 2) with a hint naming `--proxy` and `crawl.proxy`. The caller
 can supply a fresh proxy URL through `CrawlOverrides.proxy`. The service masks its
 password again in the recorded config and in diagnostics. It rejects redaction
-markers, including percent-encoded password markers, and basic URL errors such as
-a missing host or an invalid port as `invalid_value` (exit 2,
+markers, including percent-encoded password markers, and invalid proxy addresses such
+as a missing host, an invalid port or a backslash in the authority as `invalid_value` (exit 2,
 `details.key = "crawl.proxy"`). These checks run before the service opens a writer
 or network connection. A damaged retained proxy is reported as `crawl_file_invalid`
 (exit 6, `details.file`). Supply a fresh override to replace it. An explicit empty
