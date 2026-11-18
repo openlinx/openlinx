@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from math import inf
 from typing import Protocol, runtime_checkable
 
 import aiohttp
@@ -256,7 +257,8 @@ async def aiohttp_fetcher(
         session = await stack.enter_async_context(
             aiohttp.ClientSession(
                 connector=aiohttp.TCPConnector(resolver=resolver, ssl=request_tls),
-                timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
+                # aiohttp otherwise rounds deadlines of five seconds or more up.
+                timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds, ceil_threshold=inf),
                 request_class=_TunnelRequest,
                 skip_auto_headers={"User-Agent", "Accept-Encoding"},
                 # A cookie set by one response must not change what later ones return.

@@ -1,10 +1,13 @@
 """Verify the aiohttp Fetcher returns request failures with diagnostic codes."""
 
+import asyncio
+import math
 import socket
 import ssl
 
 import aiohttp
 import pytest
+from aiohttp import web
 from aiohttp.abc import AbstractResolver, ResolveResult
 from aiohttp.client_reqrep import ConnectionKey
 from multidict import CIMultiDict, CIMultiDictProxy
@@ -17,6 +20,7 @@ from openlinx.crawl.fetch.fetcher import (
     FetchPolicy,
     FetchResult,
     Request,
+    aiohttp_fetcher,
     fetch_error_of,
 )
 from openlinx.crawl.fetch.proxy import ProxyVariables
@@ -76,6 +80,61 @@ async def test_the_fetcher_never_holds_a_cookie_value(fixture_site: StartSite) -
     assert isinstance(result, FetchResult)
     assert [value for name, value in result.headers if name == "Set-Cookie"] == [
         "sid=***; Path=/; HttpOnly"
+    ]
+
+
+@pytest.mark.slow
+async def test_the_request_deadline_is_not_rounded_for_headers_or_body() -> None:
+    release = asyncio.Event()
+    received: set[str] = set()
+
+    async def respond(request: web.Request) -> web.StreamResponse:
+        received.add(request.path)
+        if request.path == "/headers":
+            await release.wait()
+            return web.Response(body=b"late")
+        response = web.StreamResponse(headers={"Content-Length": "4"})
+        await response.prepare(request)
+        await response.write(b"la")
+        await release.wait()
+        await response.write_eof(b"te")
+        return response
+
+    app = web.Application()
+    app.router.add_get("/{phase}", respond)
+    runner = web.AppRunner(app, handler_cancellation=True)
+    await runner.setup()
+    try:
+        await web.TCPSite(runner, "127.0.0.1", 0).start()
+        port = runner.addresses[0][1]
+        headers_url = parse_seed(f"http://127.0.0.1:{port}/headers")
+        body_url = parse_seed(f"http://127.0.0.1:{port}/body")
+        assert isinstance(headers_url, str)
+        assert isinstance(body_url, str)
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        # The peers finish after the configured deadline, but before the next whole second
+        # on the client's clock. The timeout is always above aiohttp's default 5 s threshold.
+        deadline = math.floor(started) + 6.125
+        policy = FetchPolicy(
+            user_agent="Test/1", proxies=ProxyVariables(), timeout_seconds=deadline - started
+        )
+        release_timer = loop.call_at(deadline + 0.25, release.set)
+        try:
+            async with aiohttp_fetcher(policy, SystemClock()) as fetcher:
+                results = await asyncio.gather(
+                    fetcher.fetch(Request(headers_url, is_internal=True)),
+                    fetcher.fetch(Request(body_url, is_internal=True)),
+                )
+        finally:
+            release_timer.cancel()
+    finally:
+        await runner.cleanup()
+
+    assert received == {"/headers", "/body"}
+    assert [(type(result), getattr(result, "fetch_error", None)) for result in results] == [
+        (FetchFailure, "timeout"),
+        (FetchFailure, "timeout"),
     ]
 
 
