@@ -7,7 +7,7 @@ import tracemalloc
 import zlib
 from collections.abc import AsyncIterator
 
-import brotli
+import brotlicffi
 import pytest
 
 from openlinx.crawl.fetch.body import BODY_LIMIT, Body, BodyDecodingError, read_body
@@ -49,7 +49,7 @@ def _packed(data: bytes, coding: str) -> bytes:
     if coding == "gzip":
         return gzip.compress(data, mtime=0)
     if coding == "br":
-        packed: bytes = brotli.compress(data)
+        packed: bytes = brotlicffi.compress(data)
         return packed
     if coding == "deflate":
         return zlib.compress(data)
@@ -118,9 +118,33 @@ def test_a_bomb_in_one_chunk_is_decoded_only_up_to_the_cap(coding: str) -> None:
     assert (len(body.data), body.truncated, peak < 8 * limit) == (limit, True, True)
 
 
+@pytest.mark.parametrize("coding", ["br", "br, gzip", "gzip, br"])
+async def test_brotli_allocates_output_within_a_small_remaining_budget(coding: str) -> None:
+    page = ROW * 1000
+    if coding == "gzip, br":
+        expected = b"hello"
+        # The gzip member ends within the cap, but the intermediate still exceeds it.
+        packed = _packed(gzip.compress(expected, mtime=0) + page, "br")
+    else:
+        expected = page[:512]
+        packed = _packed(page, "br")
+        if coding == "br, gzip":
+            packed = gzip.compress(packed, mtime=0)
+
+    tracemalloc.start()
+    try:
+        body = await read_body(_pieces(packed), coding, limit=512)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert (body.data, body.truncated) == (expected, True)
+    assert peak < 16 * 1024
+
+
 def test_stacked_codings_are_decoded_last_first() -> None:
     page = ROW * 1000
-    packed = brotli.compress(gzip.compress(page, mtime=0))
+    packed = brotlicffi.compress(gzip.compress(page, mtime=0))
 
     body = _decoded(packed, "gzip, br")
 

@@ -6,7 +6,7 @@ from collections.abc import AsyncIterable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-import brotli
+import brotlicffi
 
 if sys.version_info >= (3, 14):
     from compression import zstd
@@ -17,6 +17,7 @@ BODY_LIMIT = 20 * 1024 * 1024
 # Decoder capabilities do not depend on a request's Accept-Encoding preference.
 SUPPORTED_CODINGS = ("gzip", "deflate", "br", "zstd")
 _GZIP_MAGIC = b"\x1f\x8b"
+_BROTLI_IO_BYTES = 64 * 1024
 _ZSTD_FEED_BYTES = 1024
 _ZSTD_OUTPUT_BYTES = 64 * 1024
 _ZSTD_WINDOW_LOG_MAX = 23
@@ -99,20 +100,43 @@ class _Zlib:
 
 class _Brotli:
     def __init__(self) -> None:
-        self._inflate = brotli.Decompressor()
+        self._inflate = brotlicffi.Decompressor()
+        self._pending = memoryview(b"")
+        self._needs_drain = False
 
     def decode(self, data: bytes, limit: int) -> bytes:
-        # Bytes after the stream are ignored, as gzip's are; brotli would refuse them.
-        if self._inflate.is_finished():
+        # Ignore trailing bytes in later reads, as for gzip.
+        if self.finished():
             return b""
-        output: bytes = self._inflate.process(data, output_buffer_limit=limit)
-        return output
+        if data:
+            self._pending = memoryview(self._pending.tobytes() + data if self._pending else data)
+        return self.drain(limit)
 
     def drain(self, limit: int) -> bytes:
-        if self._inflate.is_finished() or self._inflate.can_accept_more_data():
-            return b""
-        output: bytes = self._inflate.process(b"", output_buffer_limit=limit)
-        return output
+        output = bytearray()
+        while len(output) < limit and (self._pending or self._needs_drain):
+            data = b""
+            if not self._needs_drain:
+                # Bound the binding's copy of the compressed input and any unconsumed tail.
+                data = self._pending[:_BROTLI_IO_BYTES].tobytes()
+                self._pending = (
+                    self._pending[len(data) :]
+                    if len(data) < len(self._pending)
+                    else memoryview(b"")
+                )
+            # BrotliCFFI passes the buffer size to the native decoder. Keep its eager
+            # allocation small even when the remaining budget is large.
+            budget = min(limit - len(output), _BROTLI_IO_BYTES)
+            piece: bytes = self._inflate.process(data, output_buffer_limit=budget)
+            output.extend(piece)
+            if self.finished():
+                if self._pending:
+                    raise brotlicffi.error("Decompression error: trailing data after stream.")
+                self._needs_drain = False
+                break
+            # Native output can still be pending even after all supplied input was consumed.
+            self._needs_drain = len(piece) == budget
+        return bytes(output)
 
     def finished(self) -> bool:
         finished: bool = self._inflate.is_finished()
@@ -313,7 +337,7 @@ async def read_body(
                 return Body(b"".join(parts), True, transferred)
             parts.append(output)
             size += len(output)
-    except (zlib.error, brotli.error, zstd.ZstdError) as error:
+    except (zlib.error, brotlicffi.error, zstd.ZstdError) as error:
         raise BodyDecodingError(f"The body is not valid {coding}: {error}") from error
     # An empty body, as a redirect may send under the header, holds no stream to end.
     if decoder is not None and transferred and not decoder.finished():

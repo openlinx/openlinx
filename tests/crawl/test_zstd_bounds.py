@@ -6,7 +6,7 @@ import tracemalloc
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-import brotli
+import brotlicffi
 import pytest
 
 from openlinx.crawl.fetch.body import Body, read_body
@@ -88,7 +88,7 @@ def test_zstd_stops_decoding_inside_a_chunk() -> None:
 )
 def test_stacked_codings_apply_the_decoded_body_cap(size: int, truncated: bool) -> None:
     zstd = _zstd_run(size, byte=b"x")
-    packed = brotli.compress(gzip.compress(zstd, mtime=0))
+    packed = brotlicffi.compress(gzip.compress(zstd, mtime=0))
 
     body = asyncio.run(read_body(_pieces(packed), "zstd, gzip, br", limit=196_608))
 
@@ -104,7 +104,7 @@ def test_stacked_codings_apply_a_cumulative_intermediate_cap(size: int, truncate
     # The middle stage yields a complete gzip member plus zero padding. The final output
     # stays at five bytes, even when the middle stage hits its own cap.
     zstd = _zstd_run(size, byte=b"\0", prefix=_GZIP_HELLO)
-    encoder = brotli.Compressor()
+    encoder = brotlicffi.Compressor()
     # Flush after the member and the first 128 KiB RLE block to spend budget on both reads.
     first = encoder.process(zstd[:38]) + encoder.flush()
     last = encoder.process(zstd[38:]) + encoder.finish()
