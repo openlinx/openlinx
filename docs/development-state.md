@@ -250,6 +250,9 @@ Task 13.8 rejects invalid or incomplete CONNECT responses before starting TLS.
 The 65,536-byte cap includes the terminating blank line. Ordinary requests
 retain their own response and connection error classifications.
 
+Task 13.10 exercises a capability probe with one per-host slot and verifies
+that an admitted probe shares the global connection budget with normal requests.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
