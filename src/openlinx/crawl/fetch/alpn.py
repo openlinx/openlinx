@@ -85,19 +85,22 @@ class AlpnProbe:
                 )
             except OSError:
                 continue
+            upgrading = False
             try:
                 if not await establish_tunnel(reader, writer, proxy, host, port):
                     return None
+                upgrading = True
                 await writer.start_tls(
                     context,
                     server_hostname=host.rstrip("."),
                     ssl_handshake_timeout=self._timeout_seconds,
                 )
+                upgrading = False
                 return _version(writer)
             except (OSError, ValueError):
                 return None
             finally:
-                await _close(writer)
+                await _close(writer, wait=not upgrading)
         return None
 
     async def _addresses(self, host: str, port: int) -> list[ResolveResult]:
@@ -127,8 +130,10 @@ def _version(writer: asyncio.StreamWriter) -> HttpVersion:
     return "http_2" if tls.selected_alpn_protocol() == "h2" else "http_1_1"
 
 
-async def _close(writer: asyncio.StreamWriter) -> None:
+async def _close(writer: asyncio.StreamWriter, *, wait: bool = True) -> None:
     # There is no application data to flush. Don't wait for a peer's TLS shutdown.
     writer.transport.abort()
-    with suppress(OSError):
-        await writer.wait_closed()
+    # An interrupted start_tls can close the transport without notifying the old stream.
+    if wait:
+        with suppress(OSError):
+            await writer.wait_closed()

@@ -253,6 +253,10 @@ retain their own response and connection error classifications.
 Task 13.10 exercises a capability probe with one per-host slot and verifies
 that an admitted probe shares the global connection budget with normal requests.
 
+Task 13.9 verifies a single real-time deadline for admission, DNS, TCP, CONNECT
+and TLS, including cumulative latency. Cancelling an unfinished TLS upgrade
+closes the transport without waiting on the old stream.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
