@@ -1115,13 +1115,29 @@ def test_each_url_is_recorded_with_the_values_its_handlers_saw(
 
     crawl_file = crawl_result(server.url("/"), hooks, exclude=["/logout$"], retries=0).crawl_file
 
-    seen = {url_id: json.loads(v) for url_id, v in query(crawl_file, "SELECT * FROM test_values")}
-    recorded = {row["id"]: row for row in _urls_rows(crawl_file)}
+    expected_urls = sorted(
+        [
+            server.url("/"),
+            server.url("/a"),
+            server.url("/missing"),
+            server.url("/logout"),
+            server.url("/private"),
+            "http://127.0.0.1:1/",
+            server.url("/broken"),
+            server.url("/logo.png"),
+        ]
+    )
+    url_rows = _urls_rows(crawl_file)
+    assert sorted(row["url"] for row in url_rows) == expected_urls
+    recorded = {row["id"]: row for row in url_rows}
+
+    seen = [(url_id, json.loads(v)) for url_id, v in query(crawl_file, "SELECT * FROM test_values")]
+    assert sorted(recorded[url_id]["url"] for url_id, _ in seen) == expected_urls
     assert (
-        sorted({values["fetch_state"] for values in seen.values()}),
+        sorted({values["fetch_state"] for _, values in seen}),
         [
             (url_id, name)
-            for url_id, values in seen.items()
+            for url_id, values in seen
             for name, value in values.items()
             if recorded[url_id][name] != value
         ],
