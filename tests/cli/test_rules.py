@@ -1,8 +1,14 @@
 """Verify the Rules catalogue through the CLI."""
 
+import json
+import subprocess
+import sys
+from tempfile import TemporaryFile
+
 import pytest
 
-from tests.support.cli import run_cli
+from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli
+from tests.support.processes import console_process, python_command
 
 GUIDANCE = ("description", "why_it_matters", "how_to_fix")
 
@@ -90,6 +96,33 @@ def test_unknown_rule_id() -> None:
     assert "nope" in error["message"]
     assert "linx rules list" in error["hint"]
     assert result.stdout == b""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires a Windows console")
+def test_windows_console_output() -> None:
+    command = python_command("-m", "openlinx", "rules", "show", "title-too-long")
+    # Change the code page in a separate console so it cannot affect the test runner.
+    with TemporaryFile() as stdout, TemporaryFile() as stderr:
+        with console_process(
+            f"chcp 1251 && {subprocess.list2cmdline(command.argv)}",
+            env=command.env,
+            stdout=stdout.fileno(),
+            stderr=stderr.fileno(),
+        ) as process:
+            process.communicate(timeout=CLI_PROCESS_TIMEOUT)
+        stdout.seek(0)
+        stderr.seek(0)
+        code_page, _, output = stdout.read().partition(b"\n")
+        errors = stderr.read()
+
+    assert process.returncode == 0, (code_page, errors)
+    # The first line is chcp's localized confirmation. The rest is the Command's JSON.
+    assert b"1251" in code_page, code_page
+    rule = json.loads(output.decode("utf-8"))
+    assert isinstance(rule, dict)
+    assert rule["id"] == "title-too-long"
+    assert output.endswith(b"}\n")
+    assert b"\r" not in output
 
 
 def test_show_matches_the_rule_in_the_catalogue() -> None:
