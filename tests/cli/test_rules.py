@@ -32,6 +32,57 @@ def test_every_rule_has_its_guidance() -> None:
     assert [item["id"] for item in items if not all(item[key] for key in GUIDANCE)] == []
 
 
+def test_show_a_rule_with_thresholds() -> None:
+    result = run_cli("rules", "show", "title-too-long")
+
+    assert result.exit_code == 0, result.stderr
+    rule = result.json()
+    assert (rule["id"], rule["category"], rule["issue_type"], rule["priority"]) == (
+        "title-too-long",
+        "titles",
+        "opportunity",
+        "medium",
+    )
+    assert rule["applies_to"] == "internal_pages"
+    assert rule["thresholds"] == {"max_chars": {"value": 60, "default": 60, "unit": "characters"}}
+    assert rule["description"] == "A Page's first title is longer than max_chars characters."
+    assert rule["why_it_matters"] == (
+        "Search engines cut a long title short in their results, so its end, often the brand or "
+        "what sets the page apart, is not shown."
+    )
+    assert rule["how_to_fix"] == (
+        "Shorten the title to the limit, with the words that describe the page first."
+    )
+
+
+def test_unknown_rule_id() -> None:
+    result = run_cli("rules", "show", "nope")
+    error = result.stderr_json_lines()[-1]
+
+    assert (result.exit_code, error["code"]) == (4, "rule_not_found")
+    assert "nope" in error["message"]
+    assert "linx rules list" in error["hint"]
+    assert result.stdout == b""
+
+
+def test_show_matches_the_rule_in_the_catalogue() -> None:
+    first = run_cli("rules", "list", "--fields", "id,thresholds", "--limit", "2")
+    assert first.exit_code == 0, first.stderr
+    page = first.json()
+    assert page["items"] == [
+        {"id": "internal-4xx", "thresholds": {}},
+        {"id": "internal-5xx", "thresholds": {}},
+    ]
+    cursor = page["next_cursor"]
+    assert isinstance(cursor, str)
+    assert cursor
+
+    following = run_cli("rules", "list", "--cursor", cursor, "--limit", "1")
+    shown = run_cli("rules", "show", "title-too-long")
+    assert following.exit_code == shown.exit_code == 0
+    assert following.json()["items"] == [shown.json()]
+
+
 def test_the_bare_group_lists_the_rules() -> None:
     bare = run_cli("rules")
     explicit = run_cli("rules", "list")

@@ -16,9 +16,9 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 ## 1. Rule model and the rules Command (slice)
 
 - [x] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts and a query that returns no rows until task 4.1, and `linx rules list` on `010`'s output contract.
-- [ ] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `linx rules show <id>`.
+- [x] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `linx rules show <id>`.
 - [ ] 1.3 Drive "Rule without thresholds" at seam 1, and register `title-missing`.
-- [ ] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `linx rules list`.
+- [x] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `linx rules list`.
 - [ ] 1.5 Drive "Windows console output" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
 - [ ] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `linx rules` output.
 - [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `linx commands` with its level and exit code, at seam 1.
