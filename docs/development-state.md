@@ -1,7 +1,7 @@
 # Development state
 
-Product checkpoints verified on 2026-11-15 against public refs and local candidate
-files. [README](../README.md) describes available behaviour;
+The 022 checkpoint was verified on 2026-11-18. Other stream checkpoints date
+from 2026-11-15. [README](../README.md) describes available behaviour;
 [ROADMAP](../ROADMAP.md) owns release scope and build order. Before continuing a
 stream, read [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) and
 [CONTEXT.md](../CONTEXT.md), then confirm its actual HEAD, diff and tasks.
@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | Integration branch with explicit proxy routing and CONNECT | v0.1 complete through group 10; v0.2 scoped request identity, safe fresh auth/header continue inputs and explicit proxy routing with authenticated HTTPS tunnel guards implemented. Groups 12–14 remain unfinished. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) | Groups 1–14 complete on the integration branch, including Standards and Spec review. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -64,28 +64,20 @@ cross-OS CI remain open.
 Detached Crawls, `status`, `stop` and `resume` remain planned. Later draft task groups require
 reconciliation with the implemented lifecycle before they are built.
 
-### Active fetching plan
+### Fetching on the integration branch
 
-Continue on local branch `coord/022-fetch-v02-2026-11-15`; its current tasks are in
-`openspec/changes/022-add-fetch-policy/tasks.md`.
+All 156 tasks are complete on `coord/022-fetch-v02-2026-11-15`. Groups 11–14
+cover per-hop Internal identity, explicit proxy routing and fresh credentials on
+continue, offered HTTP capability and bounded response decoding. Standards and
+Spec review closed on the code at `ee7ee390`. Its full CI matrix passed on
+Linux, macOS and Windows with Python 3.12, 3.13 and 3.14. [Reviewed code](https://github.com/openlinx/openlinx/tree/ee7ee390a67c57acd0b33e469c45940cceffabd4) · [CI run](https://github.com/openlinx/openlinx/actions/runs/44218956051).
 
-022's plan covers groups 11–14: per-hop Internal identity and safe secret
-recording/continue inputs, an explicit proxy, bounded offered HTTP capability
-measurement via ALPN, and bounded zstd decoding. Tasks 11.1–11.2 are complete locally:
-header-aware secret recording, explicit-before-default source precedence, Internal
-request headers and persisted User-Agent selection for direct continue. The Seed's
-provisional Page and robots classification now agree. The `eab31aed` checkpoint
-passed independent review and the local full check (2,107 tests passed, 14 skipped,
-98.59% coverage). Remaining runtime work and whole-change acceptance are open.
-Task 11.2a adds source-boundary Accept-Encoding validation and literal wire checks
-for overrides, including empty and repeated fields. Supported response decoding
-remains independent of the advertised preference. Task 14.1 expands the default to
-`gzip, deflate, br, zstd`.
-Task 14.8 requires actual Python 3.12–3.14 runtime evidence on Windows,
-macOS and Linux; local checks and mypy platform targets do not satisfy it. The resume
-Command adapter belongs to 060; Page capability population belongs to 030.
+### Fetching implementation checkpoints
 
-### Continuation and deferred quality work
+Tasks 11.1–11.2 established header-aware secret recording, per-hop Internal
+headers, User-Agent precedence on continue and consistent Seed classification.
+Task 11.2a covered empty and repeated Accept-Encoding overrides on the wire.
+The selected request preference and the supported response decoders are independent.
 
 Tasks 11.3–11.4 add wire guards for External Links, Seed redirects, Internal robots
 and robots redirects to External URLs. The guards preserve ordered repeated custom
@@ -199,7 +191,7 @@ capability on origins and Pages. Page population belongs to 030.
 Task 14.1 adds single-frame incremental zstd decoding with finite output budgets,
 including stacked codings. A locked conditional backport supplies the backend on
 Python 3.12 and 3.13. Task 14.4 enforces the window limit across backend fast paths.
-The cross-platform runtime matrix remains open.
+Task 14.8 records the cross-platform runtime results below.
 
 Task 14.2 reads concatenated and skippable zstd frames across arbitrary input
 boundaries. Each decoding call has a finite output budget. Buffered output is
@@ -273,27 +265,18 @@ cells across Linux, macOS and Windows. Python 3.12 and 3.13 used
 `backports.zstd` 1.8.0. Python 3.14 used `compression.zstd`.
 All focused tests ran and passed at `bd5c37b1`. [CI run](https://github.com/openlinx/openlinx/actions/runs/44200525556).
 
-[Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
-branch, including 030 and developer checks. The authenticated CONNECT checkpoint
-`4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
-[CI run](https://github.com/openlinx/openlinx/actions/runs/44184811562).
+The integration branch also carries 030 Page data and developer-check changes.
+060 still owns the resume Command and its Workspace input handling. It remains
+frozen at task 0.6. The continue Service accepts fresh auth, sensitive headers
+and explicit proxy credentials. Page capability population belongs to 030.
 
-Continue with the remaining proxy tasks, offered HTTP capability (group 13) and
-bounded zstd (group 14). Final code review follows implementation of 022.
-060 remains frozen at task 0.6.
+### Next quality work
 
-Fresh auth and sensitive-header restoration now belong to the continue service.
-The resume Command and its Workspace/provenance adapter remain owned by 060;
-fresh explicit proxy credentials are also available through the service. The encoding and disabled-auth semantics
-are explicit in the owning plan's D1/D8 and fetching specification.
-
-The [comment review and test quality plan](test-organization-plan.md) separates
-comment review, test-contract corrections and file organization. Review preparation
-has started; a sample review identified two test-quality candidates that still need
-reproduction and correction. It does not establish whole-repository compliance.
-Implementation remains deferred until after 022; no test reorganization is part of
-this checkpoint. Preserve useful rationale in comments and all regression scenarios
-when completing the review and its correction slices.
+Follow the [comment review and test quality plan](test-organization-plan.md).
+Review comments for decisions and non-obvious reasons, then verify the test
+contracts at their public seams. Start by reproducing the two recorded
+test-quality candidates. Preserve existing regression scenarios and keep
+test organization in separate changes.
 
 ## What blocks Crawl → Issues
 

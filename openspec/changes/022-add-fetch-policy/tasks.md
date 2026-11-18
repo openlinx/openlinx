@@ -215,7 +215,7 @@ For groups 11–14, each introducing slice updates the required setting/option/c
 - [x] 12.5 [3] Drive "CONNECT does not carry custom origin identity", retaining the Internal/External origin-auth guards through a tunnel; no mock of our request or proxy-choice modules.
 - [x] 12.6 [2+3] Retain 12.1's early refusal from "Continue refuses an explicit proxy password without a fresh value" and drive the successful fresh-proxy counterpart; preserve recorded non-secret config and verify current environment variables are reread without `secrets_required`.
 - [x] 12.7 Docs: document explicit proxy precedence, CONNECT, secrets and continue inputs in `docs/crawling.md` and `docs/workspace.md`; verify CLI metadata matches settings.
-- [ ] 12.8 Review Standards and Spec on group 12's commits, including retained environment/proxy failures; refactor only with the full gate green and prove immediately-green guards by mutation.
+- [x] 12.8 Review Standards and Spec on group 12's commits, including retained environment/proxy failures; refactor only with the full gate green and prove immediately-green guards by mutation.
 
 ## 13. (v0.2) Offered HTTP capability
 
@@ -232,7 +232,7 @@ For groups 11–14, each introducing slice updates the required setting/option/c
 - [x] 13.11 [2+3] Drive "Stop closes an admitted capability probe", plus cancellation while pending admission and normal completion with a pending measurement: join all work and close sockets before closing the writer; cancellation propagates.
 - [x] 13.12 [6] Drive "The measured column describes capability" while retaining "The HTTP version is a later column" as v0.1 evidence only. Verify matching schema docs and the Page column description without implementing Page population.
 - [x] 13.13 Docs: document offered capability, NULL on failed measurement, HTTP/1.1 request transport and bounded proxy/DNS/TLS probe lifecycle in `docs/crawling.md`.
-- [ ] 13.14 Review Standards and Spec on group 13's commits, especially admission/stop, bounds and probe isolation; refactor only with the full gate green and prove immediately-green guards by mutation.
+- [x] 13.14 Review Standards and Spec on group 13's commits, especially admission/stop, bounds and probe isolation; refactor only with the full gate green and prove immediately-green guards by mutation.
 
 ## 14. (v0.2) Bounded zstd
 
@@ -244,4 +244,4 @@ For groups 11–14, each introducing slice updates the required setting/option/c
 - [x] 14.6 [3+6] Retain "A body in an encoding that was not offered is not parsed" with unsupported `x-unknown`, and retain 11.2a's explicitly advertised unsupported-coding and supported-but-unadvertised decoding guards. Preserve all gzip/deflate/br, Resource-size and compressed/wire-cap guards. Prove immediately-green guards by mutation.
 - [x] 14.7 Docs: update supported codings, sizes, 20 MiB output/intermediate caps and the 8 MiB zstd window limit in `docs/crawling.md`; verify installation guidance for the conditional dependency.
 - [x] 14.8 [8, 4, 3+6] Verify locked installation, backend/type compatibility and the focused bounded-decoder/fixture cases on real Python 3.12–3.14 on Windows, macOS and Linux. Record actual results; a local run or mypy platform target alone does not establish the runtime matrix, and no skip/ignore weakens it.
-- [ ] 14.9 Review Standards and Spec on group 14's commits, including API/version evidence, frame/window/output bounds and retained unknown-coding guards; refactor only with the full gate green.
+- [x] 14.9 Review Standards and Spec on group 14's commits, including API/version evidence, frame/window/output bounds and retained unknown-coding guards; refactor only with the full gate green.
