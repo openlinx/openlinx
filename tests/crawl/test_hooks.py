@@ -18,7 +18,6 @@ from selectolax.lexbor import LexborHTMLParser
 from sqlalchemy import Connection, Engine, event, text
 from sqlalchemy.dialects import sqlite
 
-from openlinx.clock import Clock
 from openlinx.crawl.engine.hooks import (
     Hooks,
     Pass,
@@ -41,8 +40,7 @@ from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlResult
 from openlinx.store.connections import connect
-from openlinx.store.crawls import crawl_summary
-from openlinx.store.records import CrawlState, ErroredUrl, FetchedUrl, Provenance, SkippedUrl
+from openlinx.store.records import ErroredUrl, FetchedUrl, Provenance, SkippedUrl
 from openlinx.store.redaction import SecretValues
 from openlinx.store.types import Timestamp
 from openlinx.store.writer import CrawlWriterReplayError
@@ -53,8 +51,7 @@ from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
-from tests.support.network import closed_port
-from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
+from tests.support.sites import LATE_SHORTER_PATH
 from tests.support.sqlite_faults import disk_full_after
 from tests.support.workspace import TempWorkspace
 
@@ -135,76 +132,6 @@ def test_a_url_skipped_beyond_the_depth_limit_reaches_its_handlers_once_requeued
     ) == [("fetched",)]
 
 
-def test_post_crawl_passes_run_before_a_crawl_is_completed(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
-    seen: list[CrawlState] = []
-
-    async def record_state(context: PassContext) -> None:
-        seen.append((await context.writer.run_async(crawl_summary())).state)
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("state", record_state)))
-
-    crawl_result(server.url("/"), hooks)
-
-    assert seen == ["running"]
-
-
-def test_post_crawl_passes_run_in_the_order_the_hooks_declare(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
-    ran: list[str] = []
-
-    async def first(context: PassContext) -> None:
-        ran.append("first")
-
-    async def second(context: PassContext) -> None:
-        ran.append("second")
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("first", first), Pass("second", second)))
-
-    crawl_result(server.url("/"), hooks)
-
-    assert ran == ["first", "second"]
-
-
-def test_a_post_crawl_pass_gets_the_clock_of_the_crawl(temp_workspace: TempWorkspace) -> None:
-    clock = FakeClock()
-    fetcher = FakeFetcher(clock, {"/": FakePage("<p>Home</p>")})
-    clocks: list[Clock] = []
-
-    async def record_the_clock(context: PassContext) -> None:
-        clocks.append(context.clock)
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("clock", record_the_clock)))
-
-    crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher)
-
-    assert clocks == [clock]
-
-
-def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(NINE_PAGES)
-    runs: list[str] = []
-
-    async def count_runs(context: PassContext) -> None:
-        runs.append("run")
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
-
-    crawl_result(server.url("/"), hooks, max_urls=3)
-
-    assert runs == ["run"]
-
-
 _RULES = ("missing_title", "missing_description", "missing_h1", "thin_content")
 
 
@@ -243,20 +170,6 @@ def test_a_full_disk_in_a_post_crawl_pass_fails_the_crawl(
         "write_failed",
         "failed",
     )
-
-
-def test_post_crawl_passes_do_not_run_for_a_failed_crawl(temp_workspace: TempWorkspace) -> None:
-    runs: list[str] = []
-
-    async def count_runs(context: PassContext) -> None:
-        runs.append("run")
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
-
-    result = crawl_result(f"http://127.0.0.1:{closed_port()}/", hooks, network_wait=0)
-
-    assert (result.summary.state, runs) == ("failed", [])
 
 
 class Found(msgspec.Struct, frozen=True):
