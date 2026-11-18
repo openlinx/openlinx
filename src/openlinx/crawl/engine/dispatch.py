@@ -185,6 +185,10 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     finally:
         await _cancel_all(run.task_failure.checked_urls)
         await run.pause.close()
+        # The stop callback may already have cancelled the worker. A second cancellation
+        # would interrupt its wait for the probe's own cleanup.
+        if measurements is not None and measurements.cancelling():
+            await asyncio.wait({measurements})
         await _cancel_all(side_tasks)
         await run.robots.close()
     # Once every task has ended, including those that the cancellation above ended.

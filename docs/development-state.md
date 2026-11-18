@@ -257,6 +257,10 @@ Task 13.9 verifies a single real-time deadline for admission, DNS, TCP, CONNECT
 and TLS, including cumulative latency. Cancelling an unfinished TLS upgrade
 closes the transport without waiting on the old stream.
 
+Task 13.11 joins an already-cancelling capability worker before closing the
+Crawl writer. Tests cover active TLS, pending admission, asynchronous cleanup
+and normal completion with a pending measurement.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.
