@@ -1,6 +1,7 @@
 """Relay HTTP and tunnel HTTPS through a local proxy with separate CONNECT logs."""
 
 import asyncio
+import ssl
 import threading
 from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from contextlib import suppress
@@ -87,10 +88,12 @@ class ForwardProxy:
         *,
         auth: tuple[str, str] | None = None,
         connect_replies: tuple[ConnectReply, ...] = (),
+        tls: ssl.SSLContext | None = None,
     ) -> None:
         self._resolver = resolver
         self._authorization = aiohttp.encode_basic_auth(*auth) if auth is not None else None
         self._connect_replies = connect_replies or (ConnectReply(),)
+        self._tls = tls
         self._requests: list[str] = []
         self._connect_requests: list[ConnectRequest] = []
         self._lock = threading.Lock()
@@ -121,9 +124,10 @@ class ForwardProxy:
         self._http_address = (str(address[0]), int(address[1]))
         # aiohttp's path router cannot serve authority-form CONNECT; keep its HTTP relay
         # behind a TCP listener that takes ownership of tunnel bytes without private APIs.
-        self._server = await asyncio.start_server(self._accept, "127.0.0.1", 0)
+        self._server = await asyncio.start_server(self._accept, "127.0.0.1", 0, ssl=self._tls)
         host, port = self._server.sockets[0].getsockname()[:2]
-        return f"http://{host}:{port}"
+        scheme = "https" if self._tls is not None else "http"
+        return f"{scheme}://{host}:{port}"
 
     def _accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         if self._closing:
@@ -279,4 +283,5 @@ class StartProxy(Protocol):
         *,
         auth: tuple[str, str] | None = None,
         connect_replies: tuple[ConnectReply, ...] = (),
+        tls: ssl.SSLContext | None = None,
     ) -> ForwardProxy: ...

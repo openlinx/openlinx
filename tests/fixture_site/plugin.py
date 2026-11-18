@@ -87,8 +87,9 @@ def fixture_proxy() -> Iterator[StartProxy]:
             *,
             auth: tuple[str, str] | None = None,
             connect_replies: tuple[ConnectReply, ...] = (),
+            tls: ssl.SSLContext | None = None,
         ) -> ForwardProxy:
-            proxy = ForwardProxy(resolver, auth=auth, connect_replies=connect_replies)
+            proxy = ForwardProxy(resolver, auth=auth, connect_replies=connect_replies, tls=tls)
             running.callback(proxy.stop)
             return proxy
 

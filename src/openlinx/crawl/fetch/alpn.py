@@ -23,11 +23,14 @@ class AlpnProbe:
         trust_anchors: str | None,
         timeout_seconds: float,
         proxy_for: Callable[[str], str | None],
+        *,
+        proxy_tls: ssl.SSLContext,
     ) -> None:
         self._resolver = resolver
         self._trust_anchors = trust_anchors
         self._timeout_seconds = timeout_seconds
         self._proxy_for = proxy_for
+        self._proxy_tls = proxy_tls
         self._context: ssl.SSLContext | None = None
 
     async def measure(self, origin: str) -> HttpVersion | None:
@@ -69,11 +72,13 @@ class AlpnProbe:
         try:
             proxy = yarl.URL(route)
             proxy_host, proxy_port = proxy.raw_host, proxy.port
-            if proxy.scheme != "http" or not proxy_host or proxy_port is None:
+            if proxy.scheme not in {"http", "https"} or not proxy_host or proxy_port is None:
                 return None
             addresses = await self._addresses(proxy_host, proxy_port)
         except (OSError, ValueError):
             return None
+        # The proxy and the origin are separate TLS peers. Offer ALPN only to the origin.
+        proxy_tls = self._proxy_tls if proxy.scheme == "https" else None
         for address in addresses:
             try:
                 reader, writer = await asyncio.open_connection(
@@ -82,6 +87,9 @@ class AlpnProbe:
                     family=address["family"],
                     flags=socket.AI_NUMERICHOST,
                     limit=CONNECT_STREAM_LIMIT,
+                    ssl=proxy_tls,
+                    server_hostname=proxy_host.rstrip(".") if proxy_tls is not None else None,
+                    ssl_handshake_timeout=self._timeout_seconds if proxy_tls is not None else None,
                 )
             except OSError:
                 continue

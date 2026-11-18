@@ -252,9 +252,10 @@ async def aiohttp_fetcher(
         if resolver is None:
             resolver = DefaultResolver()
             stack.push_async_callback(resolver.close)
+        request_tls = tls_context(trust_anchors)
         session = await stack.enter_async_context(
             aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
+                connector=aiohttp.TCPConnector(resolver=resolver, ssl=request_tls),
                 timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
                 request_class=_TunnelRequest,
                 skip_auto_headers={"User-Agent", "Accept-Encoding"},
@@ -268,5 +269,11 @@ async def aiohttp_fetcher(
             session,
             clock,
             policy,
-            AlpnProbe(resolver, trust_anchors, policy.timeout_seconds, policy.proxy_for),
+            AlpnProbe(
+                resolver,
+                trust_anchors,
+                policy.timeout_seconds,
+                policy.proxy_for,
+                proxy_tls=request_tls,
+            ),
         )

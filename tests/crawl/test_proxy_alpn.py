@@ -1,11 +1,14 @@
 """Measure HTTPS capability through the Crawl's authenticated proxy route."""
 
+import ssl
+
 import pytest
+import trustme
 
 from tests.fixture_site.hosts import FixtureResolver
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import RequestLog, ServerHandle
-from tests.fixture_site.tls import StartTlsHosts
+from tests.fixture_site.tls import SniLog, StartTlsHosts
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.proxy import StartProxy
@@ -80,3 +83,53 @@ def test_the_alpn_probe_uses_its_own_authenticated_tunnel(
         ("GET", "/robots.txt", (1, 1), None, "Basic YWxpY2U6czNjcmV0", "staging", None),
         ("GET", "/", (1, 1), None, "Basic YWxpY2U6czNjcmV0", "staging", None),
     ]
+
+
+@pytest.mark.parametrize("proxy_certificate", ["trusted", "untrusted", "wrong-name"])
+def test_the_alpn_probe_verifies_the_environment_proxy_before_connect(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    proxy_certificate: str,
+) -> None:
+    hosts = fixture_tls_hosts(
+        Site({"/": Page(body="<title>Secure shop</title>")}), Site({}), alpn=("h2", "http/1.1")
+    )
+    ca = trustme.CA()
+    proxy_tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    certificate_name = "other.test" if proxy_certificate == "wrong-name" else "proxy.test"
+    ca.issue_cert(certificate_name).configure_cert(proxy_tls)
+    sni = SniLog()
+    proxy_tls.sni_callback = sni.record
+    proxy = fixture_proxy(hosts.resolver, auth=("u", "pw"), tls=proxy_tls)
+    resolver = FixtureResolver({("proxy.test", 8443): ServerHandle(proxy.url, RequestLog())})
+    monkeypatch.setenv("HTTPS_PROXY", "https://u:pw@proxy.test:8443")
+    anchors = hosts.trust_anchors
+    if proxy_certificate != "untrusted":
+        anchors += ca.cert_pem.bytes().decode("ascii")
+
+    result = crawl_result(
+        "https://site.test/", resolver=resolver, trust_anchors=anchors, retries=0, network_wait=0
+    )
+
+    urls = query(result.crawl_file, "SELECT fetch_error, status_code FROM urls")
+    origins = query(result.crawl_file, "SELECT origin, http_version FROM origins")
+    if proxy_certificate == "trusted":
+        assert urls == [(None, 200)]
+        assert origins == [("https://site.test", "http_2")]
+        assert [
+            (request.target, request.headers.get("Proxy-Authorization"))
+            for request in proxy.connect_requests
+        ] == [("site.test:443", "Basic dTpwdw=="), ("site.test:443", "Basic dTpwdw==")]
+        assert [
+            (request.method, request.path, request.http_version, request.alpn)
+            for request in hosts.secure_site.requests
+        ] == [("GET", "/robots.txt", (1, 1), None), ("GET", "/", (1, 1), None)]
+    else:
+        assert urls == [("tls_error", None)]
+        assert origins == [("https://site.test", None)]
+        assert proxy.connect_requests == ()
+        assert hosts.secure_site.requests == ()
+    assert resolver.lookups == ("proxy.test", "proxy.test")
+    assert sni.names == ("proxy.test", "proxy.test")
