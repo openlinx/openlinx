@@ -15,30 +15,30 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 1. Rule model and the rules Command (slice)
 
-- [x] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts and a query that returns no rows until task 4.1, and `linx rules list` on `010`'s output contract.
-- [ ] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `linx rules show <id>`.
-- [ ] 1.3 Drive "Rule without thresholds" at seam 1, and register `title-missing`.
-- [ ] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `linx rules list`.
-- [ ] 1.5 Drive "Windows console output" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
-- [ ] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `linx rules` output.
-- [ ] 1.7 **Guard:** every code this change declares (design D17) is listed by `linx commands` with its level and exit code, at seam 1.
-- [ ] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
+- [x] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. Add the Rule model and register `internal-4xx` and `internal-5xx` with guidance and no-row queries until 4.1 and 4.4. The second Rule makes the one-item page return a cursor. Add `linx rules list` on `010`'s output contract, with bare `linx rules` dispatching to it. Check the full Command path in `linx commands` (D18). This group describes the built-in catalogue. Workspace-resolved `enabled` and the public `reproduce_sql` field arrive in 2.2 and 3.3.
+- [x] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `linx rules show <id>`.
+- [x] 1.3 Drive "Rule without thresholds" at seam 1, and register `title-missing`.
+- [x] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `linx rules list`.
+- [x] 1.5 Drive "Windows console output" at seam 1, as a real subprocess on the Windows CI runner with code page 1251.
+- [x] 1.6 Docs: create `docs/rules.md` covering the Rule model, what Issue Type and Priority mean, the Issue-type principle with `http-url` as Warning/High (design D3), category and id naming (D12) and how to read `linx rules` output.
+- [x] 1.7 **Guard:** every code this change declares (design D17) is listed by `linx commands` with its level and exit code, at seam 1.
+- [x] 1.8 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green.
 
 ## 2. Configuration in openlinx.toml (slice)
 
 - [ ] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model.
-- [ ] 2.2 Drive "Disabled Rule is listed" at seam 1 (`enabled = false`), and register `url-parameters`.
+- [ ] 2.2 Drive "Disabled Rule is listed" at seam 1 and register `url-parameters`. Add `enabled` to list and show from Workspace Rule settings, defaulting to `true` unless the Rule is disabled.
 - [ ] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint.
 - [ ] 2.4 Drive "Unknown key" at seam 1, and register `h2-missing`.
 - [ ] 2.5 Drive "Negative threshold" at seam 1. `linx crawl` exits 3, and the fixture site receives 0 requests. Register `low-word-count`.
-- [ ] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id.
+- [ ] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id. Document `enabled` in the Command output.
 - [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Rules as queries, stored Issues and live Issues (slice)
 
 - [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Create the `rules` table in `openlinx.store.issues` through `018`'s `public_table()` (`STRICT`, `WITHOUT ROWID`, keyed by the Rule id), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
 - [ ] 3.2 Drive "Categories are an enumeration" at seam 6 (`values` on `rules.category`).
-- [ ] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Add `reproduce_sql` to the Rule model, the `rules` table and the Command's items (design D15). A Rule registered before the slice of its condition carries a query that returns no rows until that slice.
+- [ ] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Expose the Rule model's `reproduce_sql` in list and show and store it in the Crawl's `rules` table (D15). Keep the no-row query for any Rule whose condition is still pending.
 - [ ] 3.4 Drive "Missing title" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. The query reads `030`'s `title_count` and `title_1` (its group 2) from `pages`, joined to `urls` for `parsed` = 1 (design D2). The test writes `urls` rows through `020`'s store units and `pages` rows through `030`'s `write_page` (`openlinx.store.pages`) with a `PageRow` (`openlinx.store.page_records`), only for a URL that is a Page by `030`'s predicate, as builders, after `030` task 2.3.
 - [ ] 3.5 Drive "Empty title counts as missing" at seam 2.
 - [ ] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.
@@ -54,7 +54,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 3.16 Drive "Missing H2" at seam 2, over `030`'s `h2_count` and `h2_1`, after `030` task 3.4.
 - [ ] 3.17 Drive "Disabled Rule produces no Issue" at seam 3+6.
 - [ ] 3.18 Drive "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2).
-- [ ] 3.19 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` over a crawl file, and when Issues are live or materialised.
+- [ ] 3.19 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` from the Command output over a crawl file, and when Issues are live or materialised.
 - [ ] 3.20 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. The slice's response code Rules and Missing H1 (slice)
@@ -62,7 +62,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 4.1 Drive "Client error" at seam 2, over `urls` rows: `020`'s `is_internal`, `fetch_state` and `status_code`. The `internal_urls` population reads `blocked_by_robots_txt` only from task 7.1, after `020` task 10.5 declares the column (design D2).
 - [ ] 4.2 Drive "External URLs are not Internal URLs" at seam 2.
 - [ ] 4.3 Drive "Client error recorded by a Crawl" at seam 3+6, with an Internal URL that is not a Page. `020`'s Crawl records it, Internal and not parsed, since group 6 of `020`.
-- [ ] 4.4 Drive "Server error" at seam 2, and register `internal-5xx`.
+- [ ] 4.4 Drive "Server error" at seam 2 by replacing the no-row query of `internal-5xx`, registered in 1.1.
 - [ ] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
 - [ ] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
 - [ ] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1` (after `030` task 3.4), and register `h1-missing`.
