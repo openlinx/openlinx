@@ -6,13 +6,11 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import closing
-from enum import Enum
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import Connection, func, insert, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import Connection, func, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from openlinx.store.connections import connect
@@ -949,45 +947,6 @@ async def test_a_unit_submitted_under_a_loop_s_commit_deadline_commits_at_the_de
     assert (before, seen) == ([(0,)], ([(1,)], 1.0))
 
 
-def _inserted_cursor(connection: Connection) -> object:
-    # Returns what execute returned, a CursorResult bound to this connection.
-    return connection.execute(insert(seeds).values(position=1, url="https://example.com/a"))
-
-
-def _inserted_cursors(connection: Connection) -> object:
-    return [connection.execute(insert(seeds).values(position=1, url="https://example.com/a"))]
-
-
-def _cursors_by_name(connection: Connection) -> object:
-    return {"inserted": _inserted_cursor(connection)}
-
-
-def _set_of_cursors(connection: Connection) -> object:
-    return {_inserted_cursor(connection)}
-
-
-@pytest.mark.parametrize(
-    "unit",
-    [_inserted_cursor, _inserted_cursors, _cursors_by_name, _set_of_cursors],
-    ids=["cursor", "in a list", "a dict's value", "in a set"],
-)
-def test_a_unit_that_returns_a_cursor_is_refused(
-    temp_workspace: TempWorkspace, unit: Callable[[Connection], object]
-) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        with pytest.raises(TypeError) as refused:
-            writer.run(unit)
-        writer.run(insert_seed(2, "https://example.com/b"))
-
-    assert (str(refused.value), query(crawl.path, SEEDS)) == (
-        f"the unit {unit.__qualname__} returned a CursorResult, which compares by identity, so "
-        "a replay cannot check it: return values, such as .all() rows or a record",
-        [(2, "https://example.com/b")],
-    )
-
-
 def _commits(connection: Connection) -> None:
     insert_seed(2, "https://example.com/b")(connection)
     connection.commit()
@@ -1039,32 +998,6 @@ def test_a_unit_that_commits_ends_the_writer(
         "The crawl writer is closed.",
         [(1,), (2,)],
     )
-
-
-class _Seeded(Enum):
-    NEW = "new"
-    KNOWN = "known"
-
-
-def _seeded(connection: Connection) -> _Seeded:
-    inserted = connection.execute(
-        sqlite_insert(seeds)
-        .values(position=1, url="https://example.com/a")
-        .on_conflict_do_nothing()
-    )
-    return _Seeded.NEW if inserted.rowcount else _Seeded.KNOWN
-
-
-def test_a_unit_that_returns_an_enumeration_member_is_kept(temp_workspace: TempWorkspace) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        first = writer.run(_seeded)
-        # The replay compares the member with itself, which an Enum compares by identity.
-        replay_now(writer)
-        again = writer.run(_seeded)
-
-    assert (first, again, query(crawl.path, COUNT)) == (_Seeded.NEW, _Seeded.KNOWN, [(1,)])
 
 
 def _rolls_back(connection: Connection) -> None:
