@@ -230,6 +230,8 @@ def _build_app(
 
     async def handle(request: web.Request) -> web.StreamResponse:
         found = site.routes.get(request.path)
+        if found is None and site.resolve is not None:
+            found = site.resolve(request.path)
         if found is None:
             raise web.HTTPNotFound
         if isinstance(found, Responses):
