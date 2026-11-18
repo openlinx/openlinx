@@ -21,6 +21,7 @@ from openlinx.crawl.fetch.alpn import AlpnProbe
 from openlinx.crawl.fetch.body import BodyDecodingError, read_body
 from openlinx.crawl.fetch.cookies import redacted_header
 from openlinx.crawl.fetch.proxy import ProxyVariables
+from openlinx.crawl.fetch.proxy_connect import connect_authority
 from openlinx.crawl.fetch.tls import tls_context
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.naming import CRAWLER_PAGE_URL, PRODUCT_NAME
@@ -151,12 +152,9 @@ class _TunnelRequest(aiohttp.ClientRequest):
     ) -> None:
         super().update_proxy(proxy, proxy_auth, proxy_headers)
         if proxy is not None and self.is_ssl():
-            authority = self.url.host_port_subcomponent
-            if authority is None:
-                raise RuntimeError("A tunnel request needs an origin authority")
             # The connector takes Host from this request when building CONNECT.
             self._origin_host = self.headers["Host"]
-            self.headers["Host"] = authority
+            self.headers["Host"] = connect_authority(self.url)
 
     async def send(self, conn: Connection) -> aiohttp.ClientResponse:
         # The connection (including any CONNECT and TLS) has already been established.

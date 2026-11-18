@@ -11,7 +11,11 @@ import yarl
 from aiohttp.abc import AbstractResolver, ResolveResult
 from aiohttp.helpers import is_ip_address
 
-from openlinx.crawl.fetch.proxy_connect import CONNECT_STREAM_LIMIT, establish_tunnel
+from openlinx.crawl.fetch.proxy_connect import (
+    CONNECT_STREAM_LIMIT,
+    connect_authority,
+    establish_tunnel,
+)
 from openlinx.crawl.fetch.system_dns import resolve_system
 from openlinx.crawl.fetch.tls import tls_context
 from openlinx.store.records import HttpVersion
@@ -43,7 +47,7 @@ class AlpnProbe:
             self._context = tls_context(self._trust_anchors)
             self._context.set_alpn_protocols(["h2", "http/1.1"])
         if (route := self._proxy_for(origin)) is not None:
-            return await self._measure_proxy(route, host, port, self._context)
+            return await self._measure_proxy(route, host, connect_authority(url), self._context)
         try:
             addresses = await self._addresses(host, port)
         except (OSError, UnicodeError):
@@ -68,7 +72,7 @@ class AlpnProbe:
         return None
 
     async def _measure_proxy(
-        self, route: str, host: str, port: int, context: ssl.SSLContext
+        self, route: str, host: str, authority: str, context: ssl.SSLContext
     ) -> HttpVersion | None:
         try:
             proxy = yarl.URL(route)
@@ -96,7 +100,7 @@ class AlpnProbe:
                 continue
             upgrading = False
             try:
-                if not await establish_tunnel(reader, writer, proxy, host, port):
+                if not await establish_tunnel(reader, writer, proxy, authority):
                     return None
                 upgrading = True
                 await writer.start_tls(

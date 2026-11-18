@@ -629,9 +629,11 @@ written in the URL and after percent decoding.
 The continue service accepts a fresh URL through `CrawlOverrides.proxy`.
 See [Continuing a Crawl](#continuing-a-crawl).
 
-HTTPS requests use CONNECT through the HTTP proxy. Proxy URL credentials authenticate
-the tunnel. CONNECT carries neither the Crawl’s Authorization header nor its custom
-origin headers. Inside the tunnel, Internal requests receive their configured identity.
+HTTPS requests and ALPN probes use CONNECT through the HTTP proxy. The request
+target and `Host` both carry the destination host and port, including the default
+port and any final DNS dot. Proxy URL credentials authenticate the tunnel.
+CONNECT carries neither the Crawl’s Authorization header nor its custom origin
+headers. Inside the tunnel, Internal requests receive their configured identity.
 External requests omit it. Proxy credentials stay at the proxy, and TLS verifies the
 origin’s certificate and hostname.
 

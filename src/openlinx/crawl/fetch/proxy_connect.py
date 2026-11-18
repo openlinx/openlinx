@@ -13,14 +13,20 @@ _SUCCESS_STATUS = re.compile(rb"HTTP/1\.[01] 2[0-9]{2} [\t\x20-\x7e\x80-\xff]*")
 _FIELD_LINE = re.compile(rb"[!#$%&'*+\-.^_`|~0-9A-Za-z]+:[\t\x20-\x7e\x80-\xff]*")
 
 
+def connect_authority(url: yarl.URL) -> str:
+    """Match aiohttp's CONNECT target, including DNS root dots and default ports."""
+    host, port = url.host_subcomponent, url.port
+    if host is None or port is None:
+        raise RuntimeError("A tunnel request needs an origin host and port")
+    return f"{host}:{port}"
+
+
 async def establish_tunnel(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
     proxy: yarl.URL,
-    host: str,
-    port: int,
+    authority: str,
 ) -> bool:
-    authority = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
     lines = [f"CONNECT {authority} HTTP/1.1", f"Host: {authority}"]
     if proxy.raw_user or proxy.raw_password:
         auth = aiohttp.encode_basic_auth(proxy.user or "", proxy.password or "", encoding="latin1")

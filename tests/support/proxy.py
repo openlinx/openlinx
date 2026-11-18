@@ -88,11 +88,13 @@ class ForwardProxy:
         *,
         auth: tuple[str, str] | None = None,
         connect_replies: tuple[ConnectReply, ...] = (),
+        strict_connect_host: bool = False,
         tls: ssl.SSLContext | None = None,
     ) -> None:
         self._resolver = resolver
         self._authorization = aiohttp.encode_basic_auth(*auth) if auth is not None else None
         self._connect_replies = connect_replies or (ConnectReply(),)
+        self._strict_connect_host = strict_connect_host
         self._tls = tls
         self._requests: list[str] = []
         self._connect_requests: list[ConnectRequest] = []
@@ -173,6 +175,13 @@ class ForwardProxy:
                     self._connect_requests.append(
                         ConnectRequest(method, target, CIMultiDictProxy(headers))
                     )
+                if self._strict_connect_host and headers.getall("Host", []) != [target]:
+                    writer.write(
+                        b"HTTP/1.1 400 Host differs from CONNECT authority\r\n"
+                        b"Content-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
+                    await writer.drain()
+                    return
                 if (
                     self._authorization is not None
                     and headers.get("Proxy-Authorization") != self._authorization
@@ -283,5 +292,6 @@ class StartProxy(Protocol):
         *,
         auth: tuple[str, str] | None = None,
         connect_replies: tuple[ConnectReply, ...] = (),
+        strict_connect_host: bool = False,
         tls: ssl.SSLContext | None = None,
     ) -> ForwardProxy: ...
