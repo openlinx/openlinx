@@ -6,6 +6,7 @@ import ssl
 import struct
 import threading
 import time
+from collections import defaultdict
 from collections.abc import Awaitable, Callable, Coroutine, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -46,7 +47,8 @@ AFTER_SECONDS = 10.0
 
 
 class RequestLog:
-    def __init__(self) -> None:
+    def __init__(self, *, keep: bool = True) -> None:
+        self._keep = keep
         self._entries: list[LoggedRequest] = []
         self._failures: list[str] = []
         self._lock = threading.Lock()
@@ -54,18 +56,19 @@ class RequestLog:
         self._most_in_flight = 0
 
     def add(self, request: web.Request) -> None:
-        transport = request.transport
-        tls = transport.get_extra_info("ssl_object") if transport is not None else None
-        entry = LoggedRequest(
-            method=request.method,
-            path=request.path_qs,
-            headers=CIMultiDictProxy(CIMultiDict(request.headers)),
-            received_at=time.monotonic(),
-            http_version=(request.version.major, request.version.minor),
-            alpn=tls.selected_alpn_protocol() if isinstance(tls, ssl.SSLObject) else None,
-        )
         with self._lock:
-            self._entries.append(entry)
+            if self._keep:
+                transport = request.transport
+                tls = transport.get_extra_info("ssl_object") if transport is not None else None
+                entry = LoggedRequest(
+                    method=request.method,
+                    path=request.path_qs,
+                    headers=CIMultiDictProxy(CIMultiDict(request.headers)),
+                    received_at=time.monotonic(),
+                    http_version=(request.version.major, request.version.minor),
+                    alpn=tls.selected_alpn_protocol() if isinstance(tls, ssl.SSLObject) else None,
+                )
+                self._entries.append(entry)
             self._in_flight += 1
             self._most_in_flight = max(self._most_in_flight, self._in_flight)
 
@@ -207,19 +210,31 @@ def _pattern_chunks(size: int) -> Iterator[bytes]:
 
 
 def _build_app(
-    site: Site, base_url: Callable[[], str], log: RequestLog, after_seconds: float
+    site: Site,
+    base_url: Callable[[], str],
+    log: RequestLog,
+    after_seconds: float,
+    *,
+    keep_log: bool,
+    after_paths: Sequence[str],
 ) -> web.Application:
-    requested: dict[str, asyncio.Event] = {}
-
-    def seen(path: str) -> asyncio.Event:
-        return requested.setdefault(path, asyncio.Event())
+    # A resolver can introduce an after target whose request already arrived.
+    # The normal fixture remembers every arrival. A no-log site watches only known targets.
+    requested: dict[str, asyncio.Event] = defaultdict(asyncio.Event)
+    if not keep_log:
+        requested = {path: asyncio.Event() for path in after_paths}
+        for route in site.routes.values():
+            for answer in route.answers if isinstance(route, Responses) else (route,):
+                if answer.after is not None and answer.after not in requested:
+                    requested[answer.after] = asyncio.Event()
 
     @web.middleware
     async def logged(
         request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
     ) -> web.StreamResponse:
         log.add(request)
-        seen(request.path).set()
+        if keep_log or request.path in requested:
+            requested[request.path].set()
         try:
             return await handler(request)
         finally:
@@ -241,9 +256,12 @@ def _build_app(
         else:
             route = found
         if route.after is not None:
+            if not keep_log and route.after not in requested:
+                log.fail(f"{request.path} needs after_paths to include {route.after}")
+                raise web.HTTPInternalServerError
             try:
                 async with asyncio.timeout(after_seconds):
-                    await seen(route.after).wait()
+                    await requested[route.after].wait()
             except TimeoutError:
                 log.fail(
                     f"{request.path} waited {after_seconds} s for a request for "
@@ -348,10 +366,19 @@ class RunningServer:
         tls: ssl.SSLContext | None = None,
         *,
         port: int = 0,
+        keep_log: bool = True,
+        after_paths: Sequence[str] = (),
     ) -> None:
-        self._log = log = RequestLog()
+        self._log = log = RequestLog(keep=keep_log)
         self._app = ThreadedApp(
-            _build_app(site, lambda: self.handle.base_url, log, after_seconds),
+            _build_app(
+                site,
+                lambda: self.handle.base_url,
+                log,
+                after_seconds,
+                keep_log=keep_log,
+                after_paths=after_paths,
+            ),
             name="fixture-site",
             tls=tls,
             port=port,

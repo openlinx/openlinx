@@ -83,6 +83,18 @@ When the server stops, it cancels every handler still running (hanging, delayed,
   - `most_simultaneous`, the most requests the site has handled at once, from a request's arrival until its handler returned
   - `requests`, a snapshot of the request log. Each entry has method, path including query, headers, monotonic receipt time, an HTTP version tuple and the selected ALPN protocol (None without selection).
 
+For a large computed site, start `RunningServer(site, keep_log=False)` and call
+`stop()` in a `finally` block. Its handle still measures `most_simultaneous`,
+and `requests` is empty. The server keeps one event per distinct declared
+`after` target, including targets in any answer of a declared `Responses` route.
+If the resolver introduces other targets, pass their paths at startup, for example
+`after_paths=("/ready",)`, so even an earlier request for that path releases the waiter.
+An undeclared target from the resolver returns 500 and fails the test at teardown.
+
+For computed Pages with no dependencies, ordinary requests leave no per-path
+history in the fixture. A `Responses` route still needs a counter per requested
+path, and failed dependencies retain their diagnostics until teardown.
+
 Clients in tests:
 - aiohttp needs nothing special.
 - `http.client` needs nothing special.
