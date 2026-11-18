@@ -7,8 +7,9 @@ from tempfile import TemporaryFile
 
 import pytest
 
-from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli
+from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli, run_cli_process
 from tests.support.processes import console_process, python_command
+from tests.support.workspace import TempWorkspace
 
 GUIDANCE = ("description", "why_it_matters", "how_to_fix")
 
@@ -44,7 +45,7 @@ def test_every_rule_has_its_guidance() -> None:
     ] == []
 
 
-def test_show_a_rule_with_thresholds() -> None:
+def test_show_a_rule_with_thresholds(temp_workspace: TempWorkspace) -> None:
     result = run_cli("rules", "show", "title-too-long")
 
     assert result.exit_code == 0, result.stderr
@@ -57,6 +58,55 @@ def test_show_a_rule_with_thresholds() -> None:
     )
     assert rule["applies_to"] == "internal_pages"
     assert rule["thresholds"] == {"max_chars": {"value": 60, "default": 60, "unit": "characters"}}
+
+
+def test_override_shown_by_the_rules_command(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+
+    shown = run_cli_process("rules", "show", "title-too-long")
+    listed = run_cli("rules", "list", "--limit", "50")
+
+    assert shown.exit_code == 0, shown.stderr
+    assert listed.exit_code == 0, listed.stderr
+    (item,) = (item for item in listed.json()["items"] if item["id"] == "title-too-long")
+    expected = {"max_chars": {"value": 70, "default": 60, "unit": "characters"}}
+    assert shown.json()["thresholds"] == expected
+    assert item["thresholds"] == expected
+
+
+def test_rules_use_the_explicit_workspace(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+    other = temp_workspace.root / "other"
+    other.mkdir()
+    (other / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 0\n")
+
+    shown = run_cli("rules", "show", "title-too-long", "--workspace", "other")
+    listed = run_cli("rules", "list", "--workspace", "other", "--limit", "50")
+
+    assert shown.exit_code == 0, shown.stderr
+    assert listed.exit_code == 0, listed.stderr
+    (item,) = (item for item in listed.json()["items"] if item["id"] == "title-too-long")
+    expected = {"max_chars": {"value": 0, "default": 60, "unit": "characters"}}
+    assert shown.json()["thresholds"] == expected
+    assert item["thresholds"] == expected
+
+
+def test_a_rules_cursor_belongs_to_its_workspace(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+    (temp_workspace.root / "other").mkdir()
+    first = run_cli("rules", "list", "--limit", "1")
+    assert first.exit_code == 0, first.stderr
+    cursor = first.json()["next_cursor"]
+    assert isinstance(cursor, str)
+    assert cursor
+
+    same = run_cli("rules", "list", "--workspace", ".", "--cursor", cursor, "--fields", "id")
+    other = run_cli("rules", "list", "--workspace", "other", "--cursor", cursor)
+
+    assert same.exit_code == 0, same.stderr
+    assert {"id": "title-too-long"} in same.json()["items"]
+    assert other.exit_code == 2, other.stdout
+    assert other.stderr_json_lines()[-1]["code"] == "invalid_cursor"
 
 
 def test_rule_without_thresholds() -> None:

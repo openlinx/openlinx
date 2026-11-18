@@ -10,8 +10,9 @@ Grouped Commands appear by their full path in `linx commands`. Use `linx rules l
 Use `--format table` for a table. In both Commands, `thresholds` maps each name to an object
 with `value`, `default` and `unit`. A Rule without thresholds, such as `title-missing`, has
 `"thresholds": {}`.
-The current `value` for each threshold is its catalogue `default`. For `title-too-long`,
-`max_chars` is 60 characters.
+Each threshold's `value` comes from the Workspace settings or falls back to the catalogue
+`default`, which is 60 characters for `title-too-long`'s `max_chars`. Both Commands accept
+`--workspace <dir>`. [Threshold overrides](rules.md#override-a-threshold)
 An unknown id returns `rule_not_found` and directs you to `linx rules list`.
 
 ## stdout and stderr

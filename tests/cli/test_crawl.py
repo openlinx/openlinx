@@ -283,6 +283,17 @@ def test_openlinx_toml_sets_a_crawl_setting(
     assert config["crawl"]["concurrency"] == 2
 
 
+def test_a_rule_setting_is_recorded_by_its_rule_id(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+
+    config = json.loads(crawl_row(crawled(server.url("/")))["config"])
+
+    assert config["rules"]["title-too-long"] == {"max_chars": 70}
+
+
 def test_a_flag_overrides_openlinx_toml(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:

@@ -70,11 +70,28 @@ def keyed_entry(table: Any) -> Any:
     return entry
 
 
+def named_tables(table: Table) -> dict[str, Any] | None:
+    """The subtable models by TOML name when the settings model consists of named tables."""
+    fields = getattr(table, "model_fields", None)
+    if not fields or not all(
+        isinstance(field.annotation, type) and hasattr(field.annotation, "model_fields")
+        for field in fields.values()
+    ):
+        return None
+    return {field.alias or key: field.annotation for key, field in fields.items()}
+
+
 def check_table(name: str, table: Table) -> None:
-    """Require flat, described settings with TOML defaults so templates and error hints can
-    use every table; keyed tables also need an entry docstring."""
+    """Require described settings with TOML defaults and a description for nested tables."""
     entry = keyed_entry(table)
-    if entry is None:
+    subtables = named_tables(table)
+    if subtables is not None:
+        _check_extra(name, table)
+        if not table.__doc__ or "\n" in table.__doc__:
+            raise TypeError(f"Settings table [{name}] needs a one-line docstring.")
+        for key, model in subtables.items():
+            _check_model(f"{name}.{key}", model)
+    elif entry is None:
         _check_model(name, table)
     else:
         # Literal entries (`<name> = <value>`) have no docstring to describe the table in the
@@ -91,13 +108,17 @@ def check_table(name: str, table: Table) -> None:
 def _check_model(name: str, model: Any) -> None:
     # The template and the error hints rely on flat tables whose keys all have a
     # one-line description and a default that is a TOML literal, or None for unset.
-    if getattr(model, "model_config", {}).get("extra") != "forbid":
-        raise TypeError(f'Settings table [{name}] must set extra="forbid".')
+    _check_extra(name, model)
     for key, field in model.model_fields.items():
         if not field.description or "\n" in field.description:
             raise TypeError(f"Setting {name}.{key} needs a one-line description.")
         if field.default is not None and not _is_toml_literal(field.default):
             raise TypeError(f"Setting {name}.{key} needs a default TOML can write.")
+
+
+def _check_extra(name: str, model: Any) -> None:
+    if getattr(model, "model_config", {}).get("extra") != "forbid":
+        raise TypeError(f'Settings table [{name}] must set extra="forbid".')
 
 
 def _is_toml_literal(value: Any) -> bool:

@@ -1,6 +1,7 @@
 """Verify the init Command creates and reports a Workspace."""
 
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -186,3 +187,18 @@ def test_a_keyed_table_in_the_template(shop: Path) -> None:
     lines = (shop / "openlinx.toml").read_text(encoding="utf-8").splitlines()
 
     assert '# level = "low"' in lines[lines.index("# [groups.<name>]") :]
+
+
+def test_a_table_of_named_tables_in_the_template(shop: Path) -> None:
+    result = run_cli("init")
+
+    assert result.exit_code == 0, result.stderr
+    template = (shop / "openlinx.toml").read_text(encoding="utf-8")
+    lines = template.splitlines()
+    header = "# [rules.title-too-long]"
+    assert header in lines
+    description, default = lines[lines.index(header) + 1 :][:2]
+    assert description.startswith("# ")
+    assert "characters" in description
+    assert default == "# max_chars = 60"
+    assert "rules" not in tomllib.loads(template)

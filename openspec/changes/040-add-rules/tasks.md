@@ -26,7 +26,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 2. Configuration in openlinx.toml (slice)
 
-- [ ] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model.
+- [x] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model.
 - [ ] 2.2 Drive "Disabled Rule is listed" at seam 1 and register `url-parameters`. Add `enabled` to list and show from Workspace Rule settings, defaulting to `true` unless the Rule is disabled.
 - [ ] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint.
 - [ ] 2.4 Drive "Unknown key" at seam 1, and register `h2-missing`.

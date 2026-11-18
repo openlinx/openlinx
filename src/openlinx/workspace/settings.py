@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ValidationError, create_model
+from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -178,11 +179,15 @@ def _suggestion(error: ValidationError, root_model: type[BaseModel]) -> str | No
         for part in parents:
             # A keyed table's part is an entry's name: the next level is the entry model.
             entry = keyed_entry(model)
-            model = entry if entry is not None else model.model_fields[part].annotation
-        matches = difflib.get_close_matches(unknown, list(model.model_fields), n=1)
+            model = entry if entry is not None else _toml_fields(model)[part].annotation
+        matches = difflib.get_close_matches(unknown, list(_toml_fields(model)), n=1)
         if matches:
             return f"Did you mean {'.'.join([*parents, matches[0]])}?"
     return None
+
+
+def _toml_fields(model: type[BaseModel]) -> dict[str, FieldInfo]:
+    return {field.alias or key: field for key, field in model.model_fields.items()}
 
 
 def _sources(settings_file: Path) -> type[BaseSettings]:

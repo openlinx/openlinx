@@ -42,6 +42,17 @@ def test_unknown_key_in_a_named_entry(shop: Path) -> None:
     )
 
 
+def test_a_setting_suggestion_uses_the_aliased_table_name(shop: Path) -> None:
+    (shop / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_char = 70\n")
+
+    result = run_cli("init")
+    (error,) = result.stderr_json_lines()
+
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert error["details"]["errors"][0]["key"] == "rules.title-too-long.max_char"
+    assert error["hint"] == "Did you mean rules.title-too-long.max_chars?"
+
+
 def test_output_flags_have_no_settings_key(shop: Path) -> None:
     (shop / "openlinx.toml").write_bytes(b'[output]\nformat = "table"\n')
 
