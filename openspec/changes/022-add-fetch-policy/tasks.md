@@ -231,7 +231,7 @@ For groups 11–14, each introducing slice updates the required setting/option/c
 - [x] 13.10 [2+3] Drive "A single host slot cannot deadlock the capability probe" with Crawl concurrency 1 and one per-host slot; also guard connection limits across several origins. No wait for a probe permit may hold a URL/robots.txt permit.
 - [x] 13.11 [2+3] Drive "Stop closes an admitted capability probe", plus cancellation while pending admission and normal completion with a pending measurement: join all work and close sockets before closing the writer; cancellation propagates.
 - [x] 13.12 [6] Drive "The measured column describes capability" while retaining "The HTTP version is a later column" as v0.1 evidence only. Verify matching schema docs and the Page column description without implementing Page population.
-- [ ] 13.13 Docs: document offered capability, NULL on failed measurement, HTTP/1.1 request transport and bounded proxy/DNS/TLS probe lifecycle in `docs/crawling.md`.
+- [x] 13.13 Docs: document offered capability, NULL on failed measurement, HTTP/1.1 request transport and bounded proxy/DNS/TLS probe lifecycle in `docs/crawling.md`.
 - [ ] 13.14 Review Standards and Spec on group 13's commits, especially admission/stop, bounds and probe isolation; refactor only with the full gate green and prove immediately-green guards by mutation.
 
 ## 14. (v0.2) Bounded zstd

@@ -264,6 +264,9 @@ and normal completion with a pending measurement.
 Task 13.12 pins the live Origins and Page capability descriptions through the
 schema Command. The v0.1 deferred wording stays in the historical snapshot.
 
+Task 13.13 documents offered HTTP capability, HTTP/1.1 request transport,
+the shared probe deadline and cleanup on completion or stop.
+
 [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) publishes the integration
 branch, including 030 and developer checks. The authenticated CONNECT checkpoint
 `4e3f9c34` passed all nine jobs on Windows, macOS and Linux with Python 3.12–3.14.

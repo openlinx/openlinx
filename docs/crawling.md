@@ -395,9 +395,20 @@ With `--no-check-external`, no External URL is requested. Each one is still reco
 
 Every URL belongs to an origin, made up of its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are Internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)).
 
-`origins.http_version` reports the origin's offered HTTP capability. A plain HTTP origin
-gets `http_1_1` when the Crawl requests it, without a TLS probe. Unmeasured capability is
-NULL, including in v0.1 Crawl files. Crawler requests use HTTP/1.1.
+`origins.http_version` reports the origin's offered HTTP capability. Ordinary Crawl
+requests use HTTP/1.1. A requested plain HTTP origin gets `http_1_1`. The first request
+to an HTTPS origin in each run schedules one TLS probe, including for External origins
+and with `--ignore-robots`. The probe records `http_2` when the origin selects `h2` via
+ALPN, or `http_1_1` after any other successful handshake, including one with no ALPN
+selection. A failed, timed-out or cancelled probe leaves `NULL` for that run.
+Unmeasured origins, including in v0.1 Crawl files, also have `NULL`. The probe follows
+the same DNS routing, HTTP proxy settings and TLS trust as ordinary requests and
+sends only TLS traffic to the origin. Probes share the Crawl's connection and per-host
+limits. One `--timeout` budget starts at scheduling and covers waiting for a connection
+slot, DNS, TCP, any proxy CONNECT and TLS. The CONNECT response head can total up to
+65,536 bytes, including the status line and final blank line. On normal completion the
+Crawl waits for probes to end. On stop it cancels pending and active probes, then waits
+for them to close any open connections and exit.
 
 ### `--scope`
 
