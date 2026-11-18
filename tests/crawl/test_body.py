@@ -177,16 +177,25 @@ async def _check_brotli_budget(coding: str, first: str, last: str, expected: str
     async def chunks() -> AsyncIterator[bytes]:
         nonlocal baseline
         yield head
-        if coding != "br":
-            # The prefix produces "hello" and initializes gzip's fixed workspace, which stays
-            # live while the next chunk expands. zlib-ng allocates over 32 KiB for that state.
-            baseline = tracemalloc.get_traced_memory()[0]
-            tracemalloc.reset_peak()
+        # The prefix produces "hello" and initializes gzip's fixed workspace, which stays
+        # live while the next chunk expands. zlib-ng allocates over 32 KiB for that state.
+        baseline = tracemalloc.get_traced_memory()[0]
+        tracemalloc.reset_peak()
         yield tail
+
+    if coding == "br":
+        # A five-byte response primes CFFI's lazy setup. The measured reader creates a fresh
+        # decoder whose first chunk includes the expansion, so first-call output still counts.
+        tiny = bytes.fromhex("0b028068656c6c6f03")
+        warmup = await read_body(_pieces(tiny), "br", limit=512)
+        assert (warmup.data, warmup.truncated, warmup.transferred_bytes) == (b"hello", False, 9)
+        stream = _pieces(head + tail)
+    else:
+        stream = chunks()
 
     tracemalloc.start()
     try:
-        body = await read_body(chunks(), coding, limit=512)
+        body = await read_body(stream, coding, limit=512)
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
