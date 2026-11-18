@@ -1,4 +1,4 @@
-"""Finding the Workspace (design D1 of 010-add-workspace-and-cli-contract)."""
+"""Find the Workspace from an explicit path or the caller's location."""
 
 from dataclasses import dataclass
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""The DNS resolver hook: fixture host names for multi-host Crawls (020-add-crawl-core D15)."""
+"""Verify the resolver hook maps fixture host names to local listeners."""
 
 import aiohttp
 import pytest

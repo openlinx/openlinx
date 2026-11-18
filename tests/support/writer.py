@@ -1,4 +1,4 @@
-"""Driving the crawl writer in tests (design D7 of 017-speed-up-crawl-writer)."""
+"""Drive the Crawl writer through its synchronous and asynchronous public APIs."""
 
 from collections.abc import Callable
 from contextlib import suppress
@@ -9,7 +9,7 @@ from openlinx.store.writer import CrawlWriter
 
 
 def executing(statement: Executable) -> Callable[[Connection], None]:
-    """A unit that runs one statement and returns None, not SQLAlchemy's result (design D7)."""
+    """A unit that returns None so its result stays independent of SQLAlchemy cursor state."""
 
     def unit(connection: Connection) -> None:
         connection.execute(statement)

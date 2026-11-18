@@ -1,5 +1,4 @@
-"""`FakeClock` and `SystemClock` (designs D6 and D8 of 000-scaffold-project, D7 of
-020-add-crawl-core)."""
+"""Verify the production clock and the virtual clock used by timing tests."""
 
 import asyncio
 import threading

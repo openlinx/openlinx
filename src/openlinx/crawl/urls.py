@@ -1,4 +1,4 @@
-"""URL normalisation: NormalizedUrl, made only here (020-add-crawl-core D13)."""
+"""Normalize URLs through a single factory that establishes the NormalizedUrl contract."""
 
 import re
 import string
@@ -203,7 +203,7 @@ def url_host(url: NormalizedUrl) -> str:
 
 def host_key(url: NormalizedUrl) -> str:
     """The host as the Scope and the per-host limits compare it: a trailing dot names the
-    same server (design D7)."""
+    same server."""
     return url_host(url).removesuffix(".")
 
 

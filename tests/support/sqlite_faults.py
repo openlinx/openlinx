@@ -1,5 +1,4 @@
-"""SQLite failures that tests cannot cause for real: a -shm file still held by a killed writer
-(015-add-crawl-store), and a full disk (020-add-crawl-core)."""
+"""Inject SQLite failures that real test files cannot reliably cause."""
 
 import sqlite3
 from collections.abc import Iterator

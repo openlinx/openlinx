@@ -1,4 +1,4 @@
-"""`linx crawl` over the Crawl Service (020-add-crawl-core D10, D11)."""
+"""Adapt the Crawl Service to the crawl Command."""
 
 from pathlib import Path
 from typing import Annotated, Any
@@ -9,7 +9,13 @@ from openlinx.cli.meta import Example, command_meta
 from openlinx.cli.options import FormatOpt, OptionMeta, WorkspaceOpt, secret_flags, setting_flags
 from openlinx.cli.runner import Invocation
 from openlinx.clock import SystemClock
-from openlinx.crawl.setting_rules import as_rate, as_robots_token, as_timeout, as_user_agent
+from openlinx.crawl.setting_rules import (
+    as_header,
+    as_rate,
+    as_robots_token,
+    as_timeout,
+    as_user_agent,
+)
 from openlinx.naming import COMMAND_NAME, DEFAULT_ROBOTS_TOKEN
 from openlinx.output.diagnostics import Outcome
 from openlinx.output.writer import Format
@@ -30,6 +36,15 @@ def _user_agent(user_agent: str | None) -> str | None:
         return None if user_agent is None else as_user_agent(user_agent)
     except ValueError as refusal:
         raise typer.BadParameter(f"{user_agent!r}: {refusal}.") from None
+
+
+def _headers(headers: list[str] | None) -> list[str] | None:
+    try:
+        for header in headers or ():
+            as_header(header)
+    except ValueError as refusal:
+        raise typer.BadParameter(f"{refusal}.") from None
+    return headers
 
 
 def _timeout(timeout: float) -> float:
@@ -151,6 +166,38 @@ def crawl(
             show_default=False,
         ),
         OptionMeta(setting="crawl.user_agent"),
+    ] = None,
+    header: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--header",
+            callback=_headers,
+            help="A Name: Value header sent only to Internal URLs and their robots.txt. "
+            "Repeat for several headers; sensitive values are hidden in records.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.header"),
+    ] = None,
+    auth: Annotated[
+        str | None,
+        typer.Option(
+            "--auth",
+            help="Preemptive Basic Auth user:password for Internal URLs and their robots.txt "
+            "only; exact UTF-8 without trimming or normalization. Empty disables authentication.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.auth"),
+    ] = None,
+    proxy: Annotated[
+        str | None,
+        typer.Option(
+            "--proxy",
+            help="The HTTP proxy URL for every request, robots.txt's included; a nonempty "
+            "value overrides proxy environment variables. A schemeless URL uses HTTP; empty "
+            "uses the environment. Its password is hidden in records.",
+            show_default=False,
+        ),
+        OptionMeta(setting="crawl.proxy"),
     ] = None,
     timeout: Annotated[
         float,

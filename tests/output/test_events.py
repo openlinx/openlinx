@@ -1,4 +1,4 @@
-"""Progress event lines (design D3 of 010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify progress-event line serialization."""
 
 from datetime import UTC, datetime
 

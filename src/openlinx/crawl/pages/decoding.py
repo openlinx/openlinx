@@ -1,4 +1,4 @@
-"""HTML decoding, shared with 030's text (020-add-crawl-core D5)."""
+"""Decode HTML consistently for Link discovery and Page text extraction."""
 
 import codecs
 import re

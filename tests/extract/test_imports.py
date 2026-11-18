@@ -1,4 +1,4 @@
-"""What the Page extractor loads in a parse-pool worker (030-add-page-data D1; seam 4)."""
+"""Guard the modules loaded by Page extraction in a parse worker."""
 
 import os
 import subprocess

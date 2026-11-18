@@ -1,4 +1,4 @@
-"""Continuing a stopped or failed Crawl (020-add-crawl-core D20; seam 2)."""
+"""Verify stopped and failed Crawls continue through the service API."""
 
 import json
 from collections.abc import Sequence

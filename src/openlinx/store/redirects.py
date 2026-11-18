@@ -1,5 +1,4 @@
-"""The redirects of the urls table: the hop limit and loops, each read back from the file, so a
-replayed unit gives the same result (022-add-fetch-policy D2)."""
+"""Resolve redirect loops and hop limits from stored rows so replay gives the same result."""
 
 from sqlalchemy import Connection, bindparam, select, update
 
@@ -44,8 +43,7 @@ def _chain_back(
 ) -> tuple[int, DiscoveredVia]:
     # The consecutive redirects that led to a URL, read back from the file so a replayed unit
     # counts the same, and how its chain's first URL was found; at most `limit`
-    # point reads, which no chain passes, since the target past the limit is never queued
-    # (022-add-fetch-policy D2).
+    # point reads, which no chain passes, since the target past the limit is never queued.
     hops = 0
     while via == "redirect" and found_on is not None and hops < limit:
         hops += 1

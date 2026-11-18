@@ -1,4 +1,4 @@
-"""Inlink and outlink counts (030-add-page-data, page-data; seam 3+6)."""
+"""Verify stored Inlink and Outlink counts through a Crawl."""
 
 from dataclasses import replace
 from pathlib import Path

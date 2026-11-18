@@ -1,4 +1,4 @@
-"""The fixture-site server, aiohttp on 127.0.0.1 in a thread (design D9 of 000-scaffold-project)."""
+"""Serve fixture sites with aiohttp on 127.0.0.1 in a background thread."""
 
 import asyncio
 import socket
@@ -37,6 +37,8 @@ class LoggedRequest:
     path: str
     headers: CIMultiDictProxy[str]
     received_at: float
+    http_version: tuple[int, int]
+    alpn: str | None
 
 
 # How long a route with `after` waits for its path before it fails the test.
@@ -52,11 +54,15 @@ class RequestLog:
         self._most_in_flight = 0
 
     def add(self, request: web.Request) -> None:
+        transport = request.transport
+        tls = transport.get_extra_info("ssl_object") if transport is not None else None
         entry = LoggedRequest(
             method=request.method,
             path=request.path_qs,
             headers=CIMultiDictProxy(CIMultiDict(request.headers)),
             received_at=time.monotonic(),
+            http_version=(request.version.major, request.version.minor),
+            alpn=tls.selected_alpn_protocol() if isinstance(tls, ssl.SSLObject) else None,
         )
         with self._lock:
             self._entries.append(entry)

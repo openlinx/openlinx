@@ -1,4 +1,4 @@
-"""The links handler: a row for each Link of a URL's result (030-add-page-data D4)."""
+"""Map a URL result's Links to rows for the links table."""
 
 from collections.abc import Iterable, Mapping
 

@@ -1,4 +1,4 @@
-"""Run the CLI in tests: in process, or as a real process (design D8 of 000-scaffold-project)."""
+"""Run test Commands in process or through an owned child process."""
 
 import json
 import subprocess

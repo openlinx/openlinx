@@ -1,4 +1,4 @@
-"""A scripted random source, the randomness double of docs/testing.md (015-add-crawl-store)."""
+"""Provide a scripted randomness boundary double."""
 
 from collections.abc import Sequence
 

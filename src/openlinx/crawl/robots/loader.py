@@ -1,4 +1,4 @@
-"""The robots.txt loader: each origin's robots.txt, once a run (020-add-crawl-core D6, D7)."""
+"""Fetch and cache each origin's robots.txt verdict for the run."""
 
 import asyncio
 from collections.abc import Callable
@@ -23,10 +23,17 @@ _REDIRECT_HOPS = 5
 
 
 class RobotsLoader:
-    def __init__(self, requester: Requester, writer: CrawlWriter, token: str) -> None:
+    def __init__(
+        self,
+        requester: Requester,
+        writer: CrawlWriter,
+        token: str,
+        is_internal: Callable[[NormalizedUrl], bool],
+    ) -> None:
         self._requester = requester
         self._writer = writer
         self._token = token
+        self._is_internal = is_internal
         self._origins: dict[str, asyncio.Task[OriginRobots | NotStarted]] = {}
         # The URL that first asked for each origin's robots.txt.
         self._first_urls: dict[str, NormalizedUrl] = {}
@@ -45,7 +52,7 @@ class RobotsLoader:
         if task.done():
             # Those that waited for the verdict wake one loop turn or more after it came: a URL
             # dispatched since then goes behind them, so an origin's URLs reach its host's slot
-            # in the order they were dispatched (design D1).
+            # in the order they were dispatched.
             while self._waiting.get(origin):
                 await self._drained[origin].wait()
             return task.result()
@@ -66,8 +73,7 @@ class RobotsLoader:
 
     def forget_unanswered(self, is_internal: Callable[[NormalizedUrl], bool]) -> None:
         """Drops the verdicts of the Internal origins whose robots.txt got no response, so
-        their next URL requests it again: after a network pause, the site may answer
-        (design D16)."""
+        their next URL requests it again: after a network pause, the site may answer."""
         for origin, task in list(self._origins.items()):
             if not task.done() or task.cancelled() or task.exception() is not None:
                 continue
@@ -84,7 +90,7 @@ class RobotsLoader:
 
     async def _load(self, robots_url: NormalizedUrl) -> OriginRobots | NotStarted:
         url = robots_url
-        response = await self._requester.request_robots_txt(url)
+        response = await self._requester.request_robots_txt(url, is_internal=self._is_internal(url))
         redirect: FetchResult | None = None
         # Up to five hops, as RFC 9309 asks; a longer chain ends on a 3xx, which is missing.
         for _ in range(_REDIRECT_HOPS):
@@ -94,12 +100,14 @@ class RobotsLoader:
             if target is None:
                 break
             redirect, url = response, target
-            response = await self._requester.request_robots_txt(url)
+            response = await self._requester.request_robots_txt(
+                url, is_internal=self._is_internal(url)
+            )
         if isinstance(response, NotStarted):
-            # A stop: nothing is recorded, and the origin's URLs stay queued (design D16).
+            # A stop: nothing is recorded, and the origin's URLs stay queued.
             return response
         if isinstance(response, FetchFailure) and redirect is not None:
-            # The origin answered; only where it sent the request failed (design D6).
+            # The origin answered; only where it sent the request failed.
             robots, text = _failed_redirect(redirect, url, response), None
         else:
             robots, text = _origin_robots(response, self._token)

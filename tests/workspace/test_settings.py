@@ -1,4 +1,4 @@
-"""Settings precedence (010-add-workspace-and-cli-contract, workspace)."""
+"""Verify settings precedence and validation through the Workspace API."""
 
 from pathlib import Path
 

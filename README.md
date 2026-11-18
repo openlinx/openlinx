@@ -21,12 +21,23 @@ Pre-release: there is no release yet.
 
 ## Development quick start
 
-You need [uv](https://docs.astral.sh/uv/). It installs the Python version from `.python-version` by itself.
+You need [uv](https://docs.astral.sh/uv/). By default, uv uses Python 3.14 from
+`.python-version` and installs dependencies from `uv.lock`.
 
 ```
-uv sync
-uv run linx --version
+uv sync --locked
+uv run --locked linx --version
 ```
+
+To use Python 3.12 or 3.13, pass the same version to both commands. For example:
+
+```
+uv sync --locked --python 3.12
+uv run --locked --python 3.12 linx --version
+```
+
+On Python 3.12 and 3.13, uv installs the locked `backports.zstd` dependency automatically.
+Python 3.14 uses `compression.zstd` from the standard library.
 
 ## Using OpenLinx
 

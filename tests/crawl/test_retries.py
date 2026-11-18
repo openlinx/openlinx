@@ -1,4 +1,4 @@
-"""Timeouts and retries with backoff (022-add-fetch-policy, fetching; seam 3+6)."""
+"""Verify request timeouts and retry backoff through HTTP and stored results."""
 
 from pathlib import Path
 

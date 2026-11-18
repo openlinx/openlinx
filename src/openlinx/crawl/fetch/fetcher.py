@@ -1,24 +1,31 @@
-"""The Fetcher: one request, one hop, never a redirect followed (020-add-crawl-core D8)."""
+"""Fetch one HTTP hop and return request failures as data."""
 
-from collections.abc import AsyncIterator, Callable, Iterable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from base64 import b64encode
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from math import inf
+from typing import Protocol, runtime_checkable
 
 import aiohttp
 import yarl
 from aiohttp.abc import AbstractResolver
+from aiohttp.connector import Connection
+from aiohttp.resolver import DefaultResolver, ThreadedResolver
+from aiohttp.typedefs import LooseHeaders
 
 from openlinx import __version__
 from openlinx.clock import Clock
-from openlinx.crawl.fetch.body import OFFERED_CODINGS, BodyDecodingError, read_body
+from openlinx.crawl.fetch.alpn import AlpnProbe
+from openlinx.crawl.fetch.body import BodyDecodingError, read_body
 from openlinx.crawl.fetch.cookies import redacted_header
 from openlinx.crawl.fetch.proxy import ProxyVariables
+from openlinx.crawl.fetch.proxy_connect import connect_authority
 from openlinx.crawl.fetch.tls import tls_context
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.naming import CRAWLER_PAGE_URL, PRODUCT_NAME
-from openlinx.store.records import FetchError
+from openlinx.store.records import FetchError, HttpVersion
 
 
 def header_values(headers: Iterable[tuple[str, str]], name: str) -> list[str]:
@@ -43,6 +50,7 @@ def _received_header(name: bytes, value: bytes) -> tuple[str, str]:
 @dataclass(frozen=True, slots=True)
 class Request:
     url: NormalizedUrl
+    is_internal: bool
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -68,7 +76,7 @@ class FetchResult:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FetchFailure:
-    """A request that got no HTTP response: returned, never raised (design D8)."""
+    """A request that got no HTTP response: returned, never raised."""
 
     fetch_error: FetchError
     # The exception's type and text.
@@ -80,41 +88,111 @@ class Fetcher(Protocol):
     async def fetch(self, request: Request) -> FetchResult | FetchFailure: ...
 
 
+@runtime_checkable
+class ProbesHttpVersion(Protocol):
+    @property
+    def probe_http_version(self) -> Callable[[str], Awaitable[HttpVersion | None]] | None: ...
+
+
 _CHUNK_BYTES = 64 * 1024
-ACCEPT_ENCODING = ", ".join(OFFERED_CODINGS)
+ACCEPT_ENCODING = "gzip, deflate, br, zstd"
 DEFAULT_USER_AGENT = f"{PRODUCT_NAME}/{__version__} (+{CRAWLER_PAGE_URL})"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FetchPolicy:
     """The Fetcher's settings of a Crawl, from its plan to its Fetcher; retries and the hop limit
-    are the Requester's and the engine's (022-add-fetch-policy D1)."""
+    are the Requester's and the engine's."""
 
     user_agent: str
     proxies: ProxyVariables
-    # The watchdog of 020's design D16 outlasts it.
+    # The request watchdog outlasts this deadline, so it does not cut the Fetcher short.
     timeout_seconds: float
+    headers: tuple[tuple[str, str], ...] = ()
+    custom_user_agent: bool = False
+    auth: str | None = None
+    proxy: str | None = None
+
+    def proxy_for(self, url: str) -> str | None:
+        return self.proxy or self.proxies.for_url(url)
+
+
+def request_headers(policy: FetchPolicy, *, is_internal: bool) -> tuple[tuple[str, str], ...]:
+    custom = policy.headers if is_internal else ()
+    headers = tuple(
+        (name, value)
+        for name, value in custom
+        if name.lower() != "user-agent" or policy.custom_user_agent
+    )
+    if not (is_internal and policy.custom_user_agent):
+        headers = (("User-Agent", policy.user_agent), *headers)
+    if not any(name.lower() == "accept-encoding" for name, _ in headers):
+        headers = (*headers, ("Accept-Encoding", ACCEPT_ENCODING))
+    if is_internal and policy.auth:
+        authorization = "Basic " + b64encode(policy.auth.encode("utf-8")).decode("ascii")
+        headers = (*headers, ("Authorization", authorization))
+    # aiohttp merges repeated input names case-sensitively before writing them.
+    return tuple((name.lower(), value) for name, value in headers)
 
 
 # Opens the Crawl's Fetcher: tests bind the DNS resolver hook or a fake Fetcher into one.
 type FetcherFactory = Callable[[FetchPolicy, Clock], AbstractAsyncContextManager[Fetcher]]
 
 
+class _TunnelRequest(aiohttp.ClientRequest):
+    """Keep an origin Host override out of aiohttp's proxy CONNECT."""
+
+    _origin_host: str | None = None
+
+    def update_proxy(
+        self,
+        proxy: yarl.URL | None,
+        proxy_auth: aiohttp.BasicAuth | None,
+        proxy_headers: LooseHeaders | None,
+    ) -> None:
+        super().update_proxy(proxy, proxy_auth, proxy_headers)
+        if proxy is not None and self.is_ssl():
+            # The connector takes Host from this request when building CONNECT.
+            self._origin_host = self.headers["Host"]
+            self.headers["Host"] = connect_authority(self.url)
+
+    async def send(self, conn: Connection) -> aiohttp.ClientResponse:
+        # The connection (including any CONNECT and TLS) has already been established.
+        if self._origin_host is not None:
+            self.headers["Host"] = self._origin_host
+        return await super().send(conn)
+
+
 class AiohttpFetcher:
     def __init__(
-        self, session: aiohttp.ClientSession, clock: Clock, proxies: ProxyVariables
+        self,
+        session: aiohttp.ClientSession,
+        clock: Clock,
+        policy: FetchPolicy,
+        alpn: AlpnProbe | None = None,
     ) -> None:
         self._session = session
         self._clock = clock
-        self._proxies = proxies
+        self._policy = policy
+        self.probe_http_version = alpn.measure if alpn is not None else None
 
     async def fetch(self, request: Request) -> FetchResult | FetchFailure:
         # As given: yarl would decode a %2F in the query and request another URL than recorded.
         url = yarl.URL(request.url, encoded=True)
         fetched_at, started = self._clock.now(), self._clock.monotonic()
         try:
-            proxy = self._proxies.for_url(request.url)
-            async with self._session.get(url, allow_redirects=False, proxy=proxy) as response:
+            proxy = self._policy.proxy_for(request.url)
+            server_hostname = None
+            if proxy is not None and url.scheme == "https" and (host := url.raw_host):
+                # aiohttp strips DNS root dots for direct TLS, but not after CONNECT.
+                server_hostname = host.rstrip(".")
+            async with self._session.get(
+                url,
+                allow_redirects=False,
+                proxy=proxy,
+                server_hostname=server_hostname,
+                headers=request_headers(self._policy, is_internal=request.is_internal),
+            ) as response:
                 headers = tuple(
                     _received_header(name, value) for name, value in response.raw_headers
                 )
@@ -145,7 +223,7 @@ class AiohttpFetcher:
 
 def fetch_error_of(error: Exception) -> FetchError:
     # First: aiohttp's TLS errors are ClientConnectorErrors too, and a certificate failure is
-    # an answer of sorts, which the network pause must never count (design D16).
+    # an answer of sorts, which the network pause must never count (020-add-crawl-core D16).
     if isinstance(error, aiohttp.ClientSSLError):
         return "tls_error"
     if isinstance(error, BodyDecodingError):
@@ -175,17 +253,36 @@ async def aiohttp_fetcher(
 ) -> AsyncIterator[AiohttpFetcher]:
     """`resolver` and `trust_anchors` (PEM certificates trusted besides the OS store) are for
     tests: the DNS resolver hook and the test CA."""
-    async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(resolver=resolver, ssl=tls_context(trust_anchors)),
-        timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds),
-        headers={
-            "User-Agent": policy.user_agent,
-            # The codings this tool decodes itself, never aiohttp's own list (design D1).
-            "Accept-Encoding": ACCEPT_ENCODING,
-        },
-        # No cookie session: a cookie set by one response would change what later ones return.
-        cookie_jar=aiohttp.DummyCookieJar(),
-        # read_body decodes, so it measures the body both as transferred and as decoded.
-        auto_decompress=False,
-    ) as session:
-        yield AiohttpFetcher(session, clock, policy.proxies)
+    probe_resolver = resolver
+    async with AsyncExitStack() as stack:
+        if resolver is None:
+            resolver = DefaultResolver()
+            stack.push_async_callback(resolver.close)
+            if not isinstance(resolver, ThreadedResolver):
+                probe_resolver = resolver
+        request_tls = tls_context(trust_anchors)
+        session = await stack.enter_async_context(
+            aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(resolver=resolver, ssl=request_tls),
+                # aiohttp otherwise rounds deadlines of five seconds or more up.
+                timeout=aiohttp.ClientTimeout(total=policy.timeout_seconds, ceil_threshold=inf),
+                request_class=_TunnelRequest,
+                skip_auto_headers={"User-Agent", "Accept-Encoding"},
+                # A cookie set by one response must not change what later ones return.
+                cookie_jar=aiohttp.DummyCookieJar(),
+                # read_body measures the body both as transferred and as decoded.
+                auto_decompress=False,
+            )
+        )
+        yield AiohttpFetcher(
+            session,
+            clock,
+            policy,
+            AlpnProbe(
+                probe_resolver,
+                trust_anchors,
+                policy.timeout_seconds,
+                policy.proxy_for,
+                proxy_tls=request_tls,
+            ),
+        )

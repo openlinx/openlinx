@@ -1,0 +1,15 @@
+{
+  "name": "--auth",
+  "short": null,
+  "type": "string",
+  "choices": null,
+  "default": null,
+  "min": null,
+  "max": null,
+  "required": false,
+  "multiple": false,
+  "global": false,
+  "setting": "crawl.auth",
+  "secret": true,
+  "description": "Preemptive Basic Auth user:password for Internal URLs and their robots.txt only; exact UTF-8 without trimming or normalization. Empty disables authentication."
+}

@@ -1,4 +1,4 @@
-"""Link declarations, discovery policy and docs agree (030 D4; 023 D12; seam 6)."""
+"""Verify Link declarations, discovery policy and schema documentation agree."""
 
 from pathlib import Path
 from typing import Any

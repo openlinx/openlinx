@@ -1,8 +1,9 @@
-"""The Crawl Service wires 015's journal mode and redaction (020-add-crawl-core D11; seams 1, 2)."""
+"""Verify the Crawl Service applies journal-mode selection and secret redaction."""
 
 import json
 import re
 import sys
+from collections.abc import Mapping
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
@@ -14,6 +15,7 @@ from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlRequest, plan_crawl, start_crawl
 from openlinx.services.hooks import default_hooks
+from openlinx.workspace.tables import SecretPolicy
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
@@ -41,7 +43,7 @@ def test_the_journal_mode_setting_reaches_the_crawl_file(
         workspace=None,
         command_argv=["linx", "crawl", server.url("/")],
         flags={},
-        secret_flags=frozenset(),
+        secret_flags={},
     )
 
     result = start_crawl(plan_crawl(request), SystemClock(), Collected(), default_hooks())
@@ -141,7 +143,7 @@ def _given(
     *,
     seed: str = "http://site.test/",
     subdomains: bool = False,
-    secret_flags: frozenset[str] = frozenset(),
+    secret_flags: Mapping[str, SecretPolicy] | None = None,
 ) -> CrawlRequest:
     return CrawlRequest(
         seed=seed,
@@ -150,7 +152,7 @@ def _given(
         workspace=None,
         command_argv=["linx", "crawl", seed],
         subdomains=subdomains,
-        secret_flags=secret_flags,
+        secret_flags=secret_flags or {},
         flags=flags,
     )
 
@@ -228,9 +230,7 @@ def test_a_secret_given_to_the_service_is_nowhere_in_the_crawl_file(
 ) -> None:
     seed = "http://site.test/"
     request = replace(
-        _given(
-            temp_workspace, {"example": {"token": "s3cret"}}, secret_flags=frozenset({"--token"})
-        ),
+        _given(temp_workspace, {"example": {"token": "s3cret"}}, secret_flags={"--token": True}),
         command_argv=["linx", "crawl", seed, "--token", "s3cret"],
     )
     clock = FakeClock()

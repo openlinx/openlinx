@@ -205,6 +205,7 @@ Every code is declared once, with its level, its exit code and a description, an
 |---|---|---|---|
 | `usage_error` | error | 2 | an unknown Command or flag, a missing argument, or a global flag before the Command name |
 | `invalid_value` | error | 2 | a flag or argument value that is not allowed, or a value given with the settings that its setting refuses; `details.key` names the setting |
+| `secrets_required` | error | 2 | continuing a Crawl requires fresh secret input; the hint names the required flag or Workspace setting |
 | `unknown_field` | error | 2 | a `--fields` name the Command does not have |
 | `invalid_cursor` | error | 2 | a `--cursor` made by a different request, or altered |
 | `settings_invalid` | error | 3 | `openlinx.toml` cannot be read or breaks the settings rules |

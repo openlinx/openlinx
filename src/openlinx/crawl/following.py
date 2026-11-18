@@ -1,4 +1,4 @@
-"""Request policy from LINK_TYPES and HTTP redirect targets (023 D12; 022 D2)."""
+"""Decide which Links and HTTP redirect targets the Crawl requests."""
 
 import re
 

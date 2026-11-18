@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "column": {
+    "name": "http_version",
+    "description": "Filled from v0.2. The HTTP version that the origin's requests use.",
+    "type": "TEXT",
+    "nullable": true,
+    "primary_key": false,
+    "references": null,
+    "format": null,
+    "values": [
+      "http_2",
+      "http_1_1"
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-"""Run the CI gates locally in CI's order (design D11 of 000-scaffold-project)."""
+"""Run the CI gates locally in the same order as CI."""
 
 import os
 import shutil
@@ -15,9 +15,9 @@ JS_TESTS = "tests/js/**/*.test.mjs"
 PYTHON_GATES: list[list[str]] = [
     ["ruff", "check", "."],
     ["ruff", "format", "--check", "."],
-    ["mypy"],
     # typeshed types some stdlib names per platform (os.altsep is None off Windows), so one OS
     # alone misses the others' errors. A cache per platform keeps the passes warm.
+    ["mypy", "--platform", "win32", "--cache-dir", ".mypy_cache/win32"],
     ["mypy", "--platform", "linux", "--cache-dir", ".mypy_cache/linux"],
     ["mypy", "--platform", "darwin", "--cache-dir", ".mypy_cache/darwin"],
     ["pytest"],

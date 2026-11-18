@@ -1,4 +1,4 @@
-"""Crawl ids: the UTC start time and 4 random characters (design D1 of 015-add-crawl-store)."""
+"""Generate Crawl ids from the UTC start time and four random characters."""
 
 import re
 from collections.abc import Callable, Sequence

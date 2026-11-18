@@ -1,5 +1,4 @@
-"""The run's URL tasks, tracked until each ends, with the first that ended on a bug, and the
-run's dependencies that the units share (020-add-crawl-core D3, D16)."""
+"""Track URL tasks and retain the first uncaught failure that ends the run."""
 
 import asyncio
 from dataclasses import dataclass
@@ -18,12 +17,12 @@ from openlinx.store.failures import is_write_failure
 
 class TaskFailure:
     """Tracks the run's URL tasks until each ends, keeps the Checked URLs' in flight, and keeps
-    the first exception that escaped one: a bug, which ends the run (design D16)."""
+    the first exception that escaped one: a bug, which ends the run."""
 
     def __init__(self, stop: StopSignal) -> None:
         self._stop = stop
         self._error: BaseException | None = None
-        # The tasks of Checked URLs in flight, which never hold the depth barrier (design D3).
+        # The tasks of Checked URLs in flight, which never hold the depth barrier.
         self.checked_urls: set[asyncio.Task[None]] = set()
         # Internal checks can return the pause's URL-limit count without holding that barrier.
         self.internal_checked_urls: set[asyncio.Task[None]] = set()

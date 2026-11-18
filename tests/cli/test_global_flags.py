@@ -1,4 +1,4 @@
-"""Global flags (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify global CLI flags and their validation."""
 
 from pathlib import Path
 

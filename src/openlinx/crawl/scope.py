@@ -1,4 +1,4 @@
-"""Scope decisions: ScopeRules, built once from the Seed (020-add-crawl-core D4)."""
+"""Decide URL membership from ScopeRules built from the Seed."""
 
 import re
 from collections.abc import Iterable
@@ -44,7 +44,7 @@ class ScopeRules:
 
     @classmethod
     def from_json(cls, recorded: RecordedScope) -> "ScopeRules":
-        """The rules crawl.scope was recorded from, for the continue (design D1)."""
+        """Rebuild Scope rules from crawl.scope when continuing a Crawl."""
         hosts = recorded["hosts"]
         return cls(
             seed_hosts=tuple(hosts),
@@ -61,7 +61,7 @@ class ScopeRules:
         )
 
     def to_json(self) -> RecordedScope:
-        """As crawl.scope records it (design D18)."""
+        """Serialize the Scope rules in the form stored in crawl.scope."""
         return {
             "mode": self.mode,
             # An IP address or a single label has no registrable domain to list.
@@ -81,8 +81,7 @@ class ScopeRules:
 
     def widened_to(self, url: NormalizedUrl) -> "ScopeRules | None":
         """These rules with the host of `url` as a Seed host, when it is outside them, of the
-        registrable domain of the first Seed host and inside the Seed's folder; None otherwise
-        (022 D3)."""
+        registrable domain of the first Seed host and inside the Seed's folder; None otherwise."""
         host = host_key(url)
         if self.decide(url).is_internal or not self._in_folder(url):
             return None
@@ -94,7 +93,7 @@ class ScopeRules:
     def is_out_of_scope(self, url: NormalizedUrl) -> bool:
         """Whether a Seed's chain that ends on `url` leaves the Crawl's Scope: `url` is on another
         registrable domain than the first Seed host's, or on another host when that has none,
-        such as an IP address, or outside the Seed's folder (022 D3)."""
+        such as an IP address, or outside the Seed's folder (022-add-fetch-policy D3)."""
         host = host_key(url)
         seed_host = self.seed_hosts[0]
         domain, seed_domain = _registrable_domain(host), _registrable_domain(seed_host)
@@ -110,7 +109,7 @@ class ScopeRules:
             bool(self.registrable_domains) and _registrable_domain(host) in self.registrable_domains
         )
         if len(url) > MAX_URL_LENGTH:
-            # Before the user's patterns, so none ever runs over such a URL (022 design D12).
+            # Reject long URLs before user regexes run over them (022-add-fetch-policy D12).
             return ScopeDecision(
                 is_internal=is_internal, in_scope=False, skip_reason="url_too_long"
             )
@@ -178,7 +177,7 @@ def apex_seed_named_by_page(
 ) -> NormalizedUrl | None:
     """The Seed on its apex host, when the Seed is www. plus a registrable domain, its Page names
     the apex by its first canonical to either host or by more hyperlinks than to the Seed's
-    host, and the Scope leaves that Seed out (D4)."""
+    host, and the Scope leaves that Seed out (020-add-crawl-core D4)."""
     host = host_key(seed)
     apex = host.removeprefix("www.")
     if apex == host or _registrable_domain(apex) != apex:

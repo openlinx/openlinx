@@ -1,4 +1,4 @@
-"""The writer's throughput check, run by hand (017-speed-up-crawl-writer D11)."""
+"""Measure Crawl writer throughput by hand against the declared schema."""
 
 import argparse
 import contextlib
@@ -59,8 +59,8 @@ RATE_WINDOW_PAGES = 5_000
 POISON_EVERY = 997
 HOST = "https://www.site.test"
 EXTERNALS = 5_000
-# Each Page carries its template's navigation, header and footer Links plus its own, as the
-# prototype's --template-links stream did: 466 Link rows to 367 targets per Page.
+# Repeated navigation, header and footer Links model a shared template plus each Page's own
+# Links: 466 rows to 367 targets per Page.
 TEMPLATES = 4
 TEMPLATE_TARGETS = 250
 TEMPLATE_REPEATS = 80
@@ -82,9 +82,9 @@ MAX_RSS_MIB = 400
 SAMPLE_SECONDS = 0.2
 READ_PAUSE_SECONDS = 1.0
 
-# Provisional: urls is shaped like 020's draft table. create_crawl declares urls and origins, so
-# the URL rows must meet the declared urls: an origin_id, and none of the draft's later columns.
-# links is the declared table, with its key, layout and indexes (030 D4), so the check writes
+# create_crawl declares urls and origins, so benchmark URL rows must include an origin_id
+# and only the columns declared by the Crawl schema.
+# links uses the declared key, layout and indexes, so the check writes
 # what a Crawl writes and follows the layout the links benchmark chooses.
 METADATA = MetaData()
 URLS = Table(

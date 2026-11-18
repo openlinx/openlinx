@@ -1,16 +1,19 @@
-"""Reading a response body up to its cap (022-add-fetch-policy D1; Pure)."""
+"""Verify bounded response-body reading and decompression through pure logic."""
 
 import asyncio
 import gzip
 import hashlib
+import subprocess
 import tracemalloc
 import zlib
 from collections.abc import AsyncIterator
+from pathlib import Path
 
-import brotli
+import brotlicffi
 import pytest
 
 from openlinx.crawl.fetch.body import BODY_LIMIT, Body, BodyDecodingError, read_body
+from tests.support.processes import python_command
 
 # A product listing, as a shop's category page repeats it.
 ROW = b'<li class="product"><a href="/p/1">Trail shoe</a> <span>89.00</span></li>\n'
@@ -49,7 +52,7 @@ def _packed(data: bytes, coding: str) -> bytes:
     if coding == "gzip":
         return gzip.compress(data, mtime=0)
     if coding == "br":
-        packed: bytes = brotli.compress(data)
+        packed: bytes = brotlicffi.compress(data)
         return packed
     if coding == "deflate":
         return zlib.compress(data)
@@ -86,6 +89,22 @@ def test_a_compressed_body_is_capped_after_decoding(coding: str) -> None:
     assert (len(body.data), body.truncated) == (BODY_LIMIT, True)
 
 
+@pytest.mark.parametrize(
+    ("padding", "truncated", "transferred"),
+    [(39, False, 64), (40, True, 65)],
+    ids=["exact", "one-over"],
+)
+def test_a_compressed_body_is_capped_as_transferred(
+    padding: int, truncated: bool, transferred: int
+) -> None:
+    # A complete 25-byte gzip member followed by zero padding isolates the wire cap.
+    packed = gzip.compress(b"hello", mtime=0) + b"\0" * padding
+
+    body = _decoded(packed, "gzip", limit=64)
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"hello", truncated, transferred)
+
+
 @pytest.mark.parametrize("coding", ["gzip", "br"])
 def test_a_bomb_in_one_chunk_is_decoded_only_up_to_the_cap(coding: str) -> None:
     # 64 MiB of zeros, packed into one chunk as small as a connection reads at once.
@@ -102,13 +121,119 @@ def test_a_bomb_in_one_chunk_is_decoded_only_up_to_the_cap(coding: str) -> None:
     assert (len(body.data), body.truncated, peak < 8 * limit) == (limit, True, True)
 
 
+@pytest.mark.parametrize(
+    ("coding", "first", "last", "expected"),
+    [
+        ("br", "0b028068656c6c6f", "f56918f82582e2b14020cb2f00", b"hello" + b"A" * 507),
+        # gzip wrapping the same Brotli chunks. A sync flush leaves gzip open through both.
+        (
+            "br, gzip",
+            "1f8b0800000000000003e2666ac848cdc9c907000000ffff",
+            "fa9a29f143b5e9d1460785d3fa0c00000000ffff",
+            b"hello" + b"A" * 507,
+        ),
+        # Brotli wrapping a gzip prefix for "hello", then 100 kB of empty deflate blocks.
+        (
+            "gzip, br",
+            "0b0a801f8b0800000000000003ca48cdc9c907000000ffff",
+            "f56918f82700e2b02840cb2f00",
+            b"hello",
+        ),
+    ],
+    ids=["br", "br after gzip", "br before gzip"],
+)
+def test_brotli_allocates_output_within_a_small_remaining_budget(
+    coding: str, first: str, last: str, expected: bytes
+) -> None:
+    # A process-wide peak would also include allocations from pytest coverage and other threads.
+    root = Path(__file__).resolve().parents[2]
+    command = python_command(
+        "-I",
+        "-S",
+        "-c",
+        "import asyncio, sys\n"
+        "sys.path[:0] = sys.argv[1:4]\n"
+        "from tests.crawl.test_body import _check_brotli_budget\n"
+        "asyncio.run(_check_brotli_budget(*sys.argv[4:]))",
+        str(root),
+        str(root / "src"),
+        str(Path(brotlicffi.__file__).resolve().parents[1]),
+        coding,
+        first,
+        last,
+        expected.hex(),
+    )
+    child = subprocess.run(
+        command.argv, env=command.env, capture_output=True, text=True, timeout=30, check=False
+    )
+
+    assert child.returncode == 0, child.stderr
+
+
+async def _check_brotli_budget(coding: str, first: str, last: str, expected: str) -> None:
+    head, tail = bytes.fromhex(first), bytes.fromhex(last)
+    baseline = 0
+
+    async def chunks() -> AsyncIterator[bytes]:
+        nonlocal baseline
+        yield head
+        # The prefix produces "hello" and initializes gzip's fixed workspace, which stays
+        # live while the next chunk expands. zlib-ng allocates over 32 KiB for that state.
+        baseline = tracemalloc.get_traced_memory()[0]
+        tracemalloc.reset_peak()
+        yield tail
+
+    if coding == "br":
+        # A five-byte response primes CFFI's lazy setup. The measured reader creates a fresh
+        # decoder whose first chunk includes the expansion, so first-call output still counts.
+        tiny = bytes.fromhex("0b028068656c6c6f03")
+        warmup = await read_body(_pieces(tiny), "br", limit=512)
+        assert (warmup.data, warmup.truncated, warmup.transferred_bytes) == (b"hello", False, 9)
+        stream = _pieces(head + tail)
+    else:
+        stream = chunks()
+
+    tracemalloc.start()
+    try:
+        body = await read_body(stream, coding, limit=512)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (
+        bytes.fromhex(expected),
+        True,
+        len(head) + len(tail),
+    )
+    assert peak - baseline < 16 * 1024, f"{coding}: {peak - baseline} B of peak allocations"
+
+
 def test_stacked_codings_are_decoded_last_first() -> None:
     page = ROW * 1000
-    packed = brotli.compress(gzip.compress(page, mtime=0))
+    packed = brotlicffi.compress(gzip.compress(page, mtime=0))
 
     body = _decoded(packed, "gzip, br")
 
     assert body.data == page
+
+
+def test_a_stacked_zstd_body_cannot_exceed_the_intermediate_cap() -> None:
+    # One zstd frame in two reads: a raw block holding a 25-byte gzip member for
+    # "hello", followed by an RLE block holding 100 bytes of zero padding.
+    first = bytes.fromhex("28b52ffd207dc800001f8b08000000000002ffcb48cdc9c9070086a6103605000000")
+    last = bytes.fromhex("23030000")
+
+    body = asyncio.run(read_body(_pieces(first, last), "gzip, zstd", limit=55))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"hello", True, 38)
+
+
+def test_a_zstd_decoder_refuses_a_window_above_the_http_limit() -> None:
+    # A 16 MiB window enclosing a five-byte raw block, without a content-size field.
+    packed = bytes.fromhex("28b52ffd007029000068656c6c6f")
+
+    with pytest.raises(BodyDecodingError):
+        _decoded(packed, "zstd")
 
 
 @pytest.mark.parametrize(
@@ -125,10 +250,10 @@ def test_a_body_that_fails_to_decode_is_refused(packed: bytes, coding: str) -> N
         _decoded(packed, coding)
 
 
-def test_a_coding_that_was_not_offered_is_kept_as_received() -> None:
+def test_an_unsupported_coding_is_kept_as_received() -> None:
     packed = ROW * 10
 
-    body = _decoded(packed, "zstd")
+    body = _decoded(packed, "x-unknown")
 
     assert (body.data, body.transferred_bytes) == (packed, len(packed))
 
@@ -175,6 +300,57 @@ def test_every_member_of_a_gzip_body_is_decoded() -> None:
 async def _pieces(*pieces: bytes) -> AsyncIterator[bytes]:
     for piece in pieces:
         yield piece
+
+
+_ZSTD_HELLO = bytes.fromhex("28b52ffd200529000068656c6c6f")
+_ZSTD_SKIPPABLE = bytes.fromhex("5f2a4d180400000028b52ffd")
+
+
+@pytest.mark.parametrize("split", range(29))
+def test_concatenated_zstd_frames_are_decoded_across_input_boundaries(split: int) -> None:
+    packed = _ZSTD_HELLO * 2
+
+    body = asyncio.run(read_body(_pieces(packed[:split], packed[split:]), "zstd"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"hellohello", False, 28)
+
+
+@pytest.mark.parametrize("chunk_size", [1, 64])
+def test_zstd_skippable_frames_leave_only_the_decoded_body(chunk_size: int) -> None:
+    # The skippable payload itself looks like zstd magic and must be ignored.
+    packed = _ZSTD_SKIPPABLE + _ZSTD_HELLO + _ZSTD_SKIPPABLE + _ZSTD_HELLO + _ZSTD_SKIPPABLE
+
+    body = asyncio.run(read_body(_chunks(packed, chunk_size), "zstd"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"hellohello", False, 64)
+
+
+def test_many_zstd_skippable_frames_can_form_an_empty_body() -> None:
+    packed = _ZSTD_SKIPPABLE * 257
+
+    body = asyncio.run(read_body(_pieces(packed), "zstd"))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (b"", False, 3084)
+
+
+@pytest.mark.parametrize(
+    ("limit", "tail", "truncated"),
+    [(65_542, b"hello", False), (65_539, b"he", True)],
+    ids=["exact-budget", "budget-inside-next-frame"],
+)
+def test_zstd_drains_buffered_output_before_advancing_to_the_next_frame(
+    limit: int, tail: bytes, truncated: bool
+) -> None:
+    # A 13-byte frame with an RLE block of 65,537 copies of "x".
+    packed = bytes.fromhex("28b52ffda0010001000b000878") + _ZSTD_HELLO
+
+    body = asyncio.run(read_body(_pieces(packed), "zstd", limit))
+
+    assert (body.data, body.truncated, body.transferred_bytes) == (
+        b"x" * 65_537 + tail,
+        truncated,
+        27,
+    )
 
 
 @pytest.mark.parametrize("coding", ["gzip", "deflate", "br"])

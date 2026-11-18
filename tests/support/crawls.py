@@ -1,4 +1,4 @@
-"""Creating and reading Crawls in tests (015-add-crawl-store)."""
+"""Create and read Crawl files for tests."""
 
 import hashlib
 import sqlite3

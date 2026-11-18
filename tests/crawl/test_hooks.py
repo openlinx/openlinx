@@ -1,4 +1,4 @@
-"""The hooks of a Crawl: handlers, passes and extractors (020-add-crawl-core D9; seam 2)."""
+"""Verify Crawl handlers, passes and extractors through the service API."""
 
 import json
 import pickle
@@ -209,7 +209,7 @@ _RULES = ("missing_title", "missing_description", "missing_h1", "thin_content")
 
 
 async def _materialise_issues(context: PassContext) -> None:
-    """Writes an Issue of each rule for every URL, as 040's pass does."""
+    """Emulate a Rule pass by writing an Issue of each Rule for every URL."""
 
     def unit(connection: Connection) -> None:
         connection.execute(
@@ -781,7 +781,8 @@ def _flaky(result: UrlResult) -> tuple[Flaky, ...]:
 
 def _write_flaky(written: list[int]) -> Callable[[Connection, Sequence[Flaky]], None]:
     def write(connection: Connection, rows: Sequence[Flaky]) -> None:
-        # Fails when the writer runs the unit again, which ends the writer (017 D6).
+        # Fails when the writer runs the unit again, which ends the writer
+        # (017-speed-up-crawl-writer D6).
         if written:
             raise RuntimeError("not the same twice")
         written.extend(row.url_id for row in rows)
@@ -1517,6 +1518,61 @@ def _raise_extractor_text(tree: LexborHTMLParser, page: PageInput, config: Failu
     if page.url.endswith("/boom"):
         raise ValueError(config.text)
     return Found(page.url)
+
+
+@pytest.mark.parametrize(
+    ("header", "message", "expected"),
+    [
+        ("X-Token: abc123", "refused abc123; staging", "refused ***; staging"),
+        ("cOoKiE: sid=abc123", "refused sid=abc123; staging", "refused ***; staging"),
+        (
+            "aUtHoRiZaTiOn: Bearer abc123",
+            "refused Bearer abc123; staging",
+            "refused ***; staging",
+        ),
+        ("X-Secret: abc123", "refused abc123; staging", "refused ***; staging"),
+        ("X-Api-Key: abc123", "refused abc123; staging", "refused ***; staging"),
+        ("X-Password: abc123", "refused abc123; staging", "refused ***; staging"),
+        ("x-ToKeN:\t abc123 \t", "refused abc123; staging", "refused ***; staging"),
+        ("X-Env: abc123", "refused abc123; staging", "refused abc123; staging"),
+        ("X-Token:\t ", "nothing supplied; staging", "nothing supplied; staging"),
+    ],
+    ids=["token", "cookie", "auth", "secret", "key", "password", "ows", "harmless", "empty"],
+)
+def test_sensitive_header_values_are_absent_from_failure_diagnostics(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    header: str,
+    message: str,
+    expected: str,
+) -> None:
+    server = fixture_site(BOOM_SITE)
+    hooks = Hooks(
+        handlers=(
+            handler(
+                "api",
+                partial(_raise_handler_text, message),
+                _write_seen,
+            ),
+        )
+    )
+    reporter = Collected()
+
+    result = crawl_result(
+        server.url("/"),
+        hooks,
+        reporter=reporter,
+        header=["X-Env: staging", header, "X-Env: audit"],
+        retries=0,
+    )
+
+    assert (
+        [warning.details["error"] for warning in reporter.warnings],
+        [
+            warning["details"]["error"]
+            for warning in json.loads(crawl_row(result.crawl_file)["warnings"])
+        ],
+    ) == ([expected], [expected])
 
 
 @pytest.mark.parametrize("hook", ["handler", "extractor"])

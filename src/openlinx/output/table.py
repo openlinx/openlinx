@@ -1,4 +1,4 @@
-"""The table format, for people (design D3 of 010-add-workspace-and-cli-contract)."""
+"""Render result items as tables for people."""
 
 import io
 from collections.abc import Mapping, Sequence

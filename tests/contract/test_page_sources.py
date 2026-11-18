@@ -1,4 +1,4 @@
-"""The page_sources table in linx schema (030-add-page-data, page-data; seam 6)."""
+"""Verify the page_sources table exposed by the schema Command."""
 
 from tests.support.cli import run_cli
 

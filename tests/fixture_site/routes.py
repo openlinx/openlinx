@@ -1,4 +1,4 @@
-"""Sites declared as data: a `Site` maps paths to routes (design D9 of 000-scaffold-project)."""
+"""Declare fixture sites as data mapping paths to routes."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field

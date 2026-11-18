@@ -1,11 +1,13 @@
-"""Distinct TLS trust failures behind the fixture resolver (022-add-fetch-policy D5, D9)."""
+"""Build distinct TLS trust failures for the local fixture listeners."""
 
 import ssl
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Protocol
 from urllib.parse import urlsplit
 
 import trustme
@@ -23,6 +25,25 @@ BADCERT_HOST = "badcert.test"
 SELFSIGNED_HOST = "selfsigned.test"
 
 
+class SniLog:
+    """Record the requested name even when certificate verification ends the handshake."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._names: list[str | None] = []
+
+    def record(
+        self, tls: ssl.SSLObject | ssl.SSLSocket, name: str | None, context: ssl.SSLContext
+    ) -> None:
+        with self._lock:
+            self._names.append(name)
+
+    @property
+    def names(self) -> tuple[str | None, ...]:
+        with self._lock:
+            return tuple(self._names)
+
+
 @dataclass(frozen=True, kw_only=True)
 class TlsHosts:
     # http://site.test and https://site.test, each for www.site.test too, serving the same Site.
@@ -30,6 +51,7 @@ class TlsHosts:
     secure_site: ServerHandle
     # https://badcert.test, whose certificate names other.test.
     badcert: ServerHandle
+    badcert_sni: SniLog
     # https://other.test:{untrusted_port}, whose certificate a CA the Crawl never trusts signs.
     untrusted: ServerHandle
     untrusted_port: int
@@ -45,18 +67,31 @@ class TlsHosts:
 
 # A site, or a function that builds it from the untrusted listener's port, to link to it.
 type SiteOrBuilder = Site | Callable[[int], Site]
-StartTlsHosts = Callable[[SiteOrBuilder, Site], TlsHosts]
 
 
-def tls_hosts_for(serve: Serve, site: SiteOrBuilder, other: Site) -> TlsHosts:
+class StartTlsHosts(Protocol):
+    def __call__(
+        self, site: SiteOrBuilder, other: Site, *, alpn: tuple[str, ...] = ()
+    ) -> TlsHosts: ...
+
+
+def tls_hosts_for(
+    serve: Serve, site: SiteOrBuilder, other: Site, *, alpn: tuple[str, ...] = ()
+) -> TlsHosts:
     trusted_ca, untrusted_ca = trustme.CA(), trustme.CA()
     untrusted = serve(other, _listening(untrusted_ca.issue_cert(OTHER_HOST)))
     untrusted_port = urlsplit(untrusted.base_url).port or 0
     if not isinstance(site, Site):
         site = site(untrusted_port)
     plain = serve(site)
-    secure = serve(site, _listening(trusted_ca.issue_cert(*SITE_HOSTS)))
-    badcert = serve(other, _listening(trusted_ca.issue_cert(OTHER_HOST)))
+    secure_context = _listening(trusted_ca.issue_cert(*SITE_HOSTS))
+    if alpn:
+        secure_context.set_alpn_protocols(list(alpn))
+    secure = serve(site, secure_context)
+    badcert_sni = SniLog()
+    badcert_context = _listening(trusted_ca.issue_cert(OTHER_HOST))
+    badcert_context.sni_callback = badcert_sni.record
+    badcert = serve(other, badcert_context)
     selfsigned_context, selfsigned_certificate = _self_signed()
     selfsigned = serve(other, selfsigned_context)
     servers = {
@@ -70,6 +105,7 @@ def tls_hosts_for(serve: Serve, site: SiteOrBuilder, other: Site) -> TlsHosts:
         site=plain,
         secure_site=secure,
         badcert=badcert,
+        badcert_sni=badcert_sni,
         untrusted=untrusted,
         untrusted_port=untrusted_port,
         selfsigned=selfsigned,

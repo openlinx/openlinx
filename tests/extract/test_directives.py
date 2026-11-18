@@ -1,4 +1,6 @@
-"""The directive, refresh and canonical columns of a Page (030-add-page-data, page-data; seam 4)."""
+"""Verify a Page's directive, refresh and canonical columns through pure extraction."""
+
+import pytest
 
 from tests.support.page_data import page_row, unprepared_page_row
 
@@ -16,7 +18,7 @@ def test_meta_robots_keeps_case_but_reads_directives() -> None:
     )
 
 
-def test_x_robots_tag_is_stored_with_the_parsers_verdict() -> None:
+def test_x_robots_tag_is_stored_with_the_parser_s_verdict() -> None:
     row = page_row(
         "<html><head><title>Staging</title></head><body><p>Not for search</p></body></html>",
         headers=(("X-Robots-Tag", "noindex"),),
@@ -122,6 +124,36 @@ def test_meta_refresh_without_a_target_is_not_a_redirect() -> None:
     )
 
     assert (row.meta_refresh, row.redirect_type) == ("30", None)
+
+
+@pytest.mark.parametrize(
+    ("headers", "first_meta", "expected"),
+    [
+        (
+            (("Refresh", "0; url=/header"),),
+            "/first",
+            ("http_refresh", "https://example.test/header"),
+        ),
+        ((), "/first", ("meta_refresh", "https://example.test/first")),
+        ((), "/page", (None, None)),
+        ((("Refresh", "0; url=/page"),), "/first", ("meta_refresh", "https://example.test/first")),
+    ],
+    ids=["header-first", "first-meta", "self-meta", "self-header-falls-through"],
+)
+def test_refresh_precedence_and_self_targets(
+    headers: tuple[tuple[str, str], ...],
+    first_meta: str,
+    expected: tuple[str | None, str | None],
+) -> None:
+    row = page_row(
+        f'<html><head><meta http-equiv="refresh" content="0; url={first_meta}">'
+        '<meta http-equiv="refresh" content="0; url=/second"><title>Page</title></head>'
+        "<body><p>Moved</p></body></html>",
+        headers=headers,
+        url="https://example.test/page",
+    )
+
+    assert (row.redirect_type, row.redirect_url) == expected
 
 
 def test_relative_canonical_to_another_url() -> None:

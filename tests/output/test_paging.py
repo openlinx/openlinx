@@ -1,4 +1,4 @@
-"""Cursors (design D6 of 010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify result cursors and paging validation."""
 
 import base64
 import re

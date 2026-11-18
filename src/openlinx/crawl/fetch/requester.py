@@ -1,10 +1,10 @@
-"""The Requester: every request of a Crawl, made politely (020-add-crawl-core D7)."""
+"""Coordinate request admission, retries and watchdogs for a Crawl."""
 
 import asyncio
 from collections import deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Protocol
@@ -14,11 +14,12 @@ from openlinx.clock import Clock
 from openlinx.crawl.fetch.fetcher import Fetcher, FetchFailure, FetchResult, Request
 from openlinx.crawl.fetch.pause_gate import PauseGate
 from openlinx.crawl.fetch.politeness import RateGate, RequestLimits
-from openlinx.crawl.urls import NormalizedUrl, host_key
-from openlinx.store.records import FetchError
+from openlinx.crawl.urls import InvalidUrl, NormalizedUrl, host_key, normalize_url
+from openlinx.store.records import FetchError, HttpVersion
+from openlinx.store.redaction import SecretValues
 
-# The failures that may pass on a later attempt (022 design D4). A DNS, TLS or protocol error
-# is the name's or the server's answer, and the watchdog has waited past --timeout already.
+# DNS, TLS and protocol errors are the name's or server's answer; the watchdog has already
+# waited past --timeout. Only transient failures are retried (022-add-fetch-policy D4).
 RETRIED_FAILURES: frozenset[FetchError] = frozenset(
     {"timeout", "connection_refused", "connection_error"}
 )
@@ -29,7 +30,7 @@ TOO_MANY_REQUESTS_WAIT = 10.0
 
 def watchdog_seconds(request_deadline_seconds: float) -> float:
     """How long a request attempt may take before the watchdog ends it: a backstop behind the
-    Fetcher's own deadline, which it never cuts (design D16)."""
+    Fetcher's own deadline, which it never cuts (020-add-crawl-core D16)."""
     return max(120, request_deadline_seconds + 30)
 
 
@@ -54,7 +55,7 @@ class Stop(Protocol):
 
 class Stops(Protocol):
     """The Crawl's stop flag, as the Requester reads it: any stop keeps a new request from
-    starting, and only one that ends what is under way cuts a retry (022 design D4)."""
+    starting, and only one that ends what is under way cuts a retry."""
 
     @property
     def new_requests(self) -> Stop: ...
@@ -64,7 +65,7 @@ class Stops(Protocol):
 
 
 class _Never:
-    """A probe's stop: the network pause cancels its probes itself (design D16)."""
+    """A probe's stop: the network pause cancels its probes itself."""
 
     is_set = False
 
@@ -90,9 +91,8 @@ class ProbeResult:
 
 class Requester:
     """The host's slot, its turn under --rate, the global cap, the URL limit and the watchdog
-    for every request, a URL's retries (022 design D4), and the network pause's gate and
-    probes; the engine decides from a URL's outcome whether the pause retries it (design D7,
-    D16)."""
+    for every request, a URL's retries, and the network pause's gate and probes; the engine
+    decides from a URL's outcome whether the pause retries it."""
 
     def __init__(
         self,
@@ -106,6 +106,8 @@ class Requester:
         retries: int,
         watchdog_seconds: float,
         stop: Stops,
+        secrets: SecretValues,
+        on_request_start: Callable[[NormalizedUrl], Awaitable[None]],
     ) -> None:
         self._fetcher = fetcher
         self._limits = limits
@@ -120,6 +122,8 @@ class Requester:
         self._requests = asyncio.Semaphore(cap)
         self._retries = retries
         self._pause_gate = PauseGate()
+        self._secrets = secrets
+        self._on_request_start = on_request_start
 
     def close_gate(self) -> None:
         self._pause_gate.close()
@@ -128,28 +132,33 @@ class Requester:
         self._pause_gate.open()
 
     async def request_url(
-        self, url: NormalizedUrl, on_attempt: Callable[[FetchResult | FetchFailure], None]
+        self,
+        url: NormalizedUrl,
+        on_attempt: Callable[[FetchResult | FetchFailure], None],
+        *,
+        is_internal: bool,
     ) -> Attempted | NotStarted:
         """A URL's own request, with its retries. The URL limit counts the first attempt, with
-        the slots held, so the count is exact; a retry is the same URL (022 design D4). After a
-        stop, none starts (design D16). `on_attempt` hears each attempt's outcome as it ends,
-        so the network pause counts a URL before its retries (022 design D4)."""
+        the slots held, so the count is exact; a retry is the same URL. After a stop, none
+        starts. `on_attempt` hears each attempt's outcome as it ends, so the network pause
+        counts a URL before its retries (022-add-fetch-policy D4)."""
+        request = Request(url, is_internal=is_internal)
         async with self._gated_slots(url, self._new_requests) as passed:
             # Refused with its turn under --rate already taken, and never given back: after a
             # stop or at the limit, no request starts again.
             if not passed or not self._limits.start_request():
                 return NotStarted()
             self._starts.append(self._clock.monotonic())
-            outcome = await self._send(url)
+            outcome = await self._send(request)
             on_attempt(outcome)
-        retried = await self._retried(url, outcome, on_attempt, ends_at_gate=True)
+        retried = await self._retried(request, outcome, on_attempt, ends_at_gate=True)
         if isinstance(retried, NotStarted):
-            # Given back unrecorded, so a continue requests it (022 design D4).
+            # Given back unrecorded, so a continue requests it.
             self.give_back()
         return retried
 
     def give_back(self) -> None:
-        """A URL request that is made again, as if it had not started (design D16)."""
+        """A URL request that is made again, as if it had not started."""
         self._limits.give_back()
         if self._starts:
             self._starts.pop()
@@ -164,39 +173,52 @@ class Requester:
         return round(len(self._starts) / seconds, 3) if seconds > 0 else 0.0
 
     async def request_robots_txt(
-        self, url: NormalizedUrl
+        self, url: NormalizedUrl, *, is_internal: bool
     ) -> FetchResult | FetchFailure | NotStarted:
         """One hop of an origin's robots.txt, with its retries, which the URL limit never
-        counts (design D6). After a stop, none starts (design D16). A retry waits at the network
+        counts. After a stop, none starts. A retry waits at the network
         pause's gate: robots.txt is no URL of the pause's count, and its origin's URLs wait for
-        its verdict (022 design D4)."""
+        its verdict (022-add-fetch-policy D4)."""
+        request = Request(url, is_internal=is_internal)
         async with self._gated_slots(url, self._new_requests) as passed:
             if not passed:
                 return NotStarted()
-            outcome = await self._send(url)
-        retried = await self._retried(url, outcome, _unheard, ends_at_gate=False)
+            outcome = await self._send(request)
+        retried = await self._retried(request, outcome, _unheard, ends_at_gate=False)
         return retried if isinstance(retried, NotStarted) else retried.outcome
 
-    async def request_probe(self, url: NormalizedUrl) -> ProbeResult:
+    async def request_probe(self, url: NormalizedUrl, *, is_internal: bool) -> ProbeResult:
         """A probe of the network pause: through the host's slot, its turn and the global cap,
-        but never the pause's gate or the URL limit (design D16)."""
+        but never the pause's gate or the URL limit (020-add-crawl-core D16)."""
+        request = Request(url, is_internal=is_internal)
         async with self._slots(url, _Never()) as passed:
             if not passed:
                 raise RuntimeError("A probe cannot be refused by its never-set stop")
             started = self._clock.monotonic()
-            outcome = await self._send(url)
+            outcome = await self._send(request)
             return ProbeResult(outcome, self._clock.monotonic() - started)
+
+    async def measure_http_version(
+        self, origin: str, measure: Callable[[str], Awaitable[HttpVersion | None]]
+    ) -> HttpVersion | None:
+        """Share connection permits without creating a URL attempt or a network-pause probe."""
+        url = normalize_url(f"{origin}/")
+        if isinstance(url, InvalidUrl):
+            raise RuntimeError("A claimed origin must form a valid URL")
+        async with self._slots(url, self._new_requests) as passed:
+            return await measure(origin) if passed else None
 
     async def _retried(
         self,
-        url: NormalizedUrl,
+        request: Request,
         outcome: FetchResult | FetchFailure,
         on_attempt: Callable[[FetchResult | FetchFailure], None],
         *,
         ends_at_gate: bool,
     ) -> Attempted | NotStarted:
         """The URL limit's stop refuses new URLs only, so the retries go on within its grace;
-        any other stop ends a due retry, and the URL is not recorded (022 design D4)."""
+        any other stop ends a due retry, and the URL is not recorded (022-add-fetch-policy D4)."""
+        url = request.url
         attempts = 1
         while True:
             wait, pause = retry_wait(outcome, attempts, self._clock.now())
@@ -209,13 +231,13 @@ class Requester:
             if not await self._before(self._under_way, wait):
                 return NotStarted()
             # A closed gate ends a URL's retries: an outage spends none, and the network pause
-            # decides on the URL from its last outcome (022 design D4).
+            # decides on the URL from its last outcome.
             async with self._gated_slots(url, self._under_way, ends_at_gate=ends_at_gate) as passed:
                 if self._under_way.is_set:
                     return NotStarted()
                 if not passed:
                     return Attempted(outcome, attempts, gated=True)
-                outcome = await self._send(url)
+                outcome = await self._send(request)
                 on_attempt(outcome)
             attempts += 1
         return Attempted(outcome, attempts)
@@ -255,15 +277,14 @@ class Requester:
                         yield not cutoff.is_set
                         return
                 # A host pause that began while it waited for the permit is waited out without
-                # it, so a Retry-After holds no global permit and a stop ends that wait
-                # (022 design D4).
+                # it, so a Retry-After holds no global permit and a stop ends that wait.
                 if not await self._before(cutoff, paused):
                     yield False
                     return
 
     async def _before(self, cutoff: Stop, wait: float) -> bool:
         """Whether `wait` seconds passed before `cutoff`: a request that has not started does
-        not sleep out its turn after a stop (design D16)."""
+        not sleep out its turn after a stop."""
         if cutoff.is_set:
             return False
         if wait <= 0:
@@ -277,16 +298,22 @@ class Requester:
             semaphore = self._hosts[host] = asyncio.Semaphore(self._concurrency)
         return semaphore
 
-    async def _send(self, url: NormalizedUrl) -> FetchResult | FetchFailure:
+    async def _send(self, request: Request) -> FetchResult | FetchFailure:
+        # Only admitted hops count, including the actual target of a robots.txt redirect.
+        await self._on_request_start(request.url)
         # Each attempt races its own watchdog on the Crawl's Clock, from when it started, which
         # its row keeps as the Fetcher's would.
         started_at = self._clock.now()
         # Both have ended before the slots are given back.
         fetch = await first_of(
-            self._fetcher.fetch(Request(url)), self._clock.sleep(self._watchdog_seconds)
+            self._fetcher.fetch(request), self._clock.sleep(self._watchdog_seconds)
         )
         if not fetch.cancelled():
-            return fetch.result()
+            outcome = fetch.result()
+            # Both URL and robots consumers may retain or quote the transport's error text.
+            if isinstance(outcome, FetchFailure):
+                return replace(outcome, message=self._secrets.redact(outcome.message))
+            return outcome
         return FetchFailure(
             fetch_error="watchdog",
             message=f"No response within {self._watchdog_seconds:g} seconds",
@@ -295,7 +322,7 @@ class Requester:
 
 
 def _unheard(outcome: FetchResult | FetchFailure) -> None:
-    """robots.txt's attempts: its verdict is counted, by the engine (design D16)."""
+    """robots.txt's attempts: its verdict is counted, by the engine."""
 
 
 def is_retried(outcome: FetchResult | FetchFailure) -> bool:
@@ -307,11 +334,11 @@ def is_retried(outcome: FetchResult | FetchFailure) -> bool:
 def retry_wait(
     outcome: FetchResult | FetchFailure, attempt: int, ended: datetime
 ) -> tuple[float, float | None]:
-    """The URL retry wait and independent host pause, in seconds (022 design D4).
+    """The URL retry wait and independent host pause, in seconds.
 
-    Any valid Retry-After pauses the host; only a 429 or 503 replaces the retry backoff.
-    A 429 without one waits 10 seconds. `ended` is when the response ended, from which a
-    Retry-After date counts.
+    Any valid Retry-After pauses the host; only a 429 or 503 replaces the retry backoff
+    (022-add-fetch-policy D4). A 429 without one waits 10 seconds. `ended` is when the response
+    ended, from which a Retry-After date counts.
     """
     pause = None
     if isinstance(outcome, FetchResult):

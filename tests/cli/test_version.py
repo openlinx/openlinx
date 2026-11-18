@@ -1,4 +1,4 @@
-"""`linx --version` (000-scaffold-project)."""
+"""Verify the version flag reports the installed package version."""
 
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.project import project_version

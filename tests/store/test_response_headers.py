@@ -1,4 +1,4 @@
-"""The response_headers writer (022-add-fetch-policy D7; seam 2)."""
+"""Verify response-header writing through the store API."""
 
 from datetime import UTC, datetime
 

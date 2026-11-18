@@ -1,4 +1,4 @@
-"""Pages served from files (design D9 of 000-scaffold-project)."""
+"""Verify fixture Pages are served from files."""
 
 import subprocess
 import sys

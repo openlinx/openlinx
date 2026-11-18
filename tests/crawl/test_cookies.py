@@ -1,4 +1,4 @@
-"""Cookie values are redacted before storage (022-add-fetch-policy D7, seam 4)."""
+"""Verify cookie values are redacted before storage."""
 
 import pytest
 

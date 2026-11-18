@@ -1,23 +1,336 @@
-"""The proxy variables (022-add-fetch-policy, fetching; seam 3)."""
+"""Verify explicit and environment proxies through HTTP requests and recorded settings."""
 
 import json
 import socket
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 
 from openlinx.crawl.fetch.proxy import ProxyVariables
+from openlinx.output.diagnostics import OpenLinxError
 from openlinx.services.crawling import CrawlOverrides
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.tls import StartTlsHosts
 from tests.support.cli import run_cli
 from tests.support.crawling import continued, crawl_result, crawled
 from tests.support.crawls import query
+from tests.support.permissions import read_only_file
 from tests.support.proxy import StartProxy
 from tests.support.workspace import TempWorkspace
 
 SHOP = Site({"/": Page(body='<title>Shop</title><a href="/shoes">Shoes</a>')})
+
+
+@pytest.mark.parametrize("source", ["flag", "workspace"])
+@pytest.mark.parametrize("scheme", ["http", "https"])
+def test_the_proxy_flag_overrides_the_proxy_variables(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    scheme: str,
+) -> None:
+    _assert_explicit_proxy_precedence(
+        temp_workspace, fixture_tls_hosts, fixture_proxy, monkeypatch, source, scheme
+    )
+
+
+@pytest.mark.parametrize("source", ["flag", "workspace"])
+@pytest.mark.parametrize(
+    ("scheme", "no_proxy"),
+    [("http", "*"), ("http", "site.test"), ("https", "*"), ("https", "site.test")],
+)
+def test_an_explicit_proxy_overrides_no_proxy(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    scheme: str,
+    no_proxy: str,
+) -> None:
+    monkeypatch.setenv("NO_PROXY", no_proxy)
+    _assert_explicit_proxy_precedence(
+        temp_workspace,
+        fixture_tls_hosts,
+        fixture_proxy,
+        monkeypatch,
+        source,
+        scheme,
+        named_http_origin=scheme == "http" and no_proxy == "site.test",
+    )
+
+
+def _assert_explicit_proxy_precedence(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    scheme: str,
+    *,
+    named_http_origin: bool = False,
+) -> None:
+    hosts = fixture_tls_hosts(Site({"/": Page(body="<title>Shop</title>")}), Site({}))
+    environment_proxy = fixture_proxy(hosts.resolver)
+    explicit_proxy = fixture_proxy(hosts.resolver)
+    monkeypatch.setenv("HTTP_PROXY", environment_proxy.url)
+    monkeypatch.setenv("HTTPS_PROXY", environment_proxy.url)
+    if source == "workspace":
+        (temp_workspace.root / "openlinx.toml").write_text(
+            f'[crawl]\nproxy = "{explicit_proxy.url}"\n', encoding="utf-8"
+        )
+    use_cli = scheme == "http" and not named_http_origin
+    seed = hosts.site.url("/") if use_cli else f"{scheme}://site.test/"
+
+    if use_cli:
+        flags = ["--proxy", explicit_proxy.url] if source == "flag" else []
+        file = crawled(seed, *flags, "--retries", "0", "--network-wait", "0")
+    elif source == "flag":
+        file = crawl_result(
+            seed,
+            proxy=explicit_proxy.url,
+            resolver=hosts.resolver,
+            trust_anchors=hosts.trust_anchors,
+            retries=0,
+            network_wait=0,
+        ).crawl_file
+    else:
+        file = crawl_result(
+            seed,
+            resolver=hosts.resolver,
+            trust_anchors=hosts.trust_anchors,
+            retries=0,
+            network_wait=0,
+        ).crawl_file
+
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    assert query(
+        file, "SELECT url, fetch_state, fetch_error, status_code, attempt_count FROM urls"
+    ) == [(seed, "fetched", None, 200, 1)]
+    assert (environment_proxy.requests, environment_proxy.connect_requests) == ((), ())
+    if scheme == "http":
+        assert explicit_proxy.requests == (
+            seed + "robots.txt",
+            seed,
+        )
+        assert explicit_proxy.connect_requests == ()
+        origin = hosts.site
+    else:
+        assert explicit_proxy.requests == ()
+        assert {(entry.method, entry.target) for entry in explicit_proxy.connect_requests} == {
+            ("CONNECT", "site.test:443")
+        }
+        origin = hosts.secure_site
+    assert [request.path for request in origin.requests] == ["/robots.txt", "/"]
+
+
+def test_https_uses_an_authenticated_proxy_tunnel(
+    temp_workspace: TempWorkspace,
+    fixture_tls_hosts: StartTlsHosts,
+    fixture_proxy: StartProxy,
+) -> None:
+    hosts = fixture_tls_hosts(Site({"/": Page(body="<title>Secure shop</title>")}), Site({}))
+    proxy = fixture_proxy(hosts.resolver, auth=("u", "pw"))
+
+    result = crawl_result(
+        "https://site.test/",
+        proxy=proxy.url.replace("http://", "http://u:pw@"),
+        trust_anchors=hosts.trust_anchors,
+        retries=0,
+        network_wait=0,
+    )
+
+    assert (
+        result.summary.state,
+        query(
+            result.crawl_file,
+            "SELECT url, fetch_state, fetch_error, status_code, attempt_count FROM urls",
+        ),
+        {
+            (entry.method, entry.target, entry.headers.get("Proxy-Authorization"))
+            for entry in proxy.connect_requests
+        },
+        proxy.requests,
+        [
+            (request.path, request.headers.get("Proxy-Authorization"))
+            for request in hosts.secure_site.requests
+        ],
+    ) == (
+        "completed",
+        [("https://site.test/", "fetched", None, 200, 1)],
+        {("CONNECT", "site.test:443", "Basic dTpwdw==")},
+        (),
+        [("/robots.txt", None), ("/", None)],
+    )
+
+
+@pytest.mark.parametrize("source", ["flag", "joined_flag", "workspace"])
+@pytest.mark.parametrize("credentials", ["", "u:pw@"])
+def test_requests_go_through_the_proxy(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    source: str,
+    credentials: str,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    explicit = proxy.url.replace("http://", f"http://{credentials}")
+    recorded = proxy.url.replace("http://", "http://u:***@") if credentials else proxy.url
+    args = ["http://site.test/"]
+    expected_argv = ["linx", "crawl", "http://site.test/"]
+    if source == "workspace":
+        (temp_workspace.root / "openlinx.toml").write_text(
+            f'[crawl]\nproxy = "{explicit}"\n', encoding="utf-8"
+        )
+    elif source == "joined_flag":
+        args.append(f"--proxy={explicit}")
+        expected_argv.append(f"--proxy={recorded}")
+    else:
+        args.extend(("--proxy", explicit))
+        expected_argv.extend(("--proxy", recorded))
+
+    crawl_file = crawled(*args)
+
+    assert proxy.requests == (
+        "http://site.test/robots.txt",
+        "http://site.test/",
+        "http://site.test/shoes",
+    )
+    assert query(crawl_file, "SELECT url, status_code FROM urls ORDER BY id") == [
+        ("http://site.test/", 200),
+        ("http://site.test/shoes", 404),
+    ]
+    [(argv, config)] = query(crawl_file, "SELECT command_argv, config FROM crawl")
+    assert (json.loads(argv), json.loads(config)["crawl"]["proxy"]) == (
+        expected_argv,
+        recorded,
+    )
+
+
+@pytest.mark.parametrize("source", ["flag", "workspace", "service"])
+def test_an_explicit_schemeless_proxy_uses_http(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    source: str,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    explicit = proxy.url.removeprefix("http://")
+    if source == "workspace":
+        (temp_workspace.root / "openlinx.toml").write_text(
+            f'[crawl]\nproxy = "{explicit}"\n', encoding="utf-8"
+        )
+        file = crawled("http://site.test/", "--network-wait", "0", "--retries", "0")
+    else:
+        (temp_workspace.root / "openlinx.toml").write_text(
+            '[crawl]\nproxy = "http://127.0.0.1:1"\n', encoding="utf-8"
+        )
+        file = (
+            crawled(
+                "http://site.test/",
+                "--proxy",
+                explicit,
+                "--network-wait",
+                "0",
+                "--retries",
+                "0",
+            )
+            if source == "flag"
+            else crawl_result(
+                "http://site.test/", proxy=explicit, network_wait=0, retries=0
+            ).crawl_file
+        )
+
+    assert proxy.requests == (
+        "http://site.test/robots.txt",
+        "http://site.test/",
+        "http://site.test/shoes",
+    )
+    [(config,)] = query(file, "SELECT config FROM crawl")
+    assert json.loads(config)["crawl"]["proxy"] == proxy.url
+
+
+@pytest.mark.parametrize(
+    ("source", "bypass"),
+    [("flag", False), ("workspace", False), ("service", False), ("service", True)],
+)
+def test_an_empty_proxy_flag_restores_environment_handling(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    bypass: bool,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    workspace_proxy = fixture_proxy(hosts.resolver)
+    environment_proxy = fixture_proxy(hosts.resolver)
+    monkeypatch.setenv("HTTP_PROXY", environment_proxy.url)
+    if bypass:
+        monkeypatch.setenv("NO_PROXY", "site.test")
+    explicit = "" if source == "workspace" else workspace_proxy.url
+    (temp_workspace.root / "openlinx.toml").write_text(
+        f'[crawl]\nproxy = "{explicit}"\n', encoding="utf-8"
+    )
+
+    if source == "flag":
+        file = crawled("http://site.test/", "--proxy", "")
+    elif source == "workspace":
+        file = crawled("http://site.test/")
+    else:
+        file = crawl_result("http://site.test/", proxy="", resolver=hosts.resolver).crawl_file
+
+    assert workspace_proxy.requests == ()
+    assert environment_proxy.requests == (
+        ()
+        if bypass
+        else (
+            "http://site.test/robots.txt",
+            "http://site.test/",
+            "http://site.test/shoes",
+        )
+    )
+    assert [request.path for request in hosts.site.requests] == ["/robots.txt", "/", "/shoes"]
+    [(config,)] = query(file, "SELECT config FROM crawl")
+    assert json.loads(config)["crawl"]["proxy"] is None
+
+
+@pytest.mark.parametrize("read_only", [False, True], ids=["writable", "read-only"])
+def test_continue_refuses_an_explicit_proxy_password_without_a_fresh_value(
+    temp_workspace: TempWorkspace,
+    fixture_hosts: StartHosts,
+    fixture_proxy: StartProxy,
+    read_only: bool,
+) -> None:
+    hosts = fixture_hosts(SHOP, Site({}))
+    proxy = fixture_proxy(hosts.resolver)
+    stopped = crawl_result(
+        "http://site.test/", proxy=proxy.url.replace("http://", "http://u:pw@"), max_urls=1
+    )
+    assert stopped.summary.state == "stopped"
+    [(config,)] = query(stopped.crawl_file, "SELECT config FROM crawl")
+    assert json.loads(config)["crawl"]["proxy"] == proxy.url.replace("http://", "http://u:***@")
+    requests = proxy.requests
+    files = {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()}
+
+    with (
+        read_only_file(stopped.crawl_file) if read_only else nullcontext(),
+        pytest.raises(OpenLinxError) as caught,
+    ):
+        continued(stopped, CrawlOverrides(max_urls=None))
+
+    assert (caught.value.code, caught.value.exit_code) == ("secrets_required", 2)
+    assert "crawl.proxy" in (caught.value.diagnostic.hint or "")
+    assert "--proxy" in (caught.value.diagnostic.hint or "")
+    assert proxy.requests == requests
+    assert {file.name: file.read_bytes() for file in stopped.crawl_file.parent.iterdir()} == files
 
 
 def test_the_http_proxy_variable_is_honoured(
@@ -85,7 +398,7 @@ def test_a_proxy_password_from_a_variable_is_redacted(
     proxy = fixture_proxy(hosts.resolver)
     with_password = proxy.url.replace("http://", "http://u:pw@")
     monkeypatch.setenv("HTTP_PROXY", with_password)
-    # A proxy URL without a password is recorded as *** too, as 015 records a secret.
+    # Proxy settings are secret even without a password, so the whole URL is recorded as ***.
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.corp:3128")
     monkeypatch.setenv("NO_PROXY", "intranet.local")
 

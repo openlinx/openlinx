@@ -1,4 +1,4 @@
-"""List Commands (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify list Command paging, field selection and output."""
 
 import pytest
 

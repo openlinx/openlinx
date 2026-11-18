@@ -1,4 +1,4 @@
-"""The Link and Refresh headers' Links, and the refresh parser (020-add-crawl-core D5; seam 4)."""
+"""Verify Links from Link and Refresh headers and refresh URL parsing."""
 
 from datetime import UTC, datetime
 

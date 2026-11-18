@@ -1,4 +1,4 @@
-"""`fixture_site` fixtures: start a site, stop it afterwards (design D9 of 000-scaffold-project)."""
+"""Start fixture sites for tests and stop them during teardown."""
 
 import ssl
 from collections.abc import Iterator, Mapping
@@ -19,7 +19,7 @@ from tests.fixture_site.hosts import (
 from tests.fixture_site.routes import Site
 from tests.fixture_site.server import RunningServer, Serve, ServerHandle
 from tests.fixture_site.tls import SiteOrBuilder, StartTlsHosts, TlsHosts, tls_hosts_for
-from tests.support.proxy import ForwardProxy, StartProxy
+from tests.support.proxy import ConnectReply, ForwardProxy, StartProxy
 
 StartSite = Serve
 
@@ -71,8 +71,8 @@ def fixture_tls_hosts(fixture_site: Serve) -> StartTlsHosts:
     """site.test over http and https, and three https listeners whose certificates fail,
     behind the DNS resolver hook."""
 
-    def start(site: SiteOrBuilder, other: Site) -> TlsHosts:
-        return tls_hosts_for(fixture_site, site, other)
+    def start(site: SiteOrBuilder, other: Site, *, alpn: tuple[str, ...] = ()) -> TlsHosts:
+        return tls_hosts_for(fixture_site, site, other, alpn=alpn)
 
     return start
 
@@ -82,8 +82,21 @@ def fixture_proxy() -> Iterator[StartProxy]:
     """A forward proxy that resolves names with the DNS resolver hook it is given."""
     with ExitStack() as running:
 
-        def start(resolver: AbstractResolver) -> ForwardProxy:
-            proxy = ForwardProxy(resolver)
+        def start(
+            resolver: AbstractResolver,
+            *,
+            auth: tuple[str, str] | None = None,
+            connect_replies: tuple[ConnectReply, ...] = (),
+            strict_connect_host: bool = False,
+            tls: ssl.SSLContext | None = None,
+        ) -> ForwardProxy:
+            proxy = ForwardProxy(
+                resolver,
+                auth=auth,
+                connect_replies=connect_replies,
+                strict_connect_host=strict_connect_host,
+                tls=tls,
+            )
             running.callback(proxy.stop)
             return proxy
 

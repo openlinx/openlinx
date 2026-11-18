@@ -1,4 +1,4 @@
-"""Page preparation: one pure function of a response, behind an executor (020-add-crawl-core D9)."""
+"""Prepare a response through a pure extraction function behind an executor."""
 
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -30,7 +30,7 @@ _HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 
 
 def is_html_type(content_type: str | None) -> bool:
-    """The one rule of an HTML response, which 030's Page predicate imports (design D5)."""
+    """One HTML-response predicate shared by Link discovery and Page extraction."""
     media_type = (content_type or "").partition(";")[0]
     return media_type.strip().lower() in _HTML_TYPES
 
@@ -52,9 +52,9 @@ class PageInput(msgspec.Struct, frozen=True, kw_only=True):
 
 @dataclass(frozen=True, slots=True)
 class Extractor[C: msgspec.Struct | None, O: msgspec.Struct]:
-    """Pure and module-level, so that a 026 worker imports it by name; its config, a struct
+    """Pure and module-level so a parse worker can import it by name; its config, a struct
     with frozen fields resolved where the hooks are built, travels with it in the settings
-    snapshot (design D9)."""
+    snapshot (020-add-crawl-core D9)."""
 
     name: str
     extract: Callable[[LexborHTMLParser, PageInput, C], O]
@@ -76,7 +76,7 @@ class Extractor[C: msgspec.Struct | None, O: msgspec.Struct]:
             )
         object.__setattr__(self, "output_type", _output_type(self.name, self.extract))
         config: object = self.config
-        # Shared by every Page of the Crawl and by every 026 worker. The check is shallow: a field
+        # Shared by every Page of the Crawl and by every parse worker. The check is shallow: a field
         # may still hold a mutable value.
         if config is not None and not (
             isinstance(config, msgspec.Struct) and config.__struct_config__.frozen
@@ -97,13 +97,13 @@ def extractor[C: msgspec.Struct | None, O: msgspec.Struct](
     name: str, extract: Callable[[LexborHTMLParser, PageInput, C], O], config: C
 ) -> Extractor[Any, O]:
     """The one way to build an extractor: mypy checks C here, where the extractor is registered,
-    since an Extractor built in place inside Hooks(...) takes C as Any (design D9)."""
+    since an Extractor built in place inside Hooks(...) takes C as Any (020-add-crawl-core D9)."""
     return Extractor(name, extract, config)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class PageSettings:
-    """The settings snapshot: built once per Crawl, and given to each 026 worker once."""
+    """The settings snapshot: built once per Crawl, and given to each parse worker once."""
 
     scope: ScopeRules
     extractors: tuple[Extractor[Any, Any], ...] = ()
@@ -124,7 +124,7 @@ class PreparedPage(msgspec.Struct, frozen=True, kw_only=True):
 
     @property
     def parsed(self) -> bool:
-        # Only an extractor's failure leaves a Page that something came out of (design D16).
+        # Only an extractor's failure leaves a Page that something came out of.
         return self.parse_error in (None, "extractor_error")
 
 
@@ -140,7 +140,7 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
     tree = parse_html(decoded.text)
     is_internal = partial(_is_internal, settings.scope)
     directives = response_directives(response, settings.robots_token, meta_robots_contents(tree))
-    # The header Links come first, as 030's ordinals count them (design D5).
+    # Header Links come first because stored Link ordinals count them before HTML Links.
     from_headers = response_links(url, response, settings.scope, settings.strip_params)
     from_html = tuple(
         links_in_tree(
@@ -169,11 +169,11 @@ def prepare_page(url: NormalizedUrl, response: FetchResult, settings: PageSettin
         try:
             output = extractor.extract(tree, page, extractor.config)
             # As declared: a handler reads it by its type, and only a msgspec struct crosses
-            # 026's process boundary as it is.
+            # a parse worker's process boundary as it is.
             if not isinstance(output, extractor.output_type):
                 raise TypeError(f"{extractor.name} returned {type(output).__name__}")
             outputs.append((extractor.name, output))
-        # An extractor is later changes' code: its failure costs only its output (design D16).
+        # Extractor failures discard only that extractor's output (020-add-crawl-core D16).
         except Exception as error:
             failures.append(hook_failure(extractor.name, extractor.extract, error))
     return PreparedPage(
@@ -195,7 +195,7 @@ def response_links(
     strip_params: re.Pattern[str] | None,
 ) -> tuple[DiscoveredLink, ...]:
     """The engine reads them whatever became of the preparation, which reads them for
-    `PageInput`, so both number them alike (design D9)."""
+    `PageInput`, so both number them alike."""
     return tuple(
         header_links(
             response.headers,
@@ -214,14 +214,14 @@ class PageExecutor(Protocol):
     # Read-only, so a plain attribute or a property both make a PageExecutor.
     @property
     def backlog(self) -> int:
-        """How many Pages it may hold beyond the requests in flight (design D7)."""
+        """How many Pages it may hold beyond the requests in flight."""
 
     @property
     def workers(self) -> int:
         """The processes that prepare Pages besides the crawl process (crawl_started)."""
 
     async def start(self, settings: PageSettings) -> None:
-        """Once, with the snapshot of the final Scope, before the first prepare (design D9)."""
+        """Once, with the snapshot of the final Scope, before the first prepare."""
 
     async def prepare(self, url: NormalizedUrl, response: FetchResult) -> PreparedPage: ...
 
@@ -229,7 +229,7 @@ class PageExecutor(Protocol):
 
 
 class InProcessExecutor:
-    """Prepares Pages on the event loop's thread; 026 puts a process pool behind the seam."""
+    """Prepare Pages on the event loop; 026-add-parse-pool owns the planned process pool."""
 
     backlog = 0
     workers = 0

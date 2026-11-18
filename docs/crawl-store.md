@@ -79,7 +79,21 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 
 - **Counts are not recorded while a Crawl runs.** No column that the Crawl writes holds the number of URLs, Pages or Issues: they are counted from the tables that hold them, so they can never disagree. A value derived from the stored rows, such as a score, is stored only by a pass that runs after the Crawl, in a derived column.
 - **`started_at`** is the same instant as the time in the crawl id, read once when the Crawl is created.
-- **`settings_file`** is the `openlinx.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key, so the file says how it was made even when `openlinx.toml` changes later.
+- **`settings_file`** is the `openlinx.toml` the settings were read from, or NULL when there was none. `config` holds the settings the Crawl ran with, with every table and key and service-owned request policy metadata, so the file says how it was made even when `openlinx.toml` changes later.
+- **Request policy metadata:** every Crawl planned by the Crawl Service records
+  `"request_policy": {"custom_user_agent": true}` or
+  `"request_policy": {"custom_user_agent": false}` at the root of `config`,
+  beside settings tables. True selects the custom User-Agent for Internal requests;
+  false selects the dedicated/default User-Agent. External requests always use the
+  dedicated/default value. The selected `crawl.header` list and `crawl.user_agent` stay
+  unchanged, including harmless entries overridden at dispatch. A null dedicated value
+  generates the running tool's default, including its current version. `request_policy`
+  is reserved against settings-table registration; it is not a setting or SQL column.
+  A direct continue validates this object and its strict boolean before opening a writer
+  or Fetcher; true requires exactly one valid custom User-Agent. Missing, malformed or
+  inconsistent metadata is `crawl_file_invalid` (exit 6, `details.file`); older pre-release
+  files without it must be crawled again. Every continue preserves the recorded winner,
+  without reconstructing source priority from argv or current Workspace settings.
 - **The environment stamp** (`python_version` and `platform`) helps when a crawl file is attached to a bug report.
 
 ## Secrets are never recorded
@@ -92,14 +106,26 @@ Every crawl file has a one-row table `crawl` with the Crawl's metadata and a tab
 
   `linx commands` shows `"secret": true` on such options. A secret option has only long names, such as `--token`, so the attached short form `-tVALUE` never carries a secret.
 - **Where:** the value after a secret flag, in both the `--flag value` and the `--flag=value` forms, and a secret setting's value in `config`, wherever it came from: the flag, `openlinx.toml` (secrets are allowed there) or a default. An unset secret stays `null`.
-- **The two shapes of a redacted value:**
+- **Recorded shapes follow the declaration:**
 
-  | Secret value | Recorded as |
-  |---|---|
-  | a URL with a password, such as `http://ann:s3cret@proxy.test:8080` | the same URL without its password: `http://ann:***@proxy.test:8080` |
-  | anything else, such as `s3cret` | `***` |
+  | Declaration | Value | Recorded as |
+  |---|---|---|
+  | `True` | `http://ann:s3cret@proxy.test:8080` | `http://ann:***@proxy.test:8080` |
+  | `True` | anything without a URL password, including a credential-free environment proxy | `***` |
+  | `"whole"` | any value, including a URL-shaped credential | `***` |
+  | `"header"` | `X-Env: staging`, `x-ToKeN: abc123`, `Cookie: sid=abc123` | `X-Env: staging`, `x-ToKeN: ***`, `Cookie: ***` |
+  | `"url"` | a valid URL with a password | the URL with only its password replaced by `***` |
+  | `"url"` | a valid credential-free URL | unchanged |
+  | `"url"` | a malformed URL | `***` |
+  | `"proxy"` | an explicit proxy, including `ann:s3cret@proxy.test:8080` | `ann:***@proxy.test:8080` in argv and `http://ann:***@proxy.test:8080` in the normalized config |
+  | `False` | any value | unchanged |
 
-  A URL keeps its scheme, user, host, port and path, so a recorded proxy still says which proxy was used.
+  Header lists retain order and repeated entries. A header is sensitive when its name
+  is `Cookie` or contains `auth`, `token`, `secret`, `key` or `password`, ignoring case;
+  only its value is hidden and the original name spelling remains. A header without a
+  colon is hidden entirely. Unset values stay `null` for every policy. URL redaction
+  keeps the scheme, user, host, port, path, query and fragment. Environment proxies
+  retain their existing `True` declaration.
 
 ## Crawl States
 
@@ -202,7 +228,7 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
   v0.2 plans to detect them from the system's mount table.
 - **`"wal"` on a UNC path** turns the fallback off, for a share known to support WAL safely.
 - **Durability:** WAL files commit with `synchronous=NORMAL`: a commit survives a killed process, and a power cut may lose the last commits but leaves the file sound. Rollback-journal files commit with `synchronous=FULL`.
-- **The writer's connection settings.** The writer's connection keeps temporary tables and indexes in memory (`temp_store = MEMORY`) and uses a page cache of up to 64 MiB (`cache_size = -65536`), a ceiling rather than an allocation. In WAL mode it also maps up to 256 MiB of the crawl file into memory (`mmap_size = 268435456`). In the store benchmark the three together cut a 2,000-Page write by a third. Creating a file and reading it keep SQLite's defaults, and no setting changes these values.
+- **The writer's connection settings.** The writer uses a page cache of up to 64 MiB (`cache_size = -65536`), a ceiling rather than an allocation. In WAL mode it also maps up to 256 MiB of the crawl file into memory (`mmap_size = 268435456`). The store benchmark's writer keeps temporary tables and indexes in memory (`temp_store = MEMORY`). A Crawl run uses `temp_store = FILE` so its run-local origin claims can spill to disk as the Crawl grows. Creating a file and reading it keep SQLite's defaults.
 - **No memory mapping in rollback-journal mode.** That mode is chosen for network shares, where a mapped file is only as coherent as the share's client cache, so the writer sets `mmap_size = 0` there. It sets it explicitly, because the default is a build-time option of SQLite and is not 0 in every build.
 
 ## Describing the schema

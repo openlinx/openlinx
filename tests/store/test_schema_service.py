@@ -1,4 +1,4 @@
-"""The schema service's order of tables (015-add-crawl-store, crawl-store)."""
+"""Verify the schema service preserves declared table order."""
 
 from collections.abc import Iterator
 
@@ -11,7 +11,7 @@ from openlinx.store.schema import metadata
 
 @pytest.fixture
 def table_of_an_earlier_change() -> Iterator[None]:
-    """Declared after 015's tables, the way a later module would add its own.
+    """Temporarily declare an extension table after the built-in tables.
 
     Safe because the tests run serially; under xdist this must use an isolated MetaData copy.
     """

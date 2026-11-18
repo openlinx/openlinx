@@ -1,1 +1,1 @@
-"""Output formats, paging, diagnostics and exit codes: 010-add-workspace-and-cli-contract."""
+"""Format output, page results and report diagnostics and exit codes."""

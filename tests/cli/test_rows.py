@@ -1,4 +1,4 @@
-"""Rows Commands (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify rows Commands stream their results and report interruptions."""
 
 from tests.support.app import example_app
 from tests.support.cli import PROCESS_TIMEOUT, run_cli, start_example_process

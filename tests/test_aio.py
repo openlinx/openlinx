@@ -1,4 +1,4 @@
-"""`openlinx.aio.loop_factory` (design D15 of 000-scaffold-project)."""
+"""Verify event-loop selection and cancellation-safe races."""
 
 import asyncio
 import sys

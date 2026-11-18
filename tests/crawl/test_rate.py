@@ -1,4 +1,4 @@
-"""Politeness in time: the rate and Crawl-delay (020-add-crawl-core D7; fake timing)."""
+"""Verify request-rate and Crawl-delay timing with virtual time."""
 
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result

@@ -1,4 +1,4 @@
-"""The engine: the frontier depth by depth, and each URL's task (020-add-crawl-core D1, D2, D3)."""
+"""Dispatch the Crawl frontier by depth and coordinate each URL's task."""
 
 import asyncio
 from collections.abc import Sequence
@@ -9,6 +9,7 @@ from openlinx.aio import first_of
 from openlinx.crawl.engine.blocking import BlockingRuns
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.crawl_warnings import url_limit_reached
+from openlinx.crawl.engine.http_versions import HttpVersions
 from openlinx.crawl.engine.outcomes import Outcomes
 from openlinx.crawl.engine.pause import CountedUrl, NetworkPause, PauseEnd, Redispatch
 from openlinx.crawl.engine.progress import UrlCounters, report_progress
@@ -16,11 +17,13 @@ from openlinx.crawl.engine.seed_chain import SeedChain, end_seed_chain
 from openlinx.crawl.engine.stop import StopGrace
 from openlinx.crawl.engine.tasks import Run, TaskFailure
 from openlinx.crawl.engine.units import unit_of, via_resource
+from openlinx.crawl.fetch.fetcher import ProbesHttpVersion
 from openlinx.crawl.fetch.politeness import RateGate, RequestLimits, global_cap
 from openlinx.crawl.fetch.requester import Requester, watchdog_seconds
 from openlinx.crawl.robots.loader import RobotsLoader
 from openlinx.crawl.scope import ScopeDecision
 from openlinx.crawl.urls import NormalizedUrl
+from openlinx.store.origins import init_http_version_claims
 from openlinx.store.records import QueuedUrl
 from openlinx.store.urls import (
     next_depth,
@@ -36,7 +39,7 @@ from openlinx.store.writer import CrawlWriterClosedError
 _FRONTIER_BATCH = 100
 # next_depth gives the smallest queued depth above it, so above this one, any depth.
 _ABOVE_NO_DEPTH = -1
-# Clock seconds that the requests in flight at a stop may still take (design D16).
+# Clock seconds that the requests in flight at a stop may still take.
 STOP_GRACE_SECONDS = 10
 
 
@@ -46,16 +49,22 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     await context.writer.run_async(
         record_seed(seed, is_internal=decision.is_internal, in_scope=decision.in_scope)
     )
-    # Once a run, so a continued Crawl starts from the file's counts (design D10).
+    # Once a run, so a continued Crawl starts from the file's counts.
     counts = await context.writer.run_async(url_counts())
     counters = UrlCounters(counts)
     concurrency = context.settings.concurrency
     cap = global_cap(concurrency)
-    # The URLs a continued Crawl fetched before count toward its limit (design D20).
+    # The URLs a continued Crawl fetched before count toward its limit.
     limits = RequestLimits(
         cap, context.pages.backlog, context.settings.max_urls, started=counts.fetched
     )
     gate = RateGate(context.clock, context.settings.rate)
+
+    fetcher = context.fetcher
+    measure = fetcher.probe_http_version if isinstance(fetcher, ProbesHttpVersion) else None
+    http_versions = HttpVersions(context.writer, context.fetch_policy, context.clock, measure)
+    await context.writer.run_async(init_http_version_claims)
+
     requester = Requester(
         context.fetcher,
         limits,
@@ -66,17 +75,24 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         retries=context.settings.retries,
         watchdog_seconds=watchdog_seconds(context.fetch_policy.timeout_seconds),
         stop=context.stop,
+        secrets=context.secrets,
+        on_request_start=http_versions.requested,
     )
     redispatch = Redispatch()
-    robots = RobotsLoader(requester, context.writer, context.settings.robots_user_agent)
+    robots = RobotsLoader(
+        requester,
+        context.writer,
+        context.settings.robots_user_agent,
+        lambda url: seed_chain.decide(url, in_chain=seed_chain.is_open).is_internal,
+    )
     task_failure = TaskFailure(context.stop)
-    # The tasks that run beside the URLs' own: the network pause's probing, the progress events.
+    # Work beside the URL tasks: the network pause, progress and origin measurements.
     side_tasks: set[asyncio.Task[None]] = set()
 
     async def resumed(end: PauseEnd, count: Sequence[CountedUrl]) -> None:
         if end != "outage":
             return
-        # The network was down, not the site: robots.txt is asked again (design D16).
+        # The network was down, not the site: robots.txt is asked again.
         robots.forget_unanswered(lambda url: seed_chain.scope.decide(url).is_internal)
         requeued = redispatch.requeue(count)
         # Each whose own request counted toward the URL limit counts again when it is requested.
@@ -90,6 +106,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         concurrency=concurrency,
         network_wait=context.settings.network_wait,
         seed=seed,
+        is_internal=lambda url: seed_chain.scope.decide(url).is_internal,
         crawl_id=context.crawl_file.id,
         seed_answered=await context.writer.run_async(seed_answered(seed)),
         stop=context.stop,
@@ -125,6 +142,11 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         )
     )
     task_failure.track(side_tasks, progress)
+    measurements = None
+    if measure is not None:
+        measurements = asyncio.create_task(http_versions.run(requester))
+        task_failure.track(side_tasks, measurements)
+        context.stop.on_first_set(lambda _: measurements.cancel())
     depth: int | None = 0
     try:
         while depth is not None:
@@ -153,12 +175,19 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
                     # re-queues the URLs of its count.
                     await run.pause.ended()
                     depth = await context.writer.run_async(next_depth(_ABOVE_NO_DEPTH))
+        if measurements is not None and not _stopping(run):
+            http_versions.finish()
+            await asyncio.wait({measurements})
     # An ended writer refuses every unit.
     except CrawlWriterClosedError as closed:
         context.stop.write_failed(closed)
     finally:
         await _cancel_all(run.task_failure.checked_urls)
         await run.pause.close()
+        # The stop callback may already have cancelled the worker. A second cancellation
+        # would interrupt its wait for the probe's own cleanup.
+        if measurements is not None and measurements.cancelling():
+            await asyncio.wait({measurements})
         await _cancel_all(side_tasks)
         await run.robots.close()
     # Once every task has ended, including those that the cancellation above ended.
@@ -176,8 +205,8 @@ async def _crawl_depth(run: Run, depth: int) -> None:
     running: set[asyncio.Task[None]] = set()
     try:
         # A pass reads the depth from the top, so it also finds a queued URL that a redirect
-        # lowered to it below the last pass's cursor (022 D2). Within a pass the cursor keeps a
-        # URL in flight from being read twice (design D1); across passes only the depth's
+        # lowered to it below the last pass's cursor. Within a pass the cursor keeps a
+        # URL in flight from being read twice; across passes only the depth's
         # checked URLs are still in flight, bounded by the task cap, and the URLs whose outcome
         # is pending, bounded by the writer's batch.
         checked_in_flight: set[int] = set()
@@ -209,7 +238,7 @@ async def _start_depth(
     Crawl stops; whether it started any."""
     context, limits = run.context, run.limits
     dispatched = False
-    # The cursor of this pass: a URL in flight is never read twice (design D1).
+    # The cursor of this pass: a URL in flight is never read twice.
     after = 0
     while limits.limit_reached() is None:
         started = await _start_again(run, running, checked_in_flight)
@@ -240,7 +269,7 @@ async def _wait_for_the_pause_count(run: Run, running: set[asyncio.Task[None]]) 
     """A refusal at the URL limit while the network pause's count is open waits for its
     verdict, since an outage, or a failure while paused, gives counts back and takes the
     refusal back: while the depth's requests end, then for a pause that is on, for
-    --network-wait from the refusal at most (022 D4)."""
+    --network-wait from the refusal at most (022-add-fetch-policy D4)."""
     pause, clock = run.pause, run.context.clock
     ends = clock.monotonic() + run.context.settings.network_wait
     while pause.counting and not _stopping(run):
@@ -259,7 +288,7 @@ async def _wait_for_the_pause_count(run: Run, running: set[asyncio.Task[None]]) 
 async def _ended_or_refused(run: Run, tasks: set[asyncio.Task[None]]) -> bool:
     """Waits until the tasks have ended or the Crawl stops; False as soon as the URL limit
     refuses a URL inside one of them, so the depth's loop decides the refusal at once, wherever
-    it was waiting (022 D4)."""
+    it was waiting."""
     limits, stop, failure = run.limits, run.context.stop, run.task_failure
     while tasks and not stop.is_set and not failure.is_set:
         if limits.limit_reached() is not None:
@@ -271,7 +300,7 @@ async def _ended_or_refused(run: Run, tasks: set[asyncio.Task[None]]) -> bool:
 async def _wait_out(run: Run, tasks: set[asyncio.Task[None]]) -> None:
     """Waits until the tasks have ended; once the Crawl stops, for STOP_GRACE_SECONDS of clock
     time at most, and a bug ends the wait at once. The caller cancels what is left, before its
-    submit, so its URL stays queued (design D16)."""
+    submit, so its URL stays queued (020-add-crawl-core D16)."""
     stop, failure = run.context.stop, run.task_failure
     while tasks and not stop.is_set and not failure.is_set:
         await first_of(stop.wait(), wake_on=tasks)
@@ -290,7 +319,7 @@ async def _start_again(
     run: Run, running: set[asyncio.Task[None]], checked_in_flight: set[int]
 ) -> _Started:
     """Dispatches what a network pause re-queued or left queued, ahead of the frontier read,
-    each at the depth it was found at (design D3)."""
+    each at the depth it was found at."""
     urls = run.redispatch.take()
     for index, queued in enumerate(urls):
         started = await _start(run, queued, running, checked_in_flight)
@@ -315,9 +344,9 @@ async def _start(
     in_chain = run.seed_chain.holds(queued)
     decision = run.seed_chain.decide(queued.url, in_chain=in_chain)
     task = asyncio.create_task(_crawl_url(run, queued, decision))
-    # A checked URL never holds the barrier (design D3); the sweep in run_crawl reads what one
-    # finds after its depth has closed. The chain's last URL closes it before depth 0 ends
-    # (022 D3), even a checked one, such as a URL off the Seed's site or its folder.
+    # A checked URL never holds the barrier; the sweep in run_crawl reads what one
+    # finds after its depth has closed. The chain's last URL closes it before depth 0 ends,
+    # even a checked one, such as a URL off the Seed's site or its folder.
     if _is_checked_url(queued, decision) and not in_chain:
         run.task_failure.track(
             run.task_failure.checked_urls, task, internal_checked=decision.is_internal
@@ -331,8 +360,7 @@ async def _start(
 
 async def _reserve_task(run: Run) -> bool:
     """Room for a URL's task, or False once the Crawl stops: the tasks that fill the bound may
-    wait for a host's slot that a hanging request holds, and the grace must not wait for it
-    (design D16)."""
+    wait for a host's slot that a hanging request holds, and the grace must not wait for it."""
     reserved = await first_of(run.limits.reserve_task(), run.context.stop.wait())
     return not reserved.cancelled()
 
@@ -351,7 +379,7 @@ def _stopping(run: Run) -> bool:
 
 def _closes_the_seed_chain(run: Run) -> bool:
     # The URL limit is a stop that leaves the file whole, so the chain's URLs are still decided
-    # against the Scope it ended in (022 D3); any other stop or a bug ends the run as it is.
+    # against the Scope it ended in; any other stop or a bug ends the run as it is.
     stop = run.context.stop
     return not run.task_failure.is_set and (not stop.is_set or stop.reason == "max_urls")
 
@@ -367,12 +395,12 @@ def _discard(ids: set[int], url_id: int, _: object) -> None:
 async def _crawl_url(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> None:
     try:
         recorded = await unit_of(run, queued, decision)
-        # The URL's task ends at the submit; its outcome arrives at the commit (design D2).
+        # The task ends at submit; its outcome arrives at commit (020-add-crawl-core D2).
         if recorded is not None:
             await run.outcomes.submit(recorded)
         else:
             # Still queued: one the re-dispatch list owns waits there, since no frontier read
-            # dispatches it again (design D16).
+            # dispatches it again.
             run.redispatch.put_back([queued])
     finally:
         run.limits.task_ended()

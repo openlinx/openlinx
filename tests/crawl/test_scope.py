@@ -1,4 +1,4 @@
-"""Scope decisions (020-add-crawl-core, crawling)."""
+"""Verify Scope membership decisions through pure logic."""
 
 import json
 import re

@@ -1,16 +1,27 @@
-"""The one body reader: a response body read and decoded up to its cap (022-add-fetch-policy D1)."""
+"""Read and decode response bodies within the configured size cap."""
 
+import sys
 import zlib
 from collections.abc import AsyncIterable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-import brotli
+import brotlicffi
+
+if sys.version_info >= (3, 14):
+    from compression import zstd
+else:
+    from backports import zstd
 
 BODY_LIMIT = 20 * 1024 * 1024
-# The codings every request offers, and the only ones decoded.
-OFFERED_CODINGS = ("gzip", "deflate", "br")
+# Decoder capabilities do not depend on a request's Accept-Encoding preference.
+SUPPORTED_CODINGS = ("gzip", "deflate", "br", "zstd")
 _GZIP_MAGIC = b"\x1f\x8b"
+_BROTLI_IO_BYTES = 64 * 1024
+_ZSTD_FEED_BYTES = 1024
+_ZSTD_OUTPUT_BYTES = 64 * 1024
+_ZSTD_WINDOW_LOG_MAX = 23
+_ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 
 
 class BodyDecodingError(ValueError):
@@ -19,7 +30,7 @@ class BodyDecodingError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Body:
-    # Decoded, unless its coding was not offered: then as received.
+    # Decoded, unless its coding is unsupported: then as received.
     data: bytes
     # Larger than the cap, as transferred or as decoded, so not read in full.
     truncated: bool
@@ -55,7 +66,7 @@ class _Zlib:
                 self._head = data
                 return b""
             self._head = None
-            # "deflate" means the zlib format, but some servers send raw deflate (design D1).
+            # Some servers send raw deflate instead of the zlib format (022-add-fetch-policy D1).
             if not _is_zlib_header(data):
                 self._inflate = zlib.decompressobj(-zlib.MAX_WBITS)
         if self._inflate.eof:
@@ -89,31 +100,141 @@ class _Zlib:
 
 class _Brotli:
     def __init__(self) -> None:
-        self._inflate = brotli.Decompressor()
+        self._inflate = brotlicffi.Decompressor()
+        self._pending = memoryview(b"")
+        self._needs_drain = False
 
     def decode(self, data: bytes, limit: int) -> bytes:
-        # Bytes after the stream are ignored, as gzip's are; brotli would refuse them.
-        if self._inflate.is_finished():
+        # Ignore trailing bytes in later reads, as for gzip.
+        if self.finished():
             return b""
-        output: bytes = self._inflate.process(data, output_buffer_limit=limit)
-        return output
+        if data:
+            self._pending = memoryview(self._pending.tobytes() + data if self._pending else data)
+        return self.drain(limit)
 
     def drain(self, limit: int) -> bytes:
-        if self._inflate.is_finished() or self._inflate.can_accept_more_data():
-            return b""
-        output: bytes = self._inflate.process(b"", output_buffer_limit=limit)
-        return output
+        output = bytearray()
+        while len(output) < limit and (self._pending or self._needs_drain):
+            data = b""
+            if not self._needs_drain:
+                # Bound the binding's copy of the compressed input and any unconsumed tail.
+                data = self._pending[:_BROTLI_IO_BYTES].tobytes()
+                self._pending = (
+                    self._pending[len(data) :]
+                    if len(data) < len(self._pending)
+                    else memoryview(b"")
+                )
+            # BrotliCFFI passes the buffer size to the native decoder. Keep its eager
+            # allocation small even when the remaining budget is large.
+            budget = min(limit - len(output), _BROTLI_IO_BYTES)
+            piece: bytes = self._inflate.process(data, output_buffer_limit=budget)
+            output.extend(piece)
+            if self.finished():
+                if self._pending:
+                    raise brotlicffi.error("Decompression error: trailing data after stream.")
+                self._needs_drain = False
+                break
+            # Native output can still be pending even after all supplied input was consumed.
+            self._needs_drain = len(piece) == budget
+        return bytes(output)
 
     def finished(self) -> bool:
         finished: bool = self._inflate.is_finished()
         return finished
 
 
+def _zstd_frame() -> zstd.ZstdDecompressor:
+    return zstd.ZstdDecompressor(
+        options={zstd.DecompressionParameter.window_log_max: _ZSTD_WINDOW_LOG_MAX}
+    )
+
+
+def _zstd_window_size(prefix: bytes | memoryview) -> int | None:
+    """Read just the fields that determine the RFC 8878 window, or wait for more bytes."""
+    if len(prefix) < 4:
+        return None
+    magic = prefix[:4]
+    if magic != _ZSTD_MAGIC:
+        # The low nibble identifies the skippable frame, which needs no window.
+        if magic[0] >> 4 == 5 and magic[1:] == b"\x2a\x4d\x18":
+            return 0
+        raise BodyDecodingError("The body has an invalid zstd frame magic.")
+    if len(prefix) < 6:
+        return None
+    descriptor = prefix[4]
+    if not descriptor & 0x20:
+        window = prefix[5]
+        base = 1 << (10 + (window >> 3))
+        return base + (base >> 3) * (window & 7)
+    # For a single segment, the content size after the optional dictionary ID is the window.
+    start = 5 + (0, 1, 2, 4)[descriptor & 3]
+    size_bytes = (1, 2, 4, 8)[descriptor >> 6]
+    end = start + size_bytes
+    if len(prefix) < end:
+        return None
+    size = int.from_bytes(prefix[start:end], "little")
+    return size + 256 if size_bytes == 2 else size
+
+
+class _Zstd:
+    def __init__(self) -> None:
+        self._inflate = _zstd_frame()
+        self._pending = memoryview(b"")
+        # An empty or partial header until the current frame passes the window check.
+        self._frame_prefix: bytes | None = b""
+
+    def decode(self, data: bytes, limit: int) -> bytes:
+        if data:
+            self._pending = memoryview(self._pending.tobytes() + data if self._pending else data)
+        return self.drain(limit)
+
+    def drain(self, limit: int) -> bytes:
+        output = bytearray()
+        while len(output) < limit:
+            data: bytes | memoryview = b""
+            if self._inflate.eof:
+                data = self._inflate.unused_data
+                if not data and not self._pending:
+                    break
+                self._inflate = _zstd_frame()
+                self._frame_prefix = b""
+            if self._inflate.needs_input and not data:
+                if not self._pending:
+                    break
+                # Each frame can copy unused_data. Limit the tail it can copy even when
+                # one read contains many tiny frames or a header spans reads.
+                data = self._pending[: _ZSTD_FEED_BYTES - len(self._frame_prefix or b"")]
+                self._pending = (
+                    self._pending[len(data) :]
+                    if len(data) < len(self._pending)
+                    else memoryview(b"")
+                )
+            if self._frame_prefix is not None:
+                if self._frame_prefix:
+                    data = self._frame_prefix + bytes(data)
+                window_size = _zstd_window_size(data)
+                if window_size is None:
+                    self._frame_prefix = bytes(data)
+                    continue
+                # libzstd can bypass its window limit when decoding a whole frame at once.
+                if window_size > 1 << _ZSTD_WINDOW_LOG_MAX:
+                    raise BodyDecodingError("The zstd frame window exceeds the HTTP 8 MiB limit.")
+                self._frame_prefix = None
+            budget = min(limit - len(output), _ZSTD_OUTPUT_BYTES)
+            output.extend(self._inflate.decompress(data, max_length=budget))
+        return bytes(output)
+
+    def finished(self) -> bool:
+        return self._inflate.eof and not self._inflate.unused_data and not self._pending
+
+
 class _Chain:
     """Several codings, decoded in the reverse order of the Content-Encoding (RFC 9110 8.4.1)."""
 
-    def __init__(self, stages: Sequence[_Decoder]) -> None:
+    def __init__(self, stages: Sequence[_Decoder], body_limit: int) -> None:
         self._stages = stages
+        self._remaining = [body_limit] * (len(stages) - 1)
+        self.truncated = False
 
     def decode(self, data: bytes, limit: int) -> bytes:
         return self._through(0, data, limit)
@@ -121,10 +242,11 @@ class _Chain:
     def drain(self, limit: int) -> bytes:
         # Until a whole pass finds nothing held: a held piece, such as part of a trailer, may
         # give no output of its own while an earlier stage still holds more.
-        while True:
+        while not self.truncated:
             # The stage nearest the output first, so no stage takes input while it holds output.
             for index in reversed(range(len(self._stages))):
-                held = self._stages[index].drain(limit)
+                held = self._stages[index].drain(self._stage_limit(index, limit))
+                held = self._account(index, held)
                 if held:
                     output = self._through(index + 1, held, limit)
                     if output:
@@ -132,14 +254,32 @@ class _Chain:
                     break
             else:
                 return b""
+        return b""
 
     def finished(self) -> bool:
         return all(stage.finished() for stage in self._stages)
 
     def _through(self, start: int, data: bytes, limit: int) -> bytes:
-        for stage in self._stages[start:]:
-            data = stage.decode(data, limit)
+        for index in range(start, len(self._stages)):
+            data = self._stages[index].decode(data, self._stage_limit(index, limit))
+            data = self._account(index, data)
         return data
+
+    def _stage_limit(self, index: int, limit: int) -> int:
+        if index == len(self._remaining):
+            return limit
+        return min(limit, self._remaining[index] + 1)
+
+    def _account(self, index: int, data: bytes) -> bytes:
+        # The body reader accounts for the final stage. Earlier stages can exceed the
+        # cap even when a later stage returns little or no output.
+        if index == len(self._remaining):
+            return data
+        remaining = self._remaining[index]
+        self._remaining[index] -= min(len(data), remaining)
+        if len(data) > remaining:
+            self.truncated = True
+        return data[:remaining]
 
 
 def _is_zlib_header(data: bytes) -> bool:
@@ -155,28 +295,30 @@ def codings(content_encoding: str | None) -> list[str]:
 
 
 def is_decodable(content_encoding: str | None) -> bool:
-    return all(coding in OFFERED_CODINGS for coding in codings(content_encoding))
+    return all(coding in SUPPORTED_CODINGS for coding in codings(content_encoding))
 
 
-def _decoder(content_encoding: str | None) -> _Decoder | None:
+def _decoder(content_encoding: str | None, limit: int) -> _Chain | None:
     stages: list[_Decoder] = []
     for coding in reversed(codings(content_encoding)):
         if coding == "gzip":
             stages.append(_Zlib(16 + zlib.MAX_WBITS))
         elif coding == "deflate":
             stages.append(_Zlib(zlib.MAX_WBITS, raw_fallback=True))
+        elif coding == "zstd":
+            stages.append(_Zstd())
         else:
             stages.append(_Brotli())
-    return _Chain(stages) if stages else None
+    return _Chain(stages, limit) if stages else None
 
 
 async def read_body(
     chunks: AsyncIterable[bytes], coding: str | None, limit: int = BODY_LIMIT
 ) -> Body:
     """The body that `chunks` stream in the Content-Encoding `coding`, decoded, cut at `limit`
-    bytes as transferred and as decoded; reading stops at the cap. A coding that was not
-    offered is kept as received; BodyDecodingError for one that fails to decode."""
-    decoder = _decoder(coding) if is_decodable(coding) else None
+    bytes as transferred and at each decoding stage; reading stops at the cap. An unsupported
+    coding is kept as received; BodyDecodingError for one that fails to decode."""
+    decoder = _decoder(coding, limit) if is_decodable(coding) else None
     parts: list[bytes] = []
     size = transferred = 0
     try:
@@ -185,17 +327,17 @@ async def read_body(
             # One byte past the cap is enough to know the body is larger.
             chunk = chunk[: limit + 1 - (transferred - len(chunk))]
             output = chunk if decoder is None else decoder.decode(chunk, limit - size + 1)
-            while decoder is not None and size + len(output) <= limit:
+            while decoder is not None and not decoder.truncated and size + len(output) <= limit:
                 more = decoder.drain(limit - size - len(output) + 1)
                 if not more:
                     break
                 output += more
-            if size + len(output) > limit or transferred > limit:
+            if size + len(output) > limit or transferred > limit or (decoder and decoder.truncated):
                 parts.append(output[: limit - size])
                 return Body(b"".join(parts), True, transferred)
             parts.append(output)
             size += len(output)
-    except (zlib.error, brotli.error) as error:
+    except (zlib.error, brotlicffi.error, zstd.ZstdError) as error:
         raise BodyDecodingError(f"The body is not valid {coding}: {error}") from error
     # An empty body, as a redirect may send under the header, holds no stream to end.
     if decoder is not None and transferred and not decoder.finished():

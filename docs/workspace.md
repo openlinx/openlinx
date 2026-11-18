@@ -79,9 +79,62 @@ Diagnostics on stderr:
 
 ## Settings: `openlinx.toml`
 
+Custom request headers use the `[crawl]` list `header`, for example
+`header = ["X-Env: staging", "X-Token: abc123"]`. The repeatable `--header` option
+replaces that list for one Crawl. Headers are sent only to Internal URLs and their
+robots.txt; stored metadata hides sensitive values while keeping harmless entries.
+See [Custom request headers](crawling.md#custom-request-headers) for validation and examples.
+
+Basic Auth uses `[crawl] auth = "user:password"` or `--auth "user:password"` for one
+Crawl. It is sent preemptively only to Internal URLs and their robots.txt, using the
+exact input's UTF-8 bytes without trimming or normalization. A nonempty value needs a
+colon and refuses ASCII control characters and unencodable Unicode. Invalid Workspace
+values produce `settings_invalid` (exit 3); invalid flag/service values produce
+`invalid_value` (exit 2), without quoting credentials. Nonempty resolved auth conflicts
+with a custom Authorization header, ignoring case, as `invalid_value` (exit 2) for
+every source. Both validations precede writer/network access.
+
+Auth defaults to disabled. An explicit empty value overrides lower-priority credentials
+and records as `null` in config; supplied argv values stay redacted. Enabled auth records
+as `***` in its entirety. See [Basic authentication](crawling.md#basic-authentication)
+for the wire encoding, empty parts and diagnostic masking.
+Continuing a Crawl with recorded enabled auth requires fresh input through the
+service; it never replays `***` or reloads Workspace settings. Recorded `null` needs
+no fresh auth. See [Continuing a Crawl](crawling.md#continuing-a-crawl).
+
+An HTTP proxy uses `[crawl] proxy = "http://u:pw@proxy.corp:3128"` or `--proxy`
+for one Crawl, covering every request, including robots.txt and External URLs.
+For HTTPS, the proxy opens a CONNECT tunnel. Its credentials authenticate CONNECT.
+Origin TLS verification and the Internal scope of custom headers and Basic Auth
+also apply through the tunnel.
+A schemeless `host:port` becomes `http://host:port`. A nonempty resolved proxy
+overrides all proxy variables, including `NO_PROXY`. An empty flag overrides a
+Workspace proxy and restores environment handling, including `NO_PROXY`; an empty
+Workspace value also uses the environment. Empty resolves to `null` in config.
+Recorded argv and config hide URL passwords as `http://u:***@proxy.corp:3128`;
+an explicit URL without a password stays visible. The Crawl Service takes fresh
+proxy input for a continue through `CrawlOverrides.proxy` and retains other recorded settings.
+Omitting this input for a masked proxy produces `secrets_required` before writer
+or network access. See [Continuing a Crawl](crawling.md#continuing-a-crawl).
+
+For a continue, `CrawlOverrides.header` supplies only fresh values for recorded sensitive
+headers, matched by case-insensitive name and occurrence. Missing values produce
+`secrets_required` (exit 2); harmless entries, unmatched/extra sensitive entries,
+malformed headers and the reserved trimmed value `***` produce `invalid_value`
+(exit 2, `details.key = "crawl.header"`). Empty values are explicit valid headers.
+These checks precede writer/network access. Stored harmless bytes, order, User-Agent
+policy and other settings remain intact; current Workspace values do not replace them.
+
 ### Tables and precedence
 
 Settings are grouped in tables. Each change that adds settings registers its own table, for example `[store]` from `015-add-crawl-store`. A table must forbid unknown keys and give every setting a one-line description and a default that TOML can write: a string, number, boolean or list of those, or none at all for a setting that is unset. A table of named entries, such as `[rules.<id>]`, describes itself with its entry model's one-line docstring. The template and the error hints depend on these rules, and a test checks every registered table. A setting that mirrors a flag lives in a table the Command reads, usually named after it, under the flag's long name with `-` written as `_`.
+
+Explicit input wins over implicit or default values. An omitted flag contributes no
+override; a supplied value equal to the default remains explicit. Within one source,
+the owning contract resolves competing inputs: for request User-Agent, an explicit
+dedicated `user_agent` wins over a generic header. Custom headers remain Internal-only;
+the dedicated value applies globally. The reserved config metadata name `request_policy`
+is not a settings table and cannot be registered by an extension.
 
 Each setting takes the first value it finds:
 1. its flag on the command line

@@ -1,4 +1,4 @@
-"""`linx commands` (010-add-workspace-and-cli-contract, cli-contract)."""
+"""Verify the commands Command describes the registered CLI contracts."""
 
 import json
 import os
@@ -109,6 +109,30 @@ def test_a_secret_option_without_a_setting() -> None:
     assert (option["setting"], option["secret"]) == (None, True)
 
 
+def test_the_custom_header_option_describes_its_setting_and_secret_policy() -> None:
+    option = _options(run_cli("commands").json(), "crawl")["--header"]
+    expected = json.loads((CONTRACT / "crawl-header.json").read_text(encoding="utf-8"))
+
+    assert option == expected
+    assert type(option["secret"]) is bool
+
+
+def test_the_auth_option_describes_its_setting_and_secret_policy() -> None:
+    option = _options(run_cli("commands").json(), "crawl")["--auth"]
+    expected = json.loads((CONTRACT / "crawl-auth.json").read_text(encoding="utf-8"))
+
+    assert option == expected
+    assert type(option["secret"]) is bool
+
+
+def test_the_proxy_option_describes_its_setting_and_secret_policy() -> None:
+    option = _options(run_cli("commands").json(), "crawl")["--proxy"]
+    expected = json.loads((CONTRACT / "crawl-proxy.json").read_text(encoding="utf-8"))
+
+    assert option == expected
+    assert type(option["secret"]) is bool
+
+
 def test_bounds_of_an_option() -> None:
     options = _options(run_cli("commands").json(), "crawl")
 
@@ -171,8 +195,11 @@ def test_the_codes_of_the_fetch_policy_are_listed() -> None:
     assert [
         (d["code"], d["level"], d["exit_code"])
         for d in diagnostics
-        if d["code"] in {"seed_redirected_out_of_scope"}
-    ] == [("seed_redirected_out_of_scope", "warning", None)]
+        if d["code"] in {"seed_redirected_out_of_scope", "secrets_required"}
+    ] == [
+        ("secrets_required", "error", 2),
+        ("seed_redirected_out_of_scope", "warning", None),
+    ]
 
 
 def test_naming_rule_for_input_errors() -> None:

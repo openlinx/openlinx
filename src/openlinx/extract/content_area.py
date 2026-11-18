@@ -1,4 +1,4 @@
-"""The Content Area's selectors: the Page extractor's config (030-add-page-data D13)."""
+"""Carry Content Area selectors as immutable Page extractor configuration."""
 
 import msgspec
 

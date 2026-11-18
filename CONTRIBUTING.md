@@ -137,7 +137,7 @@ Every cell runs these steps in order, all in bash, including on Windows. It stop
 9. `openspec validate --all --strict`, with telemetry off.
 10. `node --test "tests/js/**/*.test.mjs"`.
 
-`uv run scripts/check.py` runs the gate commands of steps 4–6, 9 and 10 locally. It also runs mypy for Linux and macOS (`--platform linux` and `darwin`, each with its own cache), because some standard-library types differ per platform and CI's other cells would catch what a single OS misses. Pytest runs with the `dev` hypothesis profile. Steps 9 and 10 are skipped when `openspec` or `node` is not on `PATH`.
+`uv run scripts/check.py` runs the gate commands of steps 4–6, 9 and 10 locally. It runs mypy for Windows, Linux and macOS (`--platform win32`, `linux` and `darwin`, each with its own cache) on every host, because some standard-library types differ per platform and CI's other cells would catch what a single OS misses. Pytest runs with the `dev` hypothesis profile. Steps 9 and 10 are skipped when `openspec` or `node` is not on `PATH`.
 
 ## Adding a dependency
 
@@ -208,7 +208,15 @@ Each recipe lists the files to touch in order, the seam to test at, and what che
    the option recipe below. [test_commands.py](tests/cli/test_commands.py)::`test_mirrored_options_match_their_fields`
    also refuses a `[crawl]` field with no option. *Review:* a setting in another
    table gets an option when its contract calls for one.
-3. For a secret, set `json_schema_extra={"secret": True}` on the field.
+3. Declare redaction once with `json_schema_extra={"secret": policy}` on the field.
+   Use `True` for the existing password-only URL or whole-value behaviour;
+   `"whole"` to hide the entire value even when it looks like a URL; `"header"`
+   for ordered headers that retain names and harmless values; or `"url"` to keep
+   valid credential-free URLs and hide passwords. `False` leaves values visible.
+   Mapped options inherit this policy; an option without a setting declares it
+   in `OptionMeta(secret=...)`. `linx commands` still reports a boolean.
+   [test_secret_forms.py](tests/cli/test_secret_forms.py) checks metadata inheritance
+   through recording and the public boolean indicator.
    [test_crawl_service.py](tests/crawl/test_crawl_service.py)::`test_a_secret_setting_is_redacted_in_the_recorded_config`
    checks recording. At seam 2, test validation through `plan_crawl` in
    [crawling.py](src/openlinx/services/crawling.py), with `default_tables()` and no app;
@@ -422,8 +430,7 @@ Register hooks at the composition root; the crawl core takes them as inputs.
 
 ## Code style
 
-- Write a comment only for a non-obvious *why*. Don't add a docstring to a function or method whose name and types already say what it does, and don't add a comment that restates the code.
-- Each module starts with a one-line docstring that names the design decision it implements, such as "design D7 of 000-scaffold-project". An empty `__init__.py` that only marks a test package needs none.
+- Follow the [comment and docstring policy](AGENTS.md#rules-only-review-catches-follow-them-without-being-asked): explain the responsibility or decision in the module’s first line and the non-obvious *why* in comments. An empty `__init__.py` that only marks a test package needs no docstring.
 - An `__init__.py` holds no code: callers import its submodules. A package's docstring is a summary line and the list of its interface, which lives nowhere else.
 - **The paradigm** is [ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md): logic in pure functions, data in frozen dataclasses (frozen `msgspec.Struct`s for page preparation's per-response records, which cross the parse pool, and for records that define a JSON document), dependencies as parameters typed by a Protocol, state only where it is inherent, no class hierarchies of our own, and pydantic only at the boundary.
 - **A memo** of a pure function, `functools.lru_cache(maxsize=N)` on a function whose result depends only on its arguments, is allowed and is not module-level state (ADR-0006). It always has a bound, never `maxsize=None` or `functools.cache`, and a one-line comment at the decorator says why it pays.

@@ -1,7 +1,8 @@
-"""Page rows (030-add-page-data, page-data; seam 3+6)."""
+"""Verify stored Page rows through a Crawl."""
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -57,6 +58,96 @@ def test_error_page_keeps_response_data(
     ) == [(404, None)]
 
 
+def test_http_redirect_with_an_html_body(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/old">Old</a>'),
+                "/old": Status(
+                    301,
+                    body='<title>Moved</title><meta http-equiv="refresh" content="0; url=/meta">',
+                    headers=[("Location", "/new"), ("Refresh", "0; url=/refresh")],
+                ),
+                "/new": Page(body="<title>New</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.status_code, pages.redirect_type, pages.redirect_url, target.url, "
+        "source.parsed, pages.title_1 FROM pages "
+        "JOIN urls AS source ON source.id = pages.url_id "
+        "JOIN urls AS target ON target.id = source.redirect_url_id WHERE source.url = ?",
+        [server.url("/old")],
+    ) == [(301, "http_redirect", server.url("/new"), server.url("/new"), 0, None)]
+    assert [
+        request.path for request in server.requests if request.path in ("/meta", "/refresh")
+    ] == []
+
+
+@pytest.mark.parametrize(
+    ("status", "headers"),
+    [(301, []), (301, [("Location", "mailto:help@example.test")]), (300, [("Location", "/new")])],
+    ids=["missing-location", "unsupported-location", "non-followable-status"],
+)
+def test_http_redirect_without_a_target(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    status: int,
+    headers: list[tuple[str, str]],
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/old">Old</a>'),
+                "/old": Status(status, body="<title>Moved</title>", headers=headers),
+                "/new": Page(body="<title>New</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.redirect_type, pages.redirect_url, urls.redirect_url_id, "
+        "urls.parsed, pages.title_1 FROM pages JOIN urls ON urls.id = pages.url_id "
+        "WHERE urls.url = ?",
+        [server.url("/old")],
+    ) == [("http_redirect", None, None, 0, None)]
+    assert [request.path for request in server.requests if request.path == "/new"] == []
+
+
+def test_an_http_self_redirect_keeps_its_target(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(body='<a href="/account">Account</a>'),
+                "/account": Status(
+                    302, body="<title>Account</title>", headers=[("Location", "/account")]
+                ),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.redirect_type, pages.redirect_url, urls.redirect_url_id = urls.id, "
+        "urls.in_redirect_loop FROM pages JOIN urls ON urls.id = pages.url_id WHERE urls.url = ?",
+        [server.url("/account")],
+    ) == [("http_redirect", server.url("/account"), 1, 1)]
+    assert [request.path for request in server.requests].count("/account") == 1
+
+
 def test_crawl_timestamp_repeats_fetched_at(temp_workspace: TempWorkspace) -> None:
     clock = FakeClock(start=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC))
     fetcher = FakeFetcher(clock, {"/about": FakePage("<p>About</p>")})
@@ -96,15 +187,54 @@ def test_repeated_values_equal_the_urls_row(
 
     assert query(
         crawl_file,
-        "SELECT content_type, status_code, response_time_ms, crawl_depth, crawl_timestamp "
+        "SELECT content_type, status_code, response_time_ms, size_bytes, transferred_bytes, "
+        "content_encoding, crawl_depth, crawl_timestamp "
         "FROM pages WHERE address = ?",
         [about],
     ) == query(
         crawl_file,
-        "SELECT content_type, status_code, response_time_ms, crawl_depth, fetched_at "
+        "SELECT content_type, status_code, response_time_ms, size_bytes, transferred_bytes, "
+        "content_encoding, crawl_depth, fetched_at "
         "FROM urls WHERE url = ?",
         [about],
     )
+
+
+def test_compressed_page_sizes(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            root=Path(__file__).parents[1] / "fixture_site" / "sites" / "exact",
+            routes={
+                "/compressed": Page(
+                    file="page.html.gz",
+                    content_type="text/html",
+                    headers=[("Content-Encoding", "gzip")],
+                )
+            },
+        )
+    )
+    address = server.url("/compressed")
+
+    crawl_file = crawl_result(address).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT size_bytes, transferred_bytes, content_encoding FROM pages WHERE address = ?",
+        [address],
+    ) == [(10000, 46, "gzip")]
+
+
+def test_uncompressed_page_sizes(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/plain": Page(body="a" * 1234)}))
+    address = server.url("/plain")
+
+    crawl_file = crawl_result(address).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT size_bytes, transferred_bytes, content_encoding FROM pages WHERE address = ?",
+        [address],
+    ) == [(1234, 1234, None)]
 
 
 @pytest.mark.slow
@@ -133,6 +263,35 @@ def test_a_page_lowered_in_flight_has_the_depth_of_its_url(
         "WHERE pages.address = ?",
         [server.url("/x")],
     ) == [(2, 2)]
+
+
+def test_a_huge_max_age_keeps_every_cookie_row(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/cookie": Page(
+                    body="<p>Cookie</p>",
+                    headers=[
+                        ("Set-Cookie", "before=secret-before; Max-Age=3600"),
+                        ("Set-Cookie", "huge=secret-huge; Max-Age=" + "9" * 5000),
+                        ("Set-Cookie", "after=secret-after; Max-Age=1"),
+                    ],
+                )
+            }
+        )
+    )
+    address = server.url("/cookie")
+
+    crawl_file = crawl_result(address).crawl_file
+
+    assert query(
+        crawl_file,
+        "SELECT pages.set_cookie_count, cookies.ordinal, cookies.name, cookies.max_age "
+        "FROM pages JOIN cookies USING (url_id) WHERE pages.address = ? ORDER BY cookies.ordinal",
+        [address],
+    ) == [(3, 1, "before", 3600), (3, 2, "huge", 9223372036854775807), (3, 3, "after", 1)]
 
 
 def test_cookie_values_are_not_stored_in_page_data(

@@ -1,4 +1,4 @@
-"""Structured-data counts and types (030-add-page-data, page-data; seam 4)."""
+"""Verify structured-data counts and types through pure extraction."""
 
 from tests.support.page_data import page_row
 

@@ -1,5 +1,4 @@
-"""The network pause: Internal requests in a row without an HTTP response (020-add-crawl-core
-D16)."""
+"""Pause on consecutive Internal request failures and distinguish outages from dead sections."""
 
 import asyncio
 from collections import Counter
@@ -42,7 +41,7 @@ _PROBE_INTERVAL = 60
 
 def probe_times(network_wait: int) -> tuple[int, ...]:
     """When the probes of a pause start, each before the wait ends: one at the wait would hold
-    the Crawl past it (design D16)."""
+    the Crawl past it (020-add-crawl-core D16)."""
     times = [t for t in _FIRST_PROBES if t < network_wait]
     later = _FIRST_PROBES[-1] + _PROBE_INTERVAL
     times += range(later, network_wait, _PROBE_INTERVAL)
@@ -70,8 +69,7 @@ class _Paused:
 
 class Redispatch:
     """The URLs to dispatch ahead of the frontier read, since its cursor has passed them: those
-    an outage re-queues, each at most once a run, and those a pause left queued (design D3,
-    D16)."""
+    an outage re-queues, each at most once a run, and those a pause left queued."""
 
     def __init__(self) -> None:
         self._urls: dict[int, QueuedUrl] = {}
@@ -109,7 +107,7 @@ class Redispatch:
     def put_back(self, urls: Sequence[QueuedUrl]) -> None:
         """URLs this list took that are still queued: not started, or ended without a record,
         such as one refused at the URL limit. Only this list may dispatch them, so they wait
-        here for its next take (design D16)."""
+        here for its next take."""
         for queued in urls:
             if queued.id in self._owned:
                 self._urls[queued.id] = queued
@@ -119,7 +117,7 @@ class NetworkPause:
     """Kept from each URL's outcome, which the engine hands it with the URL's dispatch decision,
     since only the engine knows which URLs are Internal, and every code that counts, a
     robots.txt one included; it decides whether a URL is recorded or re-queued, and the
-    Requester holds its gate and makes its probes (design D7, D16)."""
+    Requester holds its gate and makes its probes."""
 
     def __init__(
         self,
@@ -127,6 +125,7 @@ class NetworkPause:
         concurrency: int,
         network_wait: int,
         seed: NormalizedUrl,
+        is_internal: Callable[[NormalizedUrl], bool],
         crawl_id: str,
         seed_answered: bool,
         stop: StopSignal,
@@ -142,6 +141,7 @@ class NetworkPause:
         self._limit = pause_after(concurrency)
         self._network_wait = network_wait
         self._seed = seed
+        self._is_internal = is_internal
         self._crawl_id = crawl_id
         self._stop = stop
         self._requester = requester
@@ -154,12 +154,12 @@ class NetworkPause:
         self._in_a_row: list[CountedUrl] = []
         self._paused: _Paused | None = None
         # The pause's own count, which a response while paused never clears, since only the
-        # next count starts again (design D16).
+        # next count starts again.
         self._count: list[CountedUrl] = []
         # The Seed is requested first, so the first Internal answer is its origin's; a
         # continue that does not request it again takes the earlier runs' answer.
         self._seed_answered = seed_answered
-        # The origins that a dead section showed dead, which count no more (design D16).
+        # The origins that a dead section showed dead, which count no more.
         self._dead_origins: set[str] = set()
         # The URLs of the count whose request was recorded as an error: an outage re-queues only
         # them, never one still in its retries, fetched, or back in the queue unrecorded.
@@ -207,9 +207,9 @@ class NetworkPause:
         self, queued: QueuedUrl, attempted: Attempted, *, internal: bool
     ) -> bool:
         """Whether a URL's request is recorded. One that ended without a response while paused
-        is not, nor one whose due retry the closed gate ended, whatever its last answer, so its
-        URL stays queued, is dispatched again, and counts toward the URL limit only then (design
-        D16). A URL of the count that failed is recorded, so the pause's end decides on it: an
+        is not, nor one whose due retry the closed gate ended, whatever its last answer, so
+        its URL stays queued, is dispatched again, and counts toward the URL limit only then.
+        A URL of the count that failed is recorded, so the pause's end decides on it: an
         outage re-queues it, once a run, and a dead section keeps its error
         (022-add-fetch-policy D4)."""
         response = attempted.outcome
@@ -236,7 +236,7 @@ class NetworkPause:
         self, queued: QueuedUrl, origin_error: FetchError | None, *, internal: bool
     ) -> None:
         """What the robots.txt verdict of an Internal URL's origin tells the pause: one without
-        a response counts, for the URL it records without a request of its own (design D6)."""
+        a response counts, for the URL it records without a request of its own."""
         if not internal:
             return
         if origin_error is None:
@@ -253,7 +253,7 @@ class NetworkPause:
             return
         self._in_a_row.append(counted)
         # Until the Seed's origin answers, one failure pauses: a network may be coming up or
-        # switching just as the Crawl starts (design D16).
+        # switching just as the Crawl starts.
         if not self._seed_answered:
             self._pause("seed_unreachable", fetch_error)
         elif len(self._in_a_row) >= self._limit:
@@ -294,7 +294,7 @@ class NetworkPause:
             end = await self._wait_for_answer(paused.began)
             if end == "dead_section" and paused.reason == "seed_unreachable":
                 # The Seed is no section of the site: its first answer is the network's, so its
-                # robots.txt and the Seed are requested again (design D16).
+                # robots.txt and the Seed are requested again.
                 end = "outage"
             if end == "dead_section":
                 self._count_no_more(self._count)
@@ -331,7 +331,7 @@ class NetworkPause:
         """The origins with at least 2 URLs in the count: one transient failure of a working
         origin inside a dead one's streak shows nothing. The probes request the Seed, so its
         answer never shows the Seed's origin dead, and an outage of a site on one host must
-        still pause (design D16)."""
+        still pause (020-add-crawl-core D16)."""
         failures = Counter(url_origin(counted.queued.url) for counted in count)
         dead = {origin for origin, n in failures.items() if n >= 2}
         self._dead_origins.update(dead - {url_origin(self._seed)})
@@ -365,8 +365,8 @@ class NetworkPause:
     async def _answer_before(
         self, probes: list[asyncio.Task[ProbeResult | None]], until: float
     ) -> bool:
-        """Whether a probe answered by `until`; a stop ends the wait with no answer (design
-        D16), but for the URL limit's, which refuses new URLs only (022-add-fetch-policy D4)."""
+        """Whether a probe answered by `until`; a stop ends the wait with no answer, except the
+        URL limit's stop, which refuses new URLs only (022-add-fetch-policy D4)."""
         while not any(_answered(probe) for probe in probes):
             delay = until - self._clock.monotonic()
             if delay <= 0 or self._stop.under_way.is_set:
@@ -376,7 +376,9 @@ class NetworkPause:
         return True
 
     async def _probe_once(self) -> ProbeResult | None:
-        probe = await self._requester.request_probe(self._seed)
+        probe = await self._requester.request_probe(
+            self._seed, is_internal=self._is_internal(self._seed)
+        )
         return None if isinstance(probe.outcome, FetchFailure) else probe
 
 

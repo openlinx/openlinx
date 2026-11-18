@@ -1,4 +1,4 @@
-"""Crawling the fixture site in tests (020-add-crawl-core, seam 3+6)."""
+"""Run Crawls against the fixture site and read their stored results."""
 
 from collections.abc import Callable
 from contextlib import nullcontext
@@ -50,6 +50,7 @@ def crawl_result(
     reporter: Reporter | None = None,
     clock: Clock | None = None,
     fetcher: Fetcher | None = None,
+    fetchers: FetcherFactory | None = None,
     stop: StopSignal | None = None,
     tables: SettingsTables | None = None,
     **crawl: Any,
@@ -73,7 +74,7 @@ def crawl_result(
         workspace=None,
         command_argv=["linx", "crawl", seed],
         flags={"crawl": crawl},
-        secret_flags=frozenset(),
+        secret_flags={},
     )
     plan = plan_crawl(request, tables)
     return start_crawl(
@@ -82,7 +83,7 @@ def crawl_result(
         reporter or Collected(),
         hooks or default_hooks(),
         pages=pages,
-        fetchers=_fetchers(resolver, trust_anchors, fetcher),
+        fetchers=fetchers or _fetchers(resolver, trust_anchors, fetcher),
         stop=stop,
     )
 
@@ -97,16 +98,17 @@ def continued(
     reporter: Reporter | None = None,
     clock: Clock | None = None,
     fetcher: Fetcher | None = None,
+    fetchers: FetcherFactory | None = None,
     stop: StopSignal | None = None,
 ) -> CrawlResult:
-    """Continues the Crawl that `crawl` ended, through the Crawl Service, as 060's resume does."""
+    """Continue the Crawl ended by `crawl` through the Crawl Service."""
     return continue_crawl(
         CrawlFile(crawl.crawl_id, crawl.crawl_file),
         overrides or CrawlOverrides(),
         clock or SystemClock(),
         reporter or Collected(),
         hooks or default_hooks(),
-        fetchers=_fetchers(resolver, trust_anchors, fetcher),
+        fetchers=fetchers or _fetchers(resolver, trust_anchors, fetcher),
         stop=stop,
     )
 

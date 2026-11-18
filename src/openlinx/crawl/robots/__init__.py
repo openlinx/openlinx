@@ -1,4 +1,4 @@
-"""robots.txt, read once per origin, for the engine (020-add-crawl-core D6).
+"""Read robots.txt once per origin for the Crawl engine.
 
 reader: OriginRobots. loader: RobotsLoader.
 """

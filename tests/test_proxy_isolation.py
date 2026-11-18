@@ -1,4 +1,4 @@
-"""Tests never inherit a proxy from the environment (design D13 of 000-scaffold-project)."""
+"""Verify tests never inherit proxy environment variables."""
 
 import os
 

@@ -1,4 +1,4 @@
-"""The scenarios' settings tables (design D8 of 010-add-workspace-and-cli-contract)."""
+"""Declare settings tables used by CLI and Workspace scenarios."""
 
 from typing import Literal
 

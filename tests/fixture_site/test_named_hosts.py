@@ -1,4 +1,4 @@
-"""A site per host name behind the DNS resolver hook (022-add-fetch-policy D9)."""
+"""Verify the resolver hook serves a distinct site for each host name."""
 
 import aiohttp
 

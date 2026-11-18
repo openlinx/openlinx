@@ -1,5 +1,4 @@
-"""UTF-8 output and the same Page data on every OS (010-add-workspace-and-cli-contract,
-cli-contract; 020-add-crawl-core, crawling; 030-add-page-data, page-data)."""
+"""Verify UTF-8 output and consistent Page data across operating systems."""
 
 import json
 import os

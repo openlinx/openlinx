@@ -1,4 +1,4 @@
-"""Response headers (022-add-fetch-policy D7, fetching spec: The response_headers table)."""
+"""Verify response headers recorded by the Fetcher and Crawl."""
 
 import json
 

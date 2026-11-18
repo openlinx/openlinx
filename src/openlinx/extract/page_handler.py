@@ -1,4 +1,4 @@
-"""The Page handler: the rows of a URL that is a Page (030-add-page-data D1, D2)."""
+"""Map a URL result to Page and cookie rows while preserving NULLs for unmeasured data."""
 
 from collections.abc import Iterable
 from datetime import datetime
@@ -23,7 +23,7 @@ from openlinx.store.records import DeclaredIn, LinkType
 # Both a Link type and a redirect type. An HTTP Refresh comes before a meta refresh.
 type _Refresh = Literal["http_refresh", "meta_refresh"]
 _REFRESH_TYPES: tuple[_Refresh, ...] = ("http_refresh", "meta_refresh")
-# The rel tokens of a pagination Link, as 020 lowercases them.
+# Link discovery lowercases rel tokens before the Page handler compares them.
 _NEXT = frozenset({"next"})
 _PREVIOUS = frozenset({"prev", "previous"})
 
@@ -59,6 +59,9 @@ def page_rows(result: UrlResult) -> Iterable[PageRow]:
             **redirect,
             set_cookie_count=len(header_values(response.headers, "Set-Cookie")),
             crawl_timestamp=response.fetched_at,
+            size_bytes=response.size_bytes,
+            transferred_bytes=response.transferred_bytes,
+            content_encoding=response.content_encoding,
             **({} if data is None else msgspec.structs.asdict(data)),
             **robots,
             **canonical,
@@ -84,7 +87,7 @@ class _RedirectColumns(TypedDict):
     redirect_type: RedirectType | None
 
 
-# Each of the next three families is NULL for a Page that was not analysed (design D2), so
+# Each of the next three families is NULL for a Page that was not analysed, so
 # its keys are absent then.
 class _RobotsColumns(TypedDict, total=False):
     meta_robots: str | None
@@ -121,7 +124,10 @@ class _OutlinkColumns(TypedDict, total=False):
 
 
 def _redirect(result: UrlResult, data: PageData | None) -> _RedirectColumns:
-    # 020 reads the Refresh header of a 2xx response and the meta refresh of a prepared one;
+    response = result.response
+    if response is not None and 300 <= response.status_code < 400:
+        return {"redirect_url": response.redirect_target, "redirect_type": "http_redirect"}
+    # Discovery reads the Refresh header of a 2xx response and a prepared Page's meta refresh;
     # a refresh of the Page itself, as a live page reloads, is no redirect.
     for link_type in _REFRESH_TYPES:
         if link_type == "meta_refresh" and not _first_meta_refresh_names_a_url(data):
@@ -147,7 +153,7 @@ def _non_indexable_reason(
     redirect: _RedirectColumns,
     canonical: _CanonicalColumns,
 ) -> IndexabilityStatus | None:
-    # The order a search engine meets them in (design D3). robots.txt can disallow a Page
+    # The order a search engine meets them in (030-add-page-data D3). robots.txt can disallow a Page
     # that was fetched anyway, under --ignore-robots.
     if result.blocked_by_robots_txt:
         return "blocked_by_robots_txt"
@@ -187,7 +193,7 @@ def _canonical_columns(result: UrlResult) -> _CanonicalColumns:
     if not result.parsed:
         return {}
     # A canonical <link> that the parser moved out of <head>, such as after an <img>, is no
-    # declaration (design D4).
+    # declaration.
     html = _links(result.links, "canonical", "head")
     header = _links(result.links, "canonical", "http_header")
     targets = {link.target for link in (*html, *header)}
@@ -259,7 +265,7 @@ def _last_modified(headers: tuple[tuple[str, str], ...]) -> datetime | None:
 
 
 def _page_response(result: UrlResult) -> tuple[UrlResponse, str] | None:
-    # The status code does not matter: a 404 or a 301 with an HTML body is a Page (design D2).
+    # The status code does not matter: a 404 or a 301 with an HTML body is a Page.
     response = result.response
     if response is None or not (result.is_internal and result.in_scope):
         return None

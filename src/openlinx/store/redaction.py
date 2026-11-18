@@ -1,11 +1,16 @@
-"""Redacting secrets before a Crawl records them (design D7 of 015-add-crawl-store)."""
+"""Redact secret settings and credentials before recording Crawl data."""
 
+from base64 import b64encode
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from yarl import URL
+
+from openlinx.proxy_urls import proxy_url, split_absolute_url
 from openlinx.store.records import SecretNames
+from openlinx.workspace.tables import SecretPolicy
 
 REDACTED = "***"
 
@@ -77,19 +82,47 @@ def _redact_spans(text: str, spans: list[tuple[int, int]]) -> str:
     return "".join(pieces)
 
 
-def secret_values(config: Mapping[str, Any], settings: frozenset[str]) -> SecretValues:
+def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy]) -> SecretValues:
     """From the config that the recorded one redacts, so both hide the same secrets."""
     found: set[str] = set()
-    for setting in settings:
+    for setting, policy in settings.items():
         table, _, key = setting.partition(".")
         value = config.get(table, {}).get(key)
-        if isinstance(value, str) and value:
-            found.add(value)
-            # A URL's password may be quoted without the rest of the URL.
-            password = _password(value)
+        if policy == "header":
+            entries = value if isinstance(value, list) else [value]
+            for entry in entries:
+                if not isinstance(entry, str):
+                    continue
+                name, colon, content = entry.partition(":")
+                if colon and not is_sensitive_header(name):
+                    continue
+                secret = content.strip(" \t") if colon else entry
+                if secret:
+                    found.add(secret)
+        elif isinstance(value, str) and value:
+            url = _secret_url(value, policy)
+            found.update((value, url))
+            password = value.partition(":")[2] if setting == "crawl.auth" else _password(url)
             if password:
                 found.add(password)
+                if (policy is True or policy in ("url", "proxy")) and (
+                    decoded := _decoded_url_password(url)
+                ):
+                    found.add(decoded)
+            if setting == "crawl.auth":
+                # Match the exact UTF-8 wire bytes without re-raising invalid-input errors.
+                try:
+                    encoded = b64encode(value.encode("utf-8")).decode("ascii")
+                except UnicodeEncodeError:
+                    continue
+                found.update((encoded, f"Basic {encoded}"))
     return SecretValues(tuple(sorted(found, key=len, reverse=True)))
+
+
+def _secret_url(value: str, policy: SecretPolicy) -> str:
+    if policy == "proxy":
+        return proxy_url(value) or value
+    return value
 
 
 def _password(value: str) -> str | None:
@@ -99,46 +132,86 @@ def _password(value: str) -> str | None:
         return None
 
 
+def _decoded_url_password(value: str) -> str | None:
+    # The HTTP client decodes URL credentials. Errors may quote the decoded password alone.
+    try:
+        return URL(value).password
+    except ValueError:
+        # Keep the spelling collected from the input even if the client rejects the URL.
+        return None
+
+
 def redact(argv: Sequence[str], config: Mapping[str, Any], secrets: SecretNames) -> Redacted:
     return Redacted(_redact_argv(argv, secrets.flags), _redact_config(config, secrets.settings))
 
 
-def _redact_argv(argv: Sequence[str], flags: frozenset[str]) -> list[str]:
+def _redact_argv(argv: Sequence[str], flags: Mapping[str, SecretPolicy]) -> list[str]:
     redacted = list(argv)
+    value_policy: SecretPolicy | None = None
     for index, argument in enumerate(argv):
+        # A split value may look like another option; consume it exactly once.
+        if value_policy is not None:
+            redacted[index] = _redact_value(argument, value_policy)
+            value_policy = None
+            continue
         flag, joined, value = argument.partition("=")
         if joined and flag in flags:
-            redacted[index] = f"{flag}={_redact_value(value)}"
-        elif index > 0 and argv[index - 1] in flags:
-            redacted[index] = _redact_value(argument)
+            redacted[index] = f"{flag}={_redact_value(value, flags[flag])}"
+        elif argument in flags:
+            value_policy = flags[argument]
     return redacted
 
 
-def _redact_config(config: Mapping[str, Any], settings: frozenset[str]) -> dict[str, Any]:
+def _redact_config(
+    config: Mapping[str, Any], settings: Mapping[str, SecretPolicy]
+) -> dict[str, Any]:
     return {
         table: {
-            key: _redact_setting(value) if f"{table}.{key}" in settings else value
+            key: _redact_setting(value, settings.get(f"{table}.{key}", False))
             for key, value in values.items()
         }
         for table, values in config.items()
     }
 
 
-def _redact_setting(value: Any) -> Any:
+def _redact_setting(value: Any, policy: SecretPolicy) -> Any:
     # An unset secret stays None: there is nothing to hide, and *** would claim a value.
-    if value is None:
-        return None
-    return _redact_value(value) if isinstance(value, str) else REDACTED
+    if value is None or policy is False:
+        return value
+    if policy == "header" and isinstance(value, list):
+        return [_redact_setting(item, policy) for item in value]
+    return _redact_value(value, policy) if isinstance(value, str) else REDACTED
 
 
-def _redact_value(value: str) -> str:
+def is_sensitive_header(name: str) -> bool:
+    lowered = name.casefold()
+    return lowered == "cookie" or any(
+        part in lowered for part in ("auth", "token", "secret", "key", "password")
+    )
+
+
+def _redact_value(value: str, policy: SecretPolicy) -> str:
+    if policy is False:
+        return value
+    if policy == "whole":
+        return REDACTED
+    if policy == "header":
+        name, colon, _ = value.partition(":")
+        if not colon:
+            return REDACTED
+        return f"{name}: {REDACTED}" if is_sensitive_header(name) else value
+    keep_url = policy in ("url", "proxy")
     try:
-        parts = urlsplit(value)
-        password = parts.password
+        parts = split_absolute_url(_secret_url(value, policy)) if keep_url else urlsplit(value)
     except ValueError:
-        # A malformed URL, such as an unclosed [ in its host: nothing of it is kept.
         return REDACTED
-    if password is None:
+    if parts is None:
         return REDACTED
+    if parts.password is None:
+        return value if keep_url else REDACTED
     host = parts.netloc.rpartition("@")[2]
-    return urlunsplit(parts._replace(netloc=f"{parts.username}:{REDACTED}@{host}"))
+    netloc = f"{parts.username}:{REDACTED}@{host}"
+    if policy == "proxy":
+        # The authority with userinfo can only occur after the scheme, if one was supplied.
+        return value.replace(parts.netloc, netloc, 1)
+    return urlunsplit(parts._replace(netloc=netloc))

@@ -1,4 +1,4 @@
-"""The declared public schema (015-add-crawl-store D6; 018-add-schema-conventions D2, D3)."""
+"""Declare the complete public crawl-file schema and its constraints."""
 
 from collections.abc import Iterable
 from typing import Any, Literal, get_args, get_origin
@@ -56,7 +56,7 @@ def literal_values(alias: Any) -> list[str]:
     return [item for member in get_args(value) for item in literal_values(member)]
 
 
-# Stays 1 until the first schema change after v0.1, which brings migrations (design D5).
+# Version 1 lasts until post-v0.1 schema changes introduce migrations (015-add-crawl-store D5).
 SCHEMA_VERSION = 1
 CRAWL_MODES = literal_values(CrawlMode)
 CRAWL_STATES = literal_values(CrawlState)
@@ -178,7 +178,8 @@ crawl = public_table(
         "config",
         Json,
         nullable=False,
-        comment="The resolved settings as an object of tables and keys, secrets redacted.",
+        comment="The resolved settings and service-owned request_policy metadata, "
+        "secrets redacted.",
     ),
     Column(
         "tool_version",
@@ -327,7 +328,7 @@ urls = public_table(
         "size_bytes",
         Integer,
         comment="The body size after content decoding; NULL without a response, for a body "
-        "larger than 20 MiB, or for a coding that was not offered.",
+        "larger than 20 MiB, or for an unsupported coding.",
     ),
     Column(
         "transferred_bytes",
@@ -477,7 +478,8 @@ origins = public_table(
     Column(
         "http_version",
         Text,
-        comment="Filled from v0.2. The HTTP version that the origin's requests use.",
+        comment="The origin's offered HTTP capability, selected by a dedicated ALPN probe for "
+        "HTTPS. Plain HTTP origins use http_1_1. Crawler requests use HTTP/1.1.",
         info={"values": literal_values(HttpVersion)},
     ),
     comment="One row for each origin of a URL that the Crawl recorded.",
@@ -604,12 +606,13 @@ pages = public_table(
         Text,
         comment="The URL the Page redirects to: the target of its 3xx response, of its HTTP "
         "Refresh header, or of its first meta refresh; NULL when it does not redirect, or "
-        "when the target is its own URL.",
+        "when the HTTP redirect has no target. A Refresh to its own URL is no redirect.",
     ),
     Column(
         "redirect_type",
         Text,
-        comment="How the Page redirects to redirect_url; NULL when it does not redirect. "
+        comment="How the Page redirects; http_redirect for every 3xx response, even when "
+        "redirect_url is NULL; NULL when it does not redirect. "
         "javascript_redirect is filled from v1.1.",
         info={"values": literal_values(RedirectType)},
     ),
@@ -629,8 +632,8 @@ pages = public_table(
     Column(
         "http_version",
         Text,
-        comment="Filled from v0.2. The HTTP version that the requests to the Page's origin "
-        "use, equal to origins.http_version.",
+        comment="Filled from v0.2. The offered HTTP capability of the Page's origin, "
+        "equal to origins.http_version.",
         info={"values": literal_values(HttpVersion)},
     ),
     Column(
@@ -913,6 +916,24 @@ pages = public_table(
         Text,
         comment="The target of the first link element whose rel is alternate with a media "
         "attribute and no hreflang; NULL without one, or when the Page is not analysed.",
+    ),
+    Column(
+        "size_bytes",
+        Integer,
+        comment="The Page's body size after content decoding, equal to urls.size_bytes; NULL "
+        "for a body larger than 20 MiB, or for an unsupported coding.",
+    ),
+    Column(
+        "transferred_bytes",
+        Integer,
+        comment="The Page's body size as transferred, before decoding, equal to "
+        "urls.transferred_bytes.",
+    ),
+    Column(
+        "content_encoding",
+        Text,
+        comment="The Content-Encoding header of the Page's response as received, equal to "
+        "urls.content_encoding; NULL without the header.",
     ),
     Column(
         "word_count",
@@ -1305,7 +1326,7 @@ links = public_table(
     "HTML, or in the Link and Refresh headers of an in-Scope 2xx response.",
     change=30,
 )
-# The layout and these indexes are provisional until the links benchmark chooses (design D4).
+# This layout and its indexes await the Link layout benchmark (030-add-page-data D4).
 Index(
     "links_target",
     links.c.target_url_id,

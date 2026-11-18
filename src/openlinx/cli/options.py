@@ -1,4 +1,4 @@
-"""The global flags, defined once (design D7 of 010-add-workspace-and-cli-contract)."""
+"""Define global CLI options once for all Commands."""
 
 import inspect
 import typing
@@ -15,7 +15,7 @@ from openlinx.cli.click_compat import Command, Context, ParameterSource
 from openlinx.naming import DATA_DIR_NAME, GLOBAL_DATA_DIR, SETTINGS_FILE_NAME
 from openlinx.output.writer import Format
 from openlinx.store.records import LATEST
-from openlinx.workspace.tables import SettingsTables
+from openlinx.workspace.tables import SecretPolicy, SettingsTables
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class OptionMeta:
 
     is_global: bool = False
     setting: str | None = None
-    secret: bool = False
+    secret: SecretPolicy = False
 
 
 GLOBAL = OptionMeta(is_global=True)
@@ -87,17 +87,21 @@ def options_with_meta(command: Command) -> Iterator[tuple[TyperOption, OptionMet
 
 def is_secret_option(extra: OptionMeta, tables: SettingsTables) -> bool:
     # An option mapped to a setting inherits it; check_command refuses an option with both.
-    return extra.secret if extra.setting is None else tables.is_secret(extra.setting)
+    return bool(_secret_policy(extra, tables))
 
 
-def secret_flags(command: Command, tables: SettingsTables) -> frozenset[str]:
-    """The Command's option names that take a secret; the service adds every secret setting."""
-    return frozenset(
-        name
+def _secret_policy(extra: OptionMeta, tables: SettingsTables) -> SecretPolicy:
+    return extra.secret if extra.setting is None else tables.secret_policy(extra.setting)
+
+
+def secret_flags(command: Command, tables: SettingsTables) -> dict[str, SecretPolicy]:
+    """Carry the same declarations used by the public boolean indicator to the service."""
+    return {
+        name: policy
         for param, extra in options_with_meta(command)
-        if is_secret_option(extra, tables)
+        if (policy := _secret_policy(extra, tables))
         for name in param.opts
-    )
+    }
 
 
 def setting_flags(ctx: Context) -> dict[str, dict[str, Any]]:

@@ -1,5 +1,4 @@
-"""Files whose exact bytes matter: mixed line endings, windows-1251 and precompressed bodies
-(design D9 of 000)."""
+"""Serve exact response bytes for line-ending, charset and compression tests."""
 
 from pathlib import Path
 
@@ -22,7 +21,7 @@ SITE = Site(
             content_type="text/javascript",
             headers=[("Content-Encoding", "gzip, br")],
         ),
-        # A server that compresses with zstd, which no request offers.
+        # A server that sends a precompressed HTML page.
         "/trail-shoes.html": Page(
             file="trail-shoes.html.zst",
             content_type="text/html",

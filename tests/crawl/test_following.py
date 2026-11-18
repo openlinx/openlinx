@@ -1,4 +1,4 @@
-"""Which Links the Crawl follows (020-add-crawl-core D5, crawling; seams 3, 4 and 6)."""
+"""Verify which Links the Crawl follows through policy and stored results."""
 
 from pathlib import Path
 from typing import get_args

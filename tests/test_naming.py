@@ -1,4 +1,4 @@
-"""Guard: one source for the product name (design D11 of 010-add-workspace-and-cli-contract)."""
+"""Guard the naming module as the single source for user-visible product names."""
 
 from pathlib import Path
 

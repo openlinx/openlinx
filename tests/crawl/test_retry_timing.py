@@ -1,4 +1,4 @@
-"""Retries in time: the backoff between attempts (022-add-fetch-policy, fetching; fake timing)."""
+"""Verify retry backoff between attempts with virtual time."""
 
 from dataclasses import replace
 from functools import partial

@@ -1,4 +1,8 @@
-"""Compressed responses (022-add-fetch-policy, fetching; seam 3)."""
+"""Verify compressed responses over HTTP."""
+
+from pathlib import Path
+
+import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site
@@ -26,9 +30,9 @@ def test_requests_accept_compressed_bodies(
     assert {
         request.path: request.headers.get("Accept-Encoding") for request in server.requests
     } == {
-        "/robots.txt": "gzip, deflate, br",
-        "/": "gzip, deflate, br",
-        "/shoes": "gzip, deflate, br",
+        "/robots.txt": "gzip, deflate, br, zstd",
+        "/": "gzip, deflate, br, zstd",
+        "/shoes": "gzip, deflate, br, zstd",
     }
 
 
@@ -52,6 +56,81 @@ def test_a_compressed_resource_records_both_sizes(
         "SELECT size_bytes, transferred_bytes, content_encoding FROM urls WHERE url = ?",
         [server.url("/app.js")],
     ) == [(10000, 2500, "gzip")]
+
+
+@pytest.mark.parametrize(
+    ("override", "wire"),
+    [
+        ([], "gzip, deflate, br, zstd"),
+        (["--header", "Accept-Encoding: identity"], "identity"),
+        (["--header", "Accept-Encoding: identity, zstd;q=0"], "identity, zstd;q=0"),
+    ],
+    ids=["default", "unadvertised", "q-zero"],
+)
+def test_a_zstd_resource_records_both_sizes(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    tmp_path: Path,
+    override: list[str],
+    wire: str,
+) -> None:
+    (tmp_path / "app.js.zst").write_bytes(bytes.fromhex("28b52ffd200529000068656c6c6f"))
+    server = fixture_site(
+        Site(
+            root=tmp_path,
+            routes={
+                "/": Page(body='<script src="/app.js"></script>'),
+                "/app.js": Page(
+                    file="app.js.zst",
+                    content_type="text/javascript",
+                    headers=[("Content-Encoding", "zstd")],
+                ),
+            },
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), *override)
+
+    assert query(
+        crawl_file,
+        "SELECT fetch_state, size_bytes, transferred_bytes, content_encoding, body_truncated"
+        " FROM urls WHERE url = ?",
+        [server.url("/app.js")],
+    ) == [("fetched", 5, 14, "zstd", 0)]
+    assert {
+        request.path: request.headers.getall("Accept-Encoding") for request in server.requests
+    } == {
+        "/robots.txt": [wire],
+        "/": [wire],
+        "/app.js": [wire],
+    }
+
+
+def test_concatenated_zstd_frames_form_one_body(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, tmp_path: Path
+) -> None:
+    (tmp_path / "app.js.zst").write_bytes(bytes.fromhex("28b52ffd200529000068656c6c6f") * 2)
+    server = fixture_site(
+        Site(
+            root=tmp_path,
+            routes={
+                "/": Page(body='<script src="/app.js"></script>'),
+                "/app.js": Page(
+                    file="app.js.zst",
+                    content_type="text/javascript",
+                    headers=[("Content-Encoding", "zstd")],
+                ),
+            },
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT size_bytes, transferred_bytes, content_encoding FROM urls WHERE url = ?",
+        [server.url("/app.js")],
+    ) == [(10, 28, "zstd")]
 
 
 def test_stacked_encodings_are_decoded_in_reverse_order(
@@ -107,10 +186,12 @@ def test_a_body_in_an_encoding_that_was_not_offered_is_not_parsed(
 ) -> None:
     server = fixture_site(
         Site(
-            root=exact.SITE.root,
             routes={
-                "/": Page(body='<title>Shop</title><a href="/zstd.html">Trail shoes</a>'),
-                "/zstd.html": exact.SITE.routes["/trail-shoes.html"],
+                "/": Page(body='<a href="/unknown.html">Unknown</a>'),
+                "/unknown.html": Page(
+                    body="<title>Unknown coding</title>",
+                    headers=[("Content-Encoding", "x-unknown")],
+                ),
             },
         )
     )
@@ -120,7 +201,7 @@ def test_a_body_in_an_encoding_that_was_not_offered_is_not_parsed(
     assert query(
         crawl_file,
         "SELECT fetch_state, parsed, parse_error, size_bytes FROM urls WHERE url = ?",
-        [server.url("/zstd.html")],
+        [server.url("/unknown.html")],
     ) == [("fetched", 0, "unsupported_encoding", None)]
 
 

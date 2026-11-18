@@ -1,4 +1,4 @@
-"""The hooks later changes plug into: extractors, handlers, passes (020-add-crawl-core D9)."""
+"""Define extractor, handler and pass contracts without importing their implementations."""
 
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -30,16 +30,16 @@ class UrlResponse:
     headers: tuple[tuple[str, str], ...]
     fetched_at: datetime
     response_time_ms: int
-    # Larger than the body cap, so read only up to it (022 design D1).
+    # Larger than the body cap, so read only up to it.
     body_truncated: bool
     # The Content-Encoding header as received; None without one.
     content_encoding: str | None
-    # The body after decoding, and as transferred; None where not measured (022 design D1).
+    # The body after decoding, and as transferred; None where not measured.
     size_bytes: int | None
     transferred_bytes: int | None
     # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
     directives: RobotsDirectives
-    # Where a 301, 302, 303, 307 or 308 leads; None for any other response (022 design D2).
+    # Where a 301, 302, 303, 307 or 308 leads; None for any other response.
     redirect_target: NormalizedUrl | None
 
 
@@ -63,7 +63,7 @@ class UrlResult:
     is_internal: bool
     in_scope: bool
     fetch_state: FetchState
-    # NULL when robots.txt was not checked (design D6).
+    # NULL when robots.txt was not checked.
     blocked_by_robots_txt: bool | None = None
     # The requests made for the URL, retries included; 0 when it was not requested.
     attempt_count: int = 0
@@ -75,7 +75,7 @@ class UrlResult:
     parse_error: ParseError | None = None
     parse_error_message: str | None = None
     # The Links the engine read for discovery: an in-Scope 2xx response's header Links,
-    # then its document's when it was prepared (design D5).
+    # then its document's when it was prepared.
     links: tuple[DiscoveredLink, ...] = ()
     # By extractor name, for a parsed response; an extractor that failed has none. A handler
     # reads one with that extractor's output(outputs).
@@ -85,7 +85,8 @@ class UrlResult:
 @dataclass(frozen=True, slots=True)
 class Handler[R]:
     """Pure: one table's rows for one URL, which its unit writes with the URL's final state
-    through the store function that owns the table; two tables are two handlers (design D9)."""
+    through the store function that owns the table; two tables are two handlers
+    (020-add-crawl-core D9)."""
 
     name: str
     handle: Callable[[UrlResult], Iterable[R]]
@@ -96,7 +97,7 @@ def handler[R](
     name: str, handle: Callable[[UrlResult], Iterable[R]], write: RowWriter[R]
 ) -> Handler[Any]:
     """The one way to build a handler: mypy checks R here, where the handler is registered,
-    since a Handler built in place inside Hooks(...) takes R as Any (design D9)."""
+    since a Handler built in place inside Hooks(...) takes R as Any (020-add-crawl-core D9)."""
     return Handler(name, handle, write)
 
 
@@ -136,7 +137,7 @@ class Hooks:
 
     def __post_init__(self) -> None:
         # Outputs are keyed by the extractor's name, so a second extractor of a name would
-        # silently replace the first's output (design D9).
+        # silently replace the first's output.
         _refuse_twice("extractors", [extractor.name for extractor in self.extractors])
         _refuse_twice("handlers", [handler.name for handler in self.handlers])
 

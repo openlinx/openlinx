@@ -1,4 +1,4 @@
-"""Crawl files in the Workspace (015-add-crawl-store, crawl-store)."""
+"""Verify Crawl file creation within a Workspace."""
 
 from datetime import UTC, datetime
 

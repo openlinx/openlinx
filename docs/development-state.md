@@ -1,344 +1,317 @@
 # Development state
 
-Start a fresh session on public `main`: it is the canonical entry point for shared
-instructions, development skills, setup and this state map. Each active branch keeps
-its own product checkpoint. Read
-[AGENTS.md](../AGENTS.md),
-[CONTRIBUTING.md](../CONTRIBUTING.md), [CONTEXT.md](../CONTEXT.md) and
-[testing.md](testing.md) before changing them.
+The 022 checkpoint was verified on 2026-11-18. Other stream checkpoints date
+from 2026-11-15. [README](../README.md) describes available behaviour;
+[ROADMAP](../ROADMAP.md) owns release scope and build order. Before continuing a
+stream, read [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) and
+[CONTEXT.md](../CONTEXT.md), then confirm its actual HEAD, diff and tasks.
 
-## Code checkpoints and transport
+## Main and active streams
 
-Code checkpoints below identify the application, specs and task state reviewed on
-2026-11-04. Later transport or agent-setup commits may follow them on the same branch.
-They do not change which product work is complete. The 022 checkpoint includes the
-reviewed and gated narrow task 9b.9 refactor; the full fetching change remains unfinished.
+Public [main at `741b92f7`](https://github.com/openlinx/openlinx/tree/741b92f7f0d8b3f3e0bf868bb9d2cb7fa79412ce)
+contains the foreground Crawl, crawl store, fetch policy, completed code audit and
+Page data foundation. The integrated Crawl → Issues product path remains unfinished.
+A published branch or a local candidate does not establish feature acceptance or CI
+coverage of that candidate.
 
-| Canonical branch | Code checkpoint | State |
+The local integration includes the platform runner fix at `30ca0c46`:
+`scripts/check.py` checks Windows, Linux and macOS types explicitly on every host.
+These static targets do not establish runtime compatibility on those operating systems.
+
+| Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| `main` | `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50` | First 022 PR #39 merged; main CI 41831195325 passed 9/9 |
-| `022-add-fetch-policy` | `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68` | Group 9b accepted; first PR #39 CI closes 8.2; TLS measurements and OS-trust policy accepted; 6.4 complete under revised D5 |
-| `023-fix-code-audit` | `c192f242b53c91395dfefde246be6f5e53aec300` | Whole-change review complete; specs synchronized and change archived on branch; PR #36 awaits current-head CI and merge |
-| `026-add-parse-pool` | `8294855ecfffb9f07094b931ed0d94754d0bf16d` | Unfinished pool/shutdown work |
-| `030-add-page-data` | `0eeed79504271c7cf1e51ab69543271225c995d8` | Published unfinished snapshot; group 12 acceptance blocked by C01/C02 |
-| `040-add-rules` | `330d5730b3e4dad3ba6a5d9285fd89ef61213d98` | Group 11 refactor; integration remains |
-| `050-add-query-and-segments` | `bd21fe4164077076076c5e64805e9f80aeb4b434` | Published unfinished snapshot; review fixes remain |
+| 022 fetching | [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) | All 156 tasks complete and archived on the integration branch after Standards and Spec review. [Archived tasks](../openspec/changes/archive/2026-11-18-022-add-fetch-policy/tasks.md). |
+| 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
+| 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
+| 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
+| 026 parse pool | Public `8294855e` | Older core and pre-rename package; bounded shutdown and scale proof remain. [Checkpoint tasks](https://github.com/openlinx/openlinx/blob/8294855ecfffb9f07094b931ed0d94754d0bf16d/openspec/changes/026-add-parse-pool/tasks.md). |
+| 040 Rules | Public `330d5730` | Rule slice and reader refactor exist; current core/Page data integration and remaining v0.1 Rules are open. [Checkpoint tasks](https://github.com/openlinx/openlinx/blob/330d5730b3e4dad3ba6a5d9285fd89ef61213d98/openspec/changes/040-add-rules/tasks.md). |
+| 050 queries | Public `bd21fe41` | Groups 1–2 have implementation, with review fixes and 040 integration outstanding. [Checkpoint tasks](https://github.com/openlinx/openlinx/blob/bd21fe4164077076076c5e64805e9f80aeb4b434/openspec/changes/050-add-query-and-segments/tasks.md). |
 
-The 030 and 050 checkpoints have been pushed by native Git fast-forward as unfinished
-snapshots. No fresh full gate or feature acceptance is claimed for that transport.
-The 022 checkpoint is also published, with its narrow 9b.9 review and gate recorded
-below. Open findings remain part of each stream's next work. Publishing a ref does not
-accept its features or merge it into `main`; transport alone needs no draft feature PR.
+### Page data and ownership candidates
 
-Shared instructions, canonical skills, development setup and this hand-off have one
-entry point on `main`. They are not automatically transplanted to the six active
-branches. Start on `main`, read this map, then choose the stream. Before first
-continuing an older branch, review and
-adapt its instructions/setup to its actual code and tests, preserving its own rules.
-In particular, 026, 040 and 050 still use the pre-rename package and older interfaces.
-Their direct checkouts are not already ported by the shared setup on `main`.
-Product integration and rename work remain separate tasks; transporting unfinished
-checkpoints does not require a merge of all of `main` into them.
+030 findings **C01 and C02 are closed on public main**, through
+[PR #37](https://github.com/openlinx/openlinx/pull/37): the deferred structured-data
+count columns are declared and Windows subprocess-tree cleanup is guarded. They no
+longer block group 12. The pause-count fix is also in main through
+[PR #41](https://github.com/openlinx/openlinx/pull/41).
 
-Check current published refs through GitHub or `git ls-remote origin`, and inspect
-fetched commits with Git. A checkpoint need not equal the latest branch head:
-later setup/docs commits are expected. Verify ancestry and the intervening diff,
-for example `git merge-base --is-ancestor <checkpoint> origin/<branch>` followed by
-`git log <checkpoint>..origin/<branch>` and `git diff <checkpoint> origin/<branch>`.
-The 023 planning checkpoint and unfinished 022/030/050 snapshots are published.
-Instruction/setup changes have their own review and PR/CI evidence, separate from
-these product checkpoints. Use the relevant PR/CI and coordinator report for actual
-setup and fresh-restore results.
+Local 030 checkpoint `c31c717e00a21662e3eae72ba4f68c6e7ed71c7c` includes Page sizes,
+HTTP redirect data, bounded Max-Age parsing and Content Area roots outside the body,
+plus linear sentence splitting and IPv6 cookie Domain handling that rejects folded values.
+Restore local branch `coord/030-sizes-2026-11-13`; its current task file is
+`openspec/changes/030-add-page-data/tasks.md`.
+The earlier foundation integration with main `741b92f7` passed the local full check
+and supplemental Windows type check. The sentence-splitting and cookie Domain
+review fixes are complete locally; group 4b review and whole-change closure remain
+governed by the tasks. Cross-OS candidate CI and feature acceptance remain unverified.
+The first unresolvable meta refresh followed by a valid one is already an explicit
+design Risk; reconcile the specification's wording with that accepted limitation.
+Tasks 10.1 and 10.11 still require the Links layout and writer-capacity benchmarks
+on a quiet machine at a time chosen by the maintainers. Task 4.15 also requires
+shortening the design's guard-test Risks entries before archival.
 
-[PR #34](https://github.com/openlinx/openlinx/pull/34), 023 group 4, the Crawl's input,
-is merged into `main` at `f38d493fd50ebfda7c3fa968945b72d6633b754e`.
-The coordinator reports that the exact-head full gate on `731326b5` passed:
-1531 tests passed, 7 platform/account skips, mypy for three platforms, OpenSpec
-16/16 and Node 1/1. This is separate evidence from the 022 task 9b.9 checks.
-The separate 023 group 5 planning checkpoint `1f3dec66` has since been published.
+Local 060 checkpoint `5fcf25e28ec9d81fc005ae8e9142f9e568afdb6b` holds the writer
+claim through Crawl creation and execution and tests release on completion, failure,
+creation failure and process death. Restore local branch `060-add-crawl-control`;
+its current tasks, including group 0, are in
+`openspec/changes/060-add-crawl-control/tasks.md`.
+Its integration with main `741b92f7` and task 0.6's guard for an existing writer
+claim file passed the local full check and supplemental Windows type check. The
+stream is frozen after task **0.6**. Task **0.7**, proving ownership before schema
+creation, the remaining ownership scenarios and group 0's review with actual
+cross-OS CI remain open.
+Detached Crawls, `status`, `stop` and `resume` remain planned. Later draft task groups require
+reconciliation with the implemented lifecycle before they are built.
 
-First 022 [PR #39](https://github.com/openlinx/openlinx/pull/39) is merged into
-main at `4957b1879f3a13b22ef0e322f2fc15bfc0b12e50`.
-[Main CI 41831195325](https://github.com/openlinx/openlinx/actions/runs/41831195325)
-passed all nine OS/Python cells on that checkpoint. This is incoming-main evidence,
-not validation of the current 023 integration.
+### Archived fetching change
 
-## Next work by stream
+The change is archived on `coord/022-fetch-v02-2026-11-15` with the
+[Fetching](../openspec/specs/fetching/spec.md) and
+[Crawling](../openspec/specs/crawling/spec.md) specifications synced. Groups
+11–14 cover per-hop Internal identity, explicit proxy routing and fresh credentials
+on continue, offered HTTP capability and bounded response decoding. Standards and
+Spec review closed on the code at `ee7ee390`. Its full CI matrix passed on
+Linux, macOS and Windows with Python 3.12, 3.13 and 3.14. [Reviewed code](https://github.com/openlinx/openlinx/tree/ee7ee390a67c57acd0b33e469c45940cceffabd4) · [CI run](https://github.com/openlinx/openlinx/actions/runs/44218956051).
 
-Stream task, design and spec links below point to the reviewed code checkpoints.
-Check the chosen branch head for any later changes.
+### Fetching implementation checkpoints
 
-### 022: group 9b accepted; first draft PR's nine-cell CI passed
+Tasks 11.1–11.2 established header-aware secret recording, per-hop Internal
+headers, User-Agent precedence on continue and consistent Seed classification.
+Task 11.2a covered empty and repeated Accept-Encoding overrides on the wire.
+The selected request preference and the supported response decoders are independent.
 
-[Tasks](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/design.md),
-[fetching spec](https://github.com/openlinx/openlinx/blob/6398ef80ef81d91c1ea7deaa55836ddf83bc2c68/openspec/changes/022-add-fetch-policy/specs/fetching/spec.md).
+Tasks 11.3–11.4 add wire guards for External Links, Seed redirects, Internal robots
+and robots redirects to External URLs. The guards preserve ordered repeated custom
+headers and were proven with failing mutations; no runtime change was needed.
+Task 11.5 extends those guards to Checked Internal URLs outside the Seed's folder,
+robots and Page retries, and the Seed outage probe. Literal wire logs and stored
+Scope/attempt fields prove the requests' roles; pause/resume events distinguish the
+probe from the ordinary Seed request. Each path was proven with a failing mutation.
+Task 11.6 guards malformed split/joined header inputs before network access and
+selective masking in the complete recorded argv/header list. Harmless values,
+names, repetitions and order remain intact; failing mutations prove the guards.
+Task 11.7 collects sensitive header values for diagnostic masking and redacts
+transport failures before URL and robots consumers retain them. Regression tests
+cover emitted/stored hook warnings, DNS failures and direct URL protocol failures;
+harmless diagnostic context remains visible.
+Task 11.8 adds `--auth` and `crawl.auth`, preemptive Internal Basic Auth with exact
+UTF-8 bytes, whole-secret recording and resolved Authorization conflict rejection
+before writer/network access. Invalid input uses source-specific errors without
+quoting credentials. Explicit empty auth overrides Workspace credentials and records
+as null. Literal wire cases and failing mutations cover Unicode, empty parts,
+whitespace, validation, conflict detection and secret metadata. A DNS-boundary
+regression guards the new credential's plaintext and encoded forms in stored errors;
+task 11.12 extends it to the complete diagnostic matrix.
+Task 11.9 guards Basic Auth and custom Authorization on External Links and on both
+Seed and ordinary Internal redirects to an External target. Literal HTTP logs and
+stored classification/redirect links establish that each target was requested without
+credentials. Failing mutations prove the Internal gates; existing custom-header
+guards remain intact. No runtime change was needed.
+Task 11.10 extends the auth guards to Internal robots, robots redirects to External
+URLs, Checked Internal URLs outside Scope, separate robots and Page retries, and the
+Seed outage probe. Literal request logs, stored classifications/attempts and pause
+events establish each path's role. Six failing mutations exercise the auth assertions
+independently of the retained header assertions; no runtime change was needed.
+Task 11.11 guards whole-secret auth recording in split and joined argv, including
+URL-shaped credentials, while preserving harmless arguments and header order.
+Workspace credentials are verified on the wire; auth/Authorization conflicts across
+both flag/Workspace directions fail before HTTP or Crawl-file creation. Failing
+mutations prove recording, Workspace loading and conflict rejection; no runtime
+change was needed.
+Task 11.12 guards raw credentials, nonempty passwords, Base64 payloads and full Basic
+values in emitted/result/stored hook diagnostics and URL/robots transport failures.
+ASCII, non-ASCII and decomposed Unicode use literal expectations; a direct HTTP
+protocol failure separately proves the URL path. Harmless context stays visible.
+Nine failing mutations prove the masking paths, individual secret forms and exact
+UTF-8 encoding; no runtime change was needed.
+Task 11.13 requires fresh auth through `CrawlOverrides.auth` when enabled credentials
+were recorded. Missing input raises `secrets_required` (exit 2) before writer/network
+access; invalid fresh input is refused without quoting it. Fresh auth is sent on the
+wire, collected for diagnostic masking and recorded as `***` again. Explicit null or
+empty auth disables it, and recorded null needs no fresh input. Request-policy
+validation checks its own header data without treating the secret marker as auth.
+Read-only files, request logs and failing mutations prove the refusal order and
+masking; the code and service behaviour are documented in the same slice.
+Task 11.14 restores fresh sensitive headers by case-insensitive name and occurrence,
+retaining recorded name case, positions and harmless bytes. Missing values fail with
+`secrets_required`; malformed, extra, harmless or reserved-marker inputs fail with
+`invalid_value` before writer/network access. Explicit empty values remain valid.
+Real requests and stored records guard repeated continues, both User-Agent winners,
+Internal Accept-Encoding overrides, unchanged Workspace-independent settings,
+auth/Authorization conflicts and diagnostic masking. Named mutations prove the
+guards. External Accept-Encoding uses the default, expanded to include zstd in 14.1.
+Confirm the actual branch, task marks and checks before continuing.
+Task 11.15 verifies the header/auth examples, Workspace and CLI metadata, and config
+JSON documentation. The docs distinguish the implemented continue service from the
+planned resume Command and explain that a continued default User-Agent follows the
+running tool version.
+Group 11 review (11.16) is complete locally. Split argv values that resemble flags
+are consumed once under their original secret policy, preserving the following
+harmless arguments. Page preparation messages mask reflected header and encoded-auth
+secrets before URL recording and warning construction. Public CLI/HTTP/SQLite
+regressions exposed both leaks before the fixes. The invalid request-policy guard
+now uses real HTTP and writable/read-only files instead of a Fetcher double; all
+original metadata cases remain. Named failing mutations prove the argv and refusal
+guards. Independent Standards and Spec review found no remaining issues in the fixes.
+Task 12.1 adds `--proxy` and `crawl.proxy` with URL-form password redaction.
+Schemeless inputs use HTTP; an empty flag overrides the Workspace proxy and returns
+to current environment handling, including `NO_PROXY`. A continue refuses recorded
+proxy password markers before writer/network access. Task 12.6 supplies fresh inputs. Mutation-proven guards cover CLI metadata and the empty-input bypass.
+Task 12.4 adds a real authenticated CONNECT fixture and verifies HTTPS requests,
+literal tunnel authority/credentials and the absence of proxy auth at the origin.
+The fixture rejects missing/wrong credentials and closes idle tunnels and partial
+requests during teardown. Four failing mutations prove the guards; existing HTTP
+and environment scenarios remain intact. The local full check passed with 2,473
+tests and 14 platform skips.
 
-Group 9 was reviewed at `a2c6b643`. The whole-group Standards and Spec review of
-9b covered `a2c6b643...c8384792`, followed by closure of its findings. Group 9b is
-accepted through `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68`, where task 9b.19 was
-checked in the P2/S2 fix commit after the final local gate and closure of all fresh
-review findings. This accepts the pre-PR group; the full fetching change remains unfinished.
+Task 12.2 verifies explicit proxy precedence over the proxy environment variables and
+over both wildcard and named-host `NO_PROXY` entries. All twelve HTTP/HTTPS cases
+cover the CLI flag and Workspace setting. Selecting the environment proxy first
+fails four cases. Applying the bypass to an explicit proxy fails the other eight.
 
-The branch actually integrates main `82ffcce61f4e3fc800726e8690eedbc4d55b08af`
-through merge commit `f56d3bbde820fd6acca46035a9d923052ff1c923`. The earlier
-`809d0d66` restored setup only. The integration preserves main's writer/service,
-settings and CLI contracts together with 022's fetching semantics and TLS/proxy
-dependencies. The stronger guards remain in place; the virtual-clock guard now
-recognises an explicit FakeFetcher factory at the service's `fetchers` seam.
+Task 12.3 preserves credential-free explicit proxy URLs in argv and config, and
+masks both the original and percent-decoded password in diagnostics. Separate
+CLI and Workspace cases retain the environment proxy recording policy.
 
-Standards S1 is closed in the integration commit: the proxy CLI test independently
-pins `[["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"]]` while retaining the comparison
-with the reader. A lowercase canonical-name mutation failed the new literal assert;
-the production names were restored and the focused checks passed.
+Task 12.5 verifies that CONNECT carries neither Authorization nor X-Env through
+an authenticated proxy. The Internal origin receives both headers, while the
+External origin receives neither on its robots.txt and Page requests.
 
-Spec P2 is closed at `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68`: the first probe's
-elapsed window uses monotonic time from its actual send, after any host wait,
-rather than wall-clock timestamps.
-Standards S2 is closed in the same fix by moving the decision to the module-level
-pure function `_pause_end`, following ADR-0006. The manager reported 62 focused
-tests passing after that extraction. These runtime and structure fixes are separate
-from C03, already closed by the Backstops spec/window alignment and seam guards in
-`e00a88ea015e5f81ccaf708ca1ee93a862fabe33`.
+Task 12.6 restores an explicit proxy from fresh continue input. A recorded
+password marker requires a fresh value before writer or network access. The
+Service preserves unrelated recorded settings and rereads the current environment.
 
-The manager reports the final local gate for this source checkpoint passed:
-1781 tests passed and 12 skipped, OpenSpec 16/16 and Node 1/1.
+Task 12.7 documents CONNECT and origin header handling alongside explicit proxy
+precedence, password masking and fresh continue inputs. The published CLI option
+metadata agrees with the Workspace setting and its literal contract.
 
-[First draft PR #39](https://github.com/openlinx/openlinx/pull/39)
-has a successful [CI run 41812691634](https://github.com/openlinx/openlinx/actions/runs/41812691634)
-at source commit `6398ef80ef81d91c1ea7deaa55836ddf83bc2c68`: all nine cells passed,
-covering Windows, macOS and Linux across Python 3.12–3.14 with the coverage gate.
-This actual first-PR matrix closes
-task 8.2; its checkbox and this state update are applied together after that result.
+Task 13.1 records `http_1_1` for each plain HTTP origin when a request starts.
+Discovered origins that receive no request stay NULL. The schema describes offered
+capability on origins and Pages. Page population belongs to 030.
 
-The metadata checkpoint `50cbcf6ff453c6c52487d9ddc5c07e97b5f4ca18` also passed
-[CI 41815963203](https://github.com/openlinx/openlinx/actions/runs/41815963203),
-with all nine OS/Python cells successful. That result predates the measurement
-documentation recorded here.
+Task 14.1 adds single-frame incremental zstd decoding with finite output budgets,
+including stacked codings. A locked conditional backport supplies the backend on
+Python 3.12 and 3.13. Task 14.4 enforces the window limit across backend fast paths.
+Task 14.8 records the cross-platform runtime results below.
 
-The later Astra pre-merge source review findings were fixed in `ca916d7a` and
-`3a47f843ee770f21d5d7e6faa7c41bac61e64768`.
-[CI 41824494037](https://github.com/openlinx/openlinx/actions/runs/41824494037)
-passed all nine OS/Python cells at `3a47f843ee770f21d5d7e6faa7c41bac61e64768`.
-The manager reports the combined local gate passed with 1821 tests passed,
-12 skipped and 98.58% coverage. Those checks cover the source fixes, before the
-TLS policy documentation revision below; the earlier group 9b and first-PR
-results remain historical evidence for their named checkpoints.
+Task 14.2 reads concatenated and skippable zstd frames across arbitrary input
+boundaries. Each decoding call has a finite output budget. Buffered output is
+drained before the decoder accepts more input.
 
-Task 6.4 now has the three-OS measurements from
-[proof PR #40](https://github.com/openlinx/openlinx/pull/40),
-[TLS run 41816962562](https://github.com/openlinx/openlinx/actions/runs/41816962562):
-3/3 jobs successful at `232845ede757d4b3a9f46c152809b2a6b5a05478`, with all five
-hosts and 20 handshakes per host per store on each OS. The accepted
-[measurement evidence](benchmarks.md#tls-handshake) shows extra truststore overhead.
-Task 6.4 is complete under revised D5: the observed overhead is accepted while
-retaining the TLS spec's OS trust store and certifi fallback only when truststore
-cannot be loaded. The user approved this decision on 2026-11-04; it changes no
-runtime behaviour. The first
-draft PR carries groups 1–9 and 9b; group 10 follows in a later PR, with 10.1 waiting
-for 023's archived workspace spec. Groups 11–14 are v0.2 work and are outside this
-acceptance.
+Task 13.2 uses a dedicated ALPN handshake to record HTTP/2 capability on a
+direct HTTPS connection. The probe uses Crawl DNS routing, the original host
+name and the same trust anchors. Ordinary requests remain on HTTP/1.1.
 
-### 023: complete and archived on branch; PR awaits merge
+Task 14.3 verifies that incomplete, corrupt and checksum-invalid zstd bodies and
+trailing garbage retain the URL failure classification. Each wire fixture has
+a valid control, including a response served as two frames.
 
-[Tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md),
-[design](../openspec/changes/archive/2026-11-04-023-fix-code-audit/design.md),
-[PR #36](https://github.com/openlinx/openlinx/pull/36).
+Task 14.4 checks the advertised zstd window before decoding each frame. Real
+8 MiB and oversized-window fixtures cover split headers, complete input and
+subsequent frames, with and without a declared content size.
 
-Groups 1–4 are in `main`. Group 5 and the integration of main `4957b187` are
-accepted; tasks 6.1–6.3 document the real extension recipes, formula seams,
-implementation checks and strict-mypy contracts.
+Task 14.5 verifies the exact 20 MiB output and intermediate limits. Real Crawl
+responses establish truncation and Page outcomes, while memory checks exercise
+the finite native output budget.
 
-The whole-change GPT-6 Astra Standards and Spec review covered groups 1–6,
-including the earlier merged groups and current integration. Its three reproduced
-findings are fixed: writer batch durability in `575dab4f`, bounded hook-error
-redaction in `8778e412`, and caller attribution for empty unknown tables in
-`80e97f34761387fbaadcebb0c26ae0dd1365396a`. Independent Astra review accepted each
-fix; the latest combined local gate passed 1932 tests with 12 platform skips,
-strict mypy on three platforms, OpenSpec 16/16 and Node 1/1.
+Task 14.6 retains the distinctions between supported response codings, what
+the request advertised, and the wire budget. The tests cover an unsupported
+coding and bounded reads of compressed input.
 
-Both CLI self-description scenarios now have separate test names. The four delta
-specs map to 46 scenarios, with none missing or duplicated. Whole-change review
-closed at `c192f242`. The four primary specs now contain the accepted deltas, and
-the change is archived with all tasks complete. The workspace proxy exception
-remains intact; 022 task 10.1 now targets that retained requirement and stays open.
-Strict validation after the archive passed all 15 remaining active specs and changes.
+Task 14.7 documents the supported codings, compressed and decoded size fields,
+the 20 MiB wire, intermediate and final caps, and the independent 8 MiB zstd
+window limit. The locked install selects the backend for each Python version.
 
-Source integration `e9eb6dba` passed all nine cells of
-[CI 41839157705](https://github.com/openlinx/openlinx/actions/runs/41839157705).
-That run predates the later docs and fixes. Check PR #36 for publication and CI
-on the current head; no earlier result validates these later commits. This branch
-has not been merged into `main`.
+Task 13.3 records HTTP/1.1 capability for TLS listeners that select
+HTTP/1.1 and those that select no ALPN protocol.
 
-### 026: reconcile the core, then close bounded shutdown
+Task 13.4 verifies that concurrent requests share a single failed origin probe.
+Replaying a writer unit returns the same claim result and schedules the origin
+once per run.
 
-[Tasks](https://github.com/openlinx/openlinx/blob/8294855ecfffb9f07094b931ed0d94754d0bf16d/openspec/changes/026-add-parse-pool/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/8294855ecfffb9f07094b931ed0d94754d0bf16d/openspec/changes/026-add-parse-pool/design.md).
+Task 13.5 measures External origins and origins whose robots.txt request fails
+when the Crawl is configured to ignore robots rules.
 
-The pool, bounded queue and crash/deadline handling are committed. The head is task
-4.7's cross-Python `PicklingError` fix; 4.2, part of 4.5 and 4.6 remain open.
-This branch still uses the pre-rename source package and an older 020 interface. Its latest core merge
-is `78019016`, before the completed core and product rename.
+Task 13.6 verifies that a failed probe preserves URL attempts, the URL limit and
+network pause accounting. A failed measurement on continue clears a prior value.
 
-Start with a plan check against current `main`: reconcile the package rename and
-PageExecutor lifecycle before implementing 4.2. The relevant rename decisions are in
-[021 D3](../openspec/changes/archive/2026-10-29-021-rename-to-openlinx/design.md).
-The original mechanical rename helper is local tooling, so a fresh clone must not
-assume it exists; review the equivalent branch-specific migration before running it.
-Preserve the existing Crawl Mode value when renaming the package.
+Task 13.7 measures HTTPS capability over an authenticated HTTP CONNECT using
+the effective proxy, mapped proxy address and original TLS server name. Origin
+identity headers reach the origin only on the ordinary HTTP requests.
 
-Task 4.2 must bound shutdown when a worker never finishes a Page or never becomes
-ready after the pool breaks. Check parent death while a worker is busy too: an idle
-pipe read alone cannot end that worker. The PageExecutor contract must return a
-Page failure for a worker crash/deadline and reserve a raised error for a broken
-contract. Validate through the real pool/subprocess tests in
-`tests/crawl/test_parse_pool.py`, then finish shutdown docs and group review.
+Task 13.8 rejects invalid or incomplete CONNECT responses before starting TLS.
+The 65,536-byte cap includes the terminating blank line. Ordinary requests
+retain their own response and connection error classifications.
 
-The 500k baseline was deferred. Before scheduling it, repair the harness's executor
-selection and timing interpretation so an in-process baseline really uses that
-executor. Baseline/layout measurements and the pool rerun need a quiet machine;
-they are not the immediate coding task.
+Task 13.10 exercises a capability probe with one per-host slot and verifies
+that an admitted probe shares the global connection budget with normal requests.
 
-### 030: resolve group 12 contract and cleanup findings first
+Task 13.9 verifies a single real-time deadline for admission, DNS, TCP, CONNECT
+and TLS, including cumulative latency. Cancelling an unfinished TLS upgrade
+closes the transport without waiting on the old stream.
 
-[Tasks](https://github.com/openlinx/openlinx/blob/0eeed79504271c7cf1e51ab69543271225c995d8/openspec/changes/030-add-page-data/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/0eeed79504271c7cf1e51ab69543271225c995d8/openspec/changes/030-add-page-data/design.md).
+Task 13.11 joins an already-cancelling capability worker before closing the
+Crawl writer. Tests cover active TLS, pending admission, asynchronous cleanup
+and normal completion with a pending measurement.
 
-Groups 1–11 are in `main`. Group 12 has an earlier review commit `e556abb2` followed
-by planning corrections `0eeed795`; the current continuity review found that its
-acceptance claims are incomplete. It may be transported as unfinished work.
-Resolve these two findings before declaring group 12 accepted or proceeding to 4b:
+Task 13.12 pins the live Origins and Page capability descriptions through the
+schema Command. The v0.1 deferred wording stays in the historical snapshot.
 
-- **C01, open:** the spec/proposal require `structured_data_error_count` and
-  `structured_data_warning_count`, but the schema, Page record, schema/architecture
-  docs and test data list still use `structured_data_errors` and
-  `structured_data_warnings`. Align the names throughout the public contract and
-  independently check the declared schema, NULL values and release prefixes.
-- **C02, open:** task 12.3 promises Windows subprocess-tree cleanup on timeout.
-  `tests/cli/test_encoding.py` uses `subprocess.run(timeout=...)` on `cmd`, with no
-  path that terminates its Python descendants. Implement ownership and cleanup of
-  the whole tree and verify that no child survives a timeout. A hang was not
-  reproduced during this review; the missing cleanup path was found by reading it.
+Task 13.13 documents offered HTTP capability, HTTP/1.1 request transport,
+the shared probe deadline and cleanup on completion or stop.
 
-Then review the corrected group with the Page/Link contract tests, extractor tests,
-Windows encoding/cleanup checks and writer throughput smoke test. Group 4b also
-waits for 022's size and redirect support in `main`. Its later plan check starts
-at 4.6, compressed Page sizes, and covers the full Page-column contract before the
-HTTP-redirect slices. Reconcile 023's Link-reading/type-table changes when integrating
-the new product base. Shared setup on `main` does not perform that integration.
+Task 14.8 verified the locked zstd installation, mypy and all 186
+focused decoder, Resource and negotiation cases in each of the nine runtime
+cells across Linux, macOS and Windows. Python 3.12 and 3.13 used
+`backports.zstd` 1.8.0. Python 3.14 used `compression.zstd`.
+All focused tests ran and passed at `bd5c37b1`. [CI run](https://github.com/openlinx/openlinx/actions/runs/44200525556).
 
-Tasks 10.1 (Link layout) and 10.11 (writer capacity) still need a quiet-machine slot.
-Share the recorded layout choice with 026 rather than running competing decisions.
-Readability, language and HTML storage are later-release work.
+The integration branch also carries 030 Page data and developer-check changes.
+060 still owns the resume Command and its Workspace input handling. It remains
+frozen at task 0.6. The continue Service accepts fresh auth, sensitive headers
+and explicit proxy credentials. Page capability population belongs to 030.
 
-### 040: integrate the current core and Page data before adding Rules
+### Next quality work
 
-[Tasks](https://github.com/openlinx/openlinx/blob/330d5730b3e4dad3ba6a5d9285fd89ef61213d98/openspec/changes/040-add-rules/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/330d5730b3e4dad3ba6a5d9285fd89ef61213d98/openspec/changes/040-add-rules/design.md).
+Follow the [comment review and test quality plan](test-organization-plan.md).
+Review comments for decisions and non-obvious reasons, then verify the test
+contracts at their public seams. Start by reproducing the two recorded
+test-quality candidates. Preserve existing regression scenarios and keep
+test organization in separate changes.
 
-The v0.1 Rule slice and group 11 refactor are committed through `330d5730`. The Rule
-reader handles live/stored data, store imports no Rule implementation, and Rule tests
-use realistic HTML. This branch still uses the pre-rename source package and has older core/Page data.
+## What blocks Crawl → Issues
 
-Next is an integration plan check for the rename, current core, 023's settings/schema
-rules and 030's Indexability. Re-run the Rule populations, reader and pass tests after
-that integration. `test_non_indexable_pages_are_not_compared` currently has a strict
-xfail conditional on `PageRow` lacking `indexability`; the integration must exercise
-the real non-indexable population rather than preserving that condition.
+1. **Port 026, 040 and 050 to current contracts.** Their public checkpoints still use
+   the pre-rename package and older core/store interfaces. Preserve their product work while
+   reconciling the rename, settings tables, schema and PageExecutor lifecycle.
+2. **Close 026 shutdown before relying on detached workers.** Task 4.2 still needs
+   bounded shutdown for a Page that never finishes and a worker that never becomes
+   ready after the pool breaks. The current close path cancels deadline/readiness
+   timers before an unbounded join; busy-worker parent death is also unresolved.
+   Finish shutdown documentation/review, then validate the benchmark harness's
+   executor selection before claiming the roughly 500k-URL baseline.
+3. **Integrate 040 with current Page data.** Task 5.10's strict conditional xfail
+   awaits real non-indexable populations; Indexability is now available in main.
+   Redirect tasks 7.2–7.4 and canonical/noindex tasks 8.5–8.11 remain open. Register
+   Rule settings with the current service and preserve schema/view guards. Task
+   10.11 depends on 060 resume retaining recorded configuration.
+4. **Finish 050's existing review work.** Tasks 1.21–1.23 cover the jsonl output
+   guard, documentation and cleanup. Task 2.13 still needs UTF-8, signed-integer and
+   256-predicate limits plus linear tokenization (**C04**). The Issue table test
+   derives expected fix text and SQL from its runtime Rule (**C05**); replace those
+   expectations with independent literals at the public seam. Reconcile 040's reader
+   before widening queries.
+5. **Prove the integrated path.** Exercise a foreground Crawl → Issues on all three
+   supported operating systems after the streams are integrated; then measure the
+   full pipeline at scale. Branch-local implementation is not that end-to-end proof.
 
-Settle the stop-during-passes contract with 060 before adding cancellation behaviour:
-the current core closes its stop signal before passes, and a pass has no stop view.
-Check pass-name uniqueness and error attribution in the same plan review. Register
-the rules settings table in `services.settings.default_tables()` when taking 023,
-and extend its centralized-schema guard to views when integrating Rule views.
-Task 10.11 still depends on 060-min resume. The early unchecked title-length tasks
-marked v0.2 are not the next v0.1 task.
+060 owns writer claims and Crawl control; 026 owns worker lifecycle; 040 owns Rule
+passes. Before implementing stop during passes, reconcile their contract: the current
+core closes its stop signal before passes, and passes have no stop view. Writer
+ownership alone does not provide pass cancellation or bounded worker shutdown.
+Keep these decisions in the owning changes' design/specs and preserve their guards.
 
-### 050: close the existing review fixes before group 3
-
-[Tasks](https://github.com/openlinx/openlinx/blob/bd21fe4164077076076c5e64805e9f80aeb4b434/openspec/changes/050-add-query-and-segments/tasks.md),
-[design](https://github.com/openlinx/openlinx/blob/bd21fe4164077076076c5e64805e9f80aeb4b434/openspec/changes/050-add-query-and-segments/design.md).
-
-Groups 1 and 2 have implementation commits, with review fixes outstanding. The code
-checkpoint includes their plan, `PageRequest` paging (1.19), and the Rule header above
-an Issue's table output (1.20). This branch still uses the pre-rename source package and its own
-`scripts/check.py`; first continuation needs a reviewed instruction/setup adaptation
-that preserves those product files.
-
-Continue in the recorded order: 1.21's CLI guard that jsonl prints only Affected URLs,
-1.22's output docs, 1.23's group 1 cleanup, then 2.13's parser limits and review fixes.
-Prove each guard by mutation at the agreed seam. For 2.13, reject invalid UTF-8 text,
-out-of-range integers, a number joined to a word and excess predicates, and remove
-quadratic tokenization. Check `tests/cli/test_issues.py`, `tests/query/test_issues.py`
-and `tests/query/test_where.py`.
-
-The current continuity review records two further open findings:
-
-- **C04:** the known 2.13 parser limits and linear tokenizer work remain incomplete.
-  The 256-predicate spec limit has no corresponding check, integer digit/range guards
-  are missing, and tokenization repeatedly slices the remaining suffix. This is
-  existing unfinished work, not a new regression attributed to the last three commits.
-  Complete 2.13 before widening use of this parser or accepting the feature.
-- **C05:** the Issue table test takes expected `how_to_fix` and `reproduce_sql` from
-  the same runtime Rule used to populate its fixture. Use independent literal
-  recorded Rule values at the public store seam so a shared source error cannot
-  make the test pass. This robustness finding remains open alongside 1.21–1.23.
-
-Then plan the 040 integration. The recorded integration base was `6afd303`; current
-040 is its later descendant `330d5730`, whose reader refactor needs explicit conflict
-review. In particular, reconcile `decode_detail`, codes and schema declarations.
-Reconcile the rename and 023's service contracts in that plan; the where parser
-belongs in `query`, its SQL compiler in `store`. Group 3 starts only after this plan
-and the existing fixes are reviewed. Groups 9–13 remain v0.2.
-
-## Evidence and checks
-
-The checkpoint facts come from Git refs, diffs, tasks, designs and test sources.
-C01–C05 were identified during the independent continuity review. C03 is closed
-by the 022 evidence above. C01, C02, C04 and C05 belong to their streams' documented
-checkpoints; check those branches for current status. Older passing runs do not
-establish that later spec and implementation pairs agree.
-
-PR #34's gate and the 022 task 9b.9 review/gate above have separate scopes; their
-results do not establish acceptance of the remaining fetching, Page data or query
-work. Record each outcome against the code checked. Reproducible setup is documented in
-CONTRIBUTING. Its platform and fresh-restore results belong to the relevant PR/CI
-and coordinator report, rather than a temporary migration checklist in this map.
-
-For a focused run, follow `uv run pytest <test file> --no-cov`. Before a commit,
-follow CONTRIBUTING and run `uv run scripts/check.py`; serialize full gates on a
-shared machine. Set `OPENSPEC_TELEMETRY=0` before running OpenSpec. CI must supply
-the required OS/Python matrix evidence. A task checkbox or an old report cannot
-replace a run on the reviewed code.
-
-## Resume in a fresh clone
-
-1. Clone or fetch public `main` and read its AGENTS, CONTRIBUTING, canonical skills
-   and this map. Follow its locked contributor setup. Shared instructions are
-   maintained on `main`; credentials and global agent tools are installed separately.
-2. Inspect current GitHub/Git refs. Locate the chosen stream's code checkpoint in
-   its branch history and read any later commits. A missing checkpoint or WIP requires
-   recovery from its owner before continuing that slice. The latest branch head need
-   not equal this checkpoint.
-3. Prepare a separate clean worktree for the chosen canonical stream. Read its own
-   AGENTS/CONTRIBUTING, proposal, design, delta specs, tasks, source and test runner.
-   Before implementation, review the instruction/setup adaptation needed to use the
-   shared main workflows there. Preserve branch-specific facts and boundaries; do
-   not assume the old branch already contains the main setup or compatible APIs.
-   Keep existing working trees intact and do not merge all of `main` for transport.
-4. Resolve that adaptation before running branch-specific setup/check commands.
-   In particular, the rename is complete in 022/023/030 but not 026/040/050. Refer to
-   the main instructions through a separate checkout or Git while reviewing the
-   branch. Local private helper scripts are not a required source of authority;
-   the nonportable rename helper is called out above. Install each branch's locked
-   environment according to its own contributor documentation.
-5. Start with the stated plan check or scenario, preserve the dependency order,
-   and record the exact tested commit, commands and outcomes in the next hand-off.
-   Recheck the live PR before publishing or merging. This document grants no
-   permission to publish or to reuse an old agent session.
-
-The durable sources are the files linked above and the branch history, including
-the planning commits `0d209151` (022 group 9b), `1f3dec66` (023 group 5),
-`0eeed795` (030 group 12 planning corrections, acceptance blocked) and
-`f64324b8` (050 review fixes).
-Keep this checkpoint current when a group is reviewed, published or integrated.
+Verify later published refs with `git ls-remote origin`; compare ancestry and diffs
+against the checkpoints above before choosing the next task. Operational schedules
+and validation transcripts belong outside this product map.

@@ -1,7 +1,13 @@
-"""The Content Area and its counts (030-add-page-data, page-data; seam 4)."""
+"""Verify Content Area selection and text metrics through pure extraction."""
+
+import subprocess
+
+import pytest
 
 from openlinx.extract.content_area import ContentArea
+from tests.support.cli import PROCESS_TIMEOUT, REPO_ROOT
 from tests.support.page_data import FIXTURE_A, page_row
+from tests.support.processes import python_command
 
 
 def test_default_content_area_leaves_out_navigation() -> None:
@@ -22,6 +28,166 @@ def test_an_include_inside_another_is_read_once() -> None:
     area = ContentArea(include=("main", "article", "main"))
 
     assert page_row(html, content_area=area).word_count == 3
+
+
+_HTML_WITH_HEAD = "<html><head><title>Hello</title></head><body><p>world</p></body></html>"
+
+
+@pytest.mark.parametrize(
+    ("include", "expected"),
+    [
+        pytest.param(
+            ("title",),
+            (1, 1, 1.0, "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"),
+            id="title",
+        ),
+        pytest.param(
+            ("head",),
+            (1, 1, 1.0, "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"),
+            id="head",
+        ),
+        pytest.param(
+            ("html",),
+            (2, 2, 1.0, "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c"),
+            id="html",
+        ),
+        pytest.param(
+            ("p", "title", "title"),
+            (2, 2, 1.0, "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c"),
+            id="document-order-and-duplicates",
+        ),
+        pytest.param(
+            ("p", "title", "html", "head", "html"),
+            (2, 2, 1.0, "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c"),
+            id="outermost-roots",
+        ),
+    ],
+)
+def test_explicit_content_area_roots_can_be_outside_body(
+    include: tuple[str, ...], expected: tuple[int, int, float | None, str | None]
+) -> None:
+    row = page_row(_HTML_WITH_HEAD, content_area=ContentArea(include=include))
+
+    assert (
+        row.word_count,
+        row.sentence_count,
+        row.average_words_per_sentence,
+        row.content_hash,
+        row.title_1,
+        row.text_ratio_pct,
+    ) == (*expected, "Hello", 7.04)
+
+
+@pytest.mark.parametrize(
+    ("area", "expected"),
+    [
+        pytest.param(
+            ContentArea(),
+            (1, 1, 1.0, "486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7"),
+            id="default-body",
+        ),
+        pytest.param(
+            ContentArea(include=("title",), exclude=("head",)),
+            (0, 0, None, None),
+            id="excluded-ancestor",
+        ),
+        pytest.param(
+            ContentArea(include=("title",), exclude=("title",)),
+            (0, 0, None, None),
+            id="excluded-root",
+        ),
+        pytest.param(
+            ContentArea(include=("html",), exclude=("head",)),
+            (1, 1, 1.0, "486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7"),
+            id="excluded-head",
+        ),
+        pytest.param(
+            ContentArea(include=("html",), exclude=("html",)),
+            (0, 0, None, None),
+            id="excluded-container",
+        ),
+        pytest.param(
+            ContentArea(exclude=("body",)), (0, 0, None, None), id="excluded-default-body"
+        ),
+        pytest.param(
+            ContentArea(exclude=("html",)), (0, 0, None, None), id="excluded-default-ancestor"
+        ),
+        pytest.param(ContentArea(include=(".missing",)), (0, 0, None, None), id="no-match"),
+    ],
+)
+def test_content_area_roots_keep_exclusions_and_default_body(
+    area: ContentArea, expected: tuple[int, int, float | None, str | None]
+) -> None:
+    row = page_row(_HTML_WITH_HEAD, content_area=area)
+
+    assert (
+        row.word_count,
+        row.sentence_count,
+        row.average_words_per_sentence,
+        row.content_hash,
+        row.title_1,
+        row.text_ratio_pct,
+    ) == (*expected, "Hello", 7.04)
+
+
+@pytest.mark.parametrize(
+    ("include", "sentences", "average"),
+    [
+        pytest.param(("main", "span", "main"), 1, 2.0, id="outermost-root"),
+        pytest.param(("span",), 2, 1.0, id="sibling-roots"),
+    ],
+)
+def test_only_outermost_content_area_roots_start_blocks(
+    include: tuple[str, ...], sentences: int, average: float
+) -> None:
+    row = page_row(
+        "<main><span>Hello</span> <span>world</span></main>",
+        content_area=ContentArea(include=include, exclude=()),
+    )
+
+    assert (
+        row.word_count,
+        row.sentence_count,
+        row.average_words_per_sentence,
+        row.content_hash,
+    ) == (2, sentences, average, "64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c")
+
+
+@pytest.mark.parametrize(
+    ("include", "expected"),
+    [
+        pytest.param(
+            ("head",),
+            (1, 1, 1.0, "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"),
+            id="head",
+        ),
+        pytest.param(("script",), (0, 0, None, None), id="skipped-root"),
+    ],
+)
+def test_explicit_content_area_roots_keep_skipped_subtrees_out(
+    include: tuple[str, ...], expected: tuple[int, int, float | None, str | None]
+) -> None:
+    row = page_row(
+        "<html><head><title>Hello</title><script>extra words</script>"
+        "<style>more words</style></head><body><p>world</p></body></html>",
+        content_area=ContentArea(include=include),
+    )
+
+    assert (
+        row.word_count,
+        row.sentence_count,
+        row.average_words_per_sentence,
+        row.content_hash,
+    ) == expected
+
+
+def test_fixture_a_title_can_be_an_explicit_content_area_root() -> None:
+    row = page_row(FIXTURE_A, content_area=ContentArea(include=("title",)))
+
+    assert (row.word_count, row.content_hash) == (
+        1,
+        "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+    )
 
 
 def test_words_with_apostrophes_hyphens_and_dots() -> None:
@@ -89,6 +255,27 @@ def test_a_terminator_before_a_unicode_space_ends_a_sentence() -> None:
     row = page_row("<p>Free shipping.&nbsp;Order today!　Read the terms.</p>")
 
     assert row.sentence_count == 3
+
+
+@pytest.mark.slow
+def test_a_long_terminator_run_does_not_stall_page_preparation() -> None:
+    # A failed boundary match must not restart at every terminator. The existing process
+    # watchdog bounds a stall; this is not a comparison of machine-dependent timings.
+    command = python_command(
+        "-c",
+        "from tests.support.page_data import page_row\n"
+        "row = page_row('<p>' + '.' * 100_000 + 'x</p>')\n"
+        "assert (row.word_count, row.sentence_count, row.average_words_per_sentence) "
+        "== (1, 1, 1.0)",
+    )
+    subprocess.run(
+        command.argv,
+        cwd=REPO_ROOT,
+        env=command.env,
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=True,
+    )
 
 
 def test_text_ratio_of_a_small_document() -> None:

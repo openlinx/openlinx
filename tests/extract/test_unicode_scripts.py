@@ -1,4 +1,4 @@
-"""The generated character tables against this interpreter's Unicode (030-add-page-data D8)."""
+"""Verify generated character tables against the interpreter's Unicode data."""
 
 import sys
 import unicodedata

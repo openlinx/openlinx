@@ -1,5 +1,4 @@
-"""The writer's throughput check runs on the schema a Crawl declares (017-speed-up-crawl-writer
-D11)."""
+"""Verify the writer throughput check uses the schema declared by a Crawl."""
 
 import json
 import subprocess

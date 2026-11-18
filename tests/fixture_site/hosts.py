@@ -1,4 +1,4 @@
-"""The DNS resolver hook: fixture host names for multi-host Crawls (020-add-crawl-core D15)."""
+"""Resolve fixture host names to local listeners for multi-host Crawls."""
 
 import socket
 from collections.abc import Callable, Mapping
@@ -68,7 +68,7 @@ StartHosts = Callable[[Site, Site], FixtureHosts]
 
 @dataclass(frozen=True)
 class NamedHosts:
-    """A site per host name, such as www.site.test apart from site.test (022 design D9)."""
+    """A site per host name, such as www.site.test apart from site.test."""
 
     servers: Mapping[str, ServerHandle]
     resolver: FixtureResolver

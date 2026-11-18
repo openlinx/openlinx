@@ -1,4 +1,4 @@
-"""Page preparation, one parse of a response, which the parse pool imports (020-add-crawl-core D9).
+"""Prepare each response with one parse behind the PageExecutor boundary.
 
 preparation: Extractor, extractor, PageInput, PageSettings, PreparedPage, PageExecutor,
 InProcessExecutor, prepare_page, is_html_type, response_links, response_directives.

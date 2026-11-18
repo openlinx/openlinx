@@ -1,4 +1,4 @@
-"""Text of the HTML, as one model for every column (030-add-page-data D7)."""
+"""Use one HTML text model for all extracted text columns."""
 
 import re
 from collections.abc import Collection, Iterable, Iterator

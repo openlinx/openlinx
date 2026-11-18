@@ -1,4 +1,4 @@
-"""Every unit's outcome, and the fallback of a URL whose unit failed (020-add-crawl-core D2)."""
+"""Collect committed URL outcomes and record fallbacks for failed units."""
 
 import asyncio
 from contextlib import suppress
@@ -22,7 +22,7 @@ RECORD_FAILURE_LIMIT = 100
 
 
 class RecordingFailedError(Exception):
-    """Recording kept failing for one URL after another (design D16)."""
+    """Recording kept failing for one URL after another."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +36,7 @@ class Recorded:
 
 
 class Outcomes:
-    """Every submitted unit's Future until its outcome has reached the engine (design D2)."""
+    """Every submitted unit's Future until its outcome has reached the engine."""
 
     def __init__(
         self, writer: CrawlWriter, warnings: WarningLog, stop: StopSignal, counters: UrlCounters
@@ -78,7 +78,7 @@ class Outcomes:
             self._warnings.count(failure, result.url)
         if error is None:
             self._pending_urls.discard(result.url_id)
-            # At the commit, as the file then shows it (design D10).
+            # At the commit, as the file then shows it.
             self._counters.add(done.result().tally)
             self._failed_in_a_row = 0
             return
@@ -112,7 +112,7 @@ class Outcomes:
         try:
             recording = await (await self._writer.submit_async(unit))
             self._counters.add(recording.tally)
-        # A fallback that fails is the file's failure, not the URL's (design D2).
+        # A fallback that fails is the file's failure, not the URL's (020-add-crawl-core D2).
         except Exception as failure:
             self._stop.write_failed(failure)
 

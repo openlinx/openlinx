@@ -34,9 +34,10 @@ OpenLinx is an open-source, agent-first SEO crawler, run as the `linx` command: 
 
 - **Fix the cause, never the symptom.** When there is a bug or a red check, find out why. Don't get to green with a retry, a sleep, a skip, a looser assert or a `# type: ignore`. If a test is wrong, fix the premise it rests on. Where it is cheap, also close the class of bug with a guard, a type or a check.
 - **A guard test that passes at once is proven by a mutation.** If a guard test never went red, break the code on purpose and show the test fails. The commit says which mutation it used.
-- **Comments:** only for a non-obvious *why*. No docstring that repeats a name and its types. Every module starts with a one-line docstring that names the design decision it implements.
+- **Comments and docstrings:** each module starts with a docstring whose first line clearly explains its responsibility or design decision. Comments explain a non-obvious *why*; function and method docstrings add what names and types cannot. Keep an ADR or design-section citation only when it supports a concrete constraint or tradeoff stated in the text, understandable without opening the target. Provenance-only change numbers belong in Git. Keep change references that identify which planned change owns an empty package.
 - **[ADR-0006](docs/adr/0006-functional-core-frozen-records-protocols.md):** logic in pure functions. Data in frozen records, with `slots=True` for records made per URL or Page and `kw_only=True` above three fields. Dependencies passed in, typed by a Protocol. pydantic only at the boundary.
 - **Errors:** an error a user sees is an `OpenLinxError` with a code from `openlinx.output.codes`. A broken internal contract raises `TypeError` or `RuntimeError`.
+- **Settings precedence:** explicit input wins over implicit or default values. Preserve whether an input was supplied, even when it equals the default; follow [Settings](docs/architecture.md#settings) when resolving conflicts.
 - **Tests:** only the boundary doubles listed in docs/testing.md, never a mock of our own modules. Expected values are literals taken from the spec. Use `127.0.0.1`, never `localhost`.
 - **Store:** a unit that runs once per URL or Page executes a statement built at import. A unit may run twice, so it has no effect outside its connection.
 - **Docs in the same slice:** new codes, settings, options and Commands are documented where their area is.
@@ -61,9 +62,9 @@ Packages under `src/openlinx/`:
 - `output/`: formats, the code registry and the Reporter.
 - `workspace/`: Workspaces and settings.
 
-`extract/`, `rules/`, `query/`, `report/`, `skill/` and `mcp/` stay empty until the change named in their docstring.
+An empty package stays a placeholder until the planned change named in its docstring.
 
-**Reading a design citation.** A docstring may say "020-add-crawl-core D5", "(020 D5)" or "design D5 of 020-add-crawl-core". Each points to the heading `### D5.` in the change's `design.md`: for an archived change, such as this one, `openspec/changes/archive/2026-10-29-020-add-crawl-core/design.md`; for one in progress, `openspec/changes/<id>/design.md`.
+**Reading a design citation.** When a citation supports the constraint or tradeoff explained beside it, `020-add-crawl-core D5` (or `020 D5`) points to `### D5.` in that change’s `design.md`. Archived designs live under `openspec/changes/archive/<date>-<id>/design.md`; active ones under `openspec/changes/<id>/design.md`. The citation supplements the explanation; it does not replace it.
 
 ## Shared development instructions
 

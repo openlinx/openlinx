@@ -1,4 +1,4 @@
-"""The fake Fetcher of the timing scenarios (020-add-crawl-core D15, 022-add-fetch-policy D9)."""
+"""Verify the timing-test Fetcher double's scripted outcomes."""
 
 import asyncio
 
@@ -14,7 +14,7 @@ def _answers(fetcher: FakeFetcher, path: str, times: int) -> list[FetchResult]:
         url = NormalizedUrl(f"http://site.test{path}")
         answers = []
         for _ in range(times):
-            answer = await fetcher.fetch(Request(url))
+            answer = await fetcher.fetch(Request(url, is_internal=True))
             assert isinstance(answer, FetchResult)
             answers.append(answer)
         return answers

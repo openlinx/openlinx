@@ -1,4 +1,4 @@
-"""Choosing a crawl file's journal mode, with no system call (design D3 of 015-add-crawl-store)."""
+"""Choose a crawl file's journal mode from its path without system calls."""
 
 from dataclasses import dataclass
 from pathlib import PurePath
@@ -36,7 +36,7 @@ def choose_journal_mode(setting: JournalSetting, location: PurePath) -> JournalC
 def _is_unc(location: PurePath) -> bool:
     path = str(location).replace("/", "\\")
     # The extended-length and device prefixes name a share only as \\?\UNC\; \\?\C:\ is local,
-    # and a false UNC answer would cost a local user WAL (design D3).
+    # and a false UNC answer would cost a local user WAL.
     if path.startswith(("\\\\?\\", "\\\\.\\")):
         return path[4:].upper().startswith("UNC\\")
     return path.startswith("\\\\")

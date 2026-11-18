@@ -1,4 +1,4 @@
-"""The warning log: each warning kept once per what its code names (020-add-crawl-core D10)."""
+"""Retain each Crawl warning according to its code's deduplication policy."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -17,7 +17,7 @@ _ONCE_PER: Mapping[str, str] = {
 
 @dataclass(frozen=True, slots=True)
 class _Pauses:
-    """Where network_paused is kept, how many pauses and how many seconds in all (D10)."""
+    """Where network_paused is kept, how many pauses and how many seconds in all."""
 
     index: int
     count: int
@@ -29,7 +29,7 @@ class WarningLog:
 
     A continuing run's log starts from the warnings its earlier runs stored, without writing
     them again: a warning kept once stays once over the Crawl's life, and a counted one adds
-    up (design D10)."""
+    up (020-add-crawl-core D10)."""
 
     def __init__(self, reporter: Reporter, earlier: Sequence[Diagnostic] = ()) -> None:
         self._reporter = reporter

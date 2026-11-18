@@ -1,9 +1,17 @@
-"""The [crawl] settings table (020-add-crawl-core D11)."""
+"""Define the crawl settings table and its validation bounds."""
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from openlinx.crawl.setting_rules import as_rate, as_robots_token, as_timeout, as_user_agent
+from openlinx.crawl.setting_rules import (
+    as_auth,
+    as_headers,
+    as_rate,
+    as_robots_token,
+    as_timeout,
+    as_user_agent,
+)
 from openlinx.naming import DEFAULT_ROBOTS_TOKEN
+from openlinx.proxy_urls import proxy_url
 from openlinx.store.records import ScopeKind
 
 
@@ -57,6 +65,25 @@ class CrawlSettings(BaseModel):
         description="The User-Agent request header of every request, robots.txt's included: "
         "visible ASCII characters, spaces and tabs only. The tool's name, version and project "
         "URL when unset.",
+    )
+    header: list[str] = Field(
+        [],
+        description="Custom Name: Value headers for Internal URLs and their robots.txt only; "
+        "repeat entries to send several headers. Sensitive values are hidden in records.",
+        json_schema_extra={"secret": "header"},
+    )
+    auth: str | None = Field(
+        None,
+        description="Preemptive Basic Auth user:password for Internal URLs and their robots.txt "
+        "only; exact UTF-8 without trimming or normalization. Empty disables authentication.",
+        json_schema_extra={"secret": "whole"},
+    )
+    proxy: str | None = Field(
+        None,
+        description="The HTTP proxy URL for every request, robots.txt's included; a nonempty "
+        "value overrides proxy environment variables. A schemeless URL uses HTTP; empty uses "
+        "the environment. Its password is hidden in records.",
+        json_schema_extra={"secret": "proxy"},
     )
     timeout: float = Field(
         20,
@@ -121,7 +148,23 @@ class CrawlSettings(BaseModel):
     def _is_a_user_agent(cls, user_agent: str | None) -> str | None:
         return None if user_agent is None else as_user_agent(user_agent)
 
+    @field_validator("auth")
+    @classmethod
+    def _is_auth(cls, auth: str | None) -> str | None:
+        return None if auth is None or auth == "" else as_auth(auth)
+
+    @field_validator("proxy")
+    @classmethod
+    def _is_a_proxy(cls, proxy: str | None) -> str | None:
+        return proxy_url(proxy)
+
     @field_validator("robots_user_agent")
     @classmethod
     def _is_a_robots_token(cls, token: str) -> str:
         return as_robots_token(token)
+
+    @field_validator("header")
+    @classmethod
+    def _are_headers(cls, headers: list[str]) -> list[str]:
+        as_headers(headers)
+        return headers

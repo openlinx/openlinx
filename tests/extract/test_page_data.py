@@ -1,4 +1,4 @@
-"""The columns the Page extractor derives from the HTML (030-add-page-data, page-data; seam 4)."""
+"""Verify the Page extractor's HTML-derived columns through pure logic."""
 
 import sys
 from dataclasses import fields
@@ -209,11 +209,18 @@ def test_a_full_page_fills_every_html_column() -> None:
         ),
     )
     later = {column.name for column in pages.c if (column.comment or "").startswith(_LATER)}
+    # This fixture prepares HTML without fetching, so response sizes are outside this guard.
+    response_size_columns = {"size_bytes", "transferred_bytes", "content_encoding"}
 
     assert [
         field.name
         for field in fields(PageRow)
-        if field.default is None and field.name not in later and getattr(row, field.name) is None
+        if (
+            field.default is None
+            and field.name not in later
+            and field.name not in response_size_columns
+            and getattr(row, field.name) is None
+        )
     ] == []
 
 

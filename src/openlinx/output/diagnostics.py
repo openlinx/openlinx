@@ -1,4 +1,4 @@
-"""Diagnostics, and errors bound to their code (design D5 of 010-add-workspace-and-cli-contract)."""
+"""Bind diagnostics and user-facing errors to registered codes."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field

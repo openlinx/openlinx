@@ -1,4 +1,4 @@
-"""The h1 and h2 headings of a Page's HTML (030-add-page-data D7)."""
+"""Extract h1 and h2 headings from a Page's HTML."""
 
 from selectolax.lexbor import LexborHTMLParser
 

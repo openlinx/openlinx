@@ -1,4 +1,4 @@
-"""The Crawl Service: a foreground Spider-mode Crawl (020-add-crawl-core D11, D15)."""
+"""Plan and run foreground Spider-mode Crawls through injected dependencies."""
 
 import asyncio
 import os
@@ -29,6 +29,7 @@ from openlinx.crawl.fetch.fetcher import (
 from openlinx.crawl.fetch.proxy import SECRET_KEYS, ProxyVariables
 from openlinx.crawl.pages.preparation import PageExecutor
 from openlinx.crawl.scope import ScopeDecision, ScopeRules, scope_rules
+from openlinx.crawl.setting_rules import as_headers
 from openlinx.crawl.settings import CrawlSettings
 from openlinx.crawl.urls import (
     InvalidUrl,
@@ -40,9 +41,12 @@ from openlinx.crawl.urls import (
     url_path,
 )
 from openlinx.output.codes import (
+    CRAWL_FILE_INVALID,
     INVALID_PATTERN,
     INVALID_URL,
+    INVALID_VALUE,
     OPTION_CONFLICT,
+    SECRETS_REQUIRED,
     SEED_OUT_OF_SCOPE,
     SUBFOLDER_IS_ROOT,
 )
@@ -50,6 +54,11 @@ from openlinx.output.diagnostics import Diagnostic, OpenLinxError
 from openlinx.output.events import timestamp_text
 from openlinx.output.reporter import Reporter
 from openlinx.services.crawl_failures import NETWORK_FAILURES, interrupted, write_failed
+from openlinx.services.crawl_secrets import (
+    check_fresh_proxy,
+    check_recorded_proxy,
+    restored_headers,
+)
 from openlinx.services.crawls import create_crawl
 from openlinx.services.hooks import default_page_executor
 from openlinx.services.interrupts import interrupts_stop
@@ -79,7 +88,7 @@ from openlinx.store.urls import url_counts
 from openlinx.store.writer import CrawlWriter
 from openlinx.workspace.discovery import resolve_workspace
 from openlinx.workspace.settings import Settings, load_settings, refused_given_value
-from openlinx.workspace.tables import SettingsTables
+from openlinx.workspace.tables import SecretPolicy, SettingsTables
 
 _SEED_PROBLEMS: Mapping[InvalidUrlReason, str] = {
     "malformed": "is not a valid URL",
@@ -96,11 +105,11 @@ class CrawlRequest:
     home: Path
     workspace: Path | None
     command_argv: Sequence[str]
-    # Settings given as flags, by table: they override the settings file (010 D2).
+    # Settings given as flags, by table: they override the settings file.
     flags: Mapping[str, Mapping[str, Any]]
     # The command line's tokens that take a secret, such as --token, which the file redacts:
     # no default, so a caller that forgot them never records a secret in the clear.
-    secret_flags: frozenset[str]
+    secret_flags: Mapping[str, SecretPolicy]
     # --subdomains: the same as the scope "subdomains", which conflicts with another one.
     subdomains: bool = False
 
@@ -113,7 +122,7 @@ class CrawlPlan:
     strip_params: re.Pattern[str] | None
     fetch_policy: FetchPolicy
     new_crawl: NewCrawl
-    # Every table as loaded, from which default_hooks takes the configs of 030's hooks.
+    # Every table as loaded, from which default_hooks takes the built-in hook configs.
     loaded: Settings
 
 
@@ -127,12 +136,21 @@ KEEP = _Override.KEEP
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CrawlOverrides:
-    """The settings a continue may change, as 060 D8 lets a resume change them; 060 checks
-    that a URL limit is only raised (design D20)."""
+    """Continue settings and fresh credentials that recording cannot retain.
+
+    KEEP preserves recorded values. Enabled auth and masked proxy credentials need fresh
+    input. None or empty auth disables it, and None or empty proxy selects current
+    environment handling. Header entries restore only recorded sensitive name/occurrence slots;
+    they cannot override harmless headers. The planned resume Command also requires that the
+    URL limit can only be raised (060 D8).
+    """
 
     max_urls: int | Literal[_Override.KEEP] | None = KEEP
     concurrency: int | Literal[_Override.KEEP] = KEEP
     rate: float | Literal[_Override.KEEP] | None = KEEP
+    auth: str | Literal[_Override.KEEP] | None = KEEP
+    header: tuple[str, ...] | Literal[_Override.KEEP] = KEEP
+    proxy: str | Literal[_Override.KEEP] | None = KEEP
 
     def given(self) -> dict[str, Any]:
         values = {field.name: getattr(self, field.name) for field in fields(self)}
@@ -141,7 +159,7 @@ class CrawlOverrides:
 
 @dataclass(frozen=True, kw_only=True)
 class CrawlResult:
-    """Built at the end from the crawl file, never from counters kept while it ran (D10)."""
+    """Built at the end from the crawl file, never from counters kept while it ran."""
 
     crawl_id: str
     summary: CrawlSummary
@@ -187,7 +205,7 @@ class CrawlResult:
 
 
 def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> CrawlPlan:
-    """Validation and config resolution, before anything is created (design D11); `tables`
+    """Validation and config resolution, before anything is created; `tables`
     are the built-in ones unless given."""
     # The call's own input first: the Seed, stripped once the settings are read, and the
     # flags that conflict.
@@ -198,6 +216,12 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         tables = default_tables()
     settings = load_settings(workspace, tables, flags)
     crawl_settings = settings.table(CrawlSettings)
+    parsed_headers = as_headers(crawl_settings.header)
+    supplied = flags.get("crawl", {})
+    custom_user_agent = any(name.lower() == "user-agent" for name, _ in parsed_headers) and (
+        crawl_settings.user_agent is None
+        or ("header" in supplied and supplied.get("user_agent") is None)
+    )
     strip_params = strip_params_pattern(crawl_settings.strip_params)
     seed = _seed(request.seed, strip_params)
     scope = scope_rules(
@@ -220,10 +244,16 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         seeds=[request.seed],
         command_argv=request.command_argv,
         cwd=request.cwd,
-        # Every registered table, resolved (design D11).
-        config={**settings.root.model_dump(mode="json"), **_environment(proxies)},
+        # Every registered table, resolved.
+        config={
+            **settings.root.model_dump(mode="json"),
+            **_environment(proxies),
+            "request_policy": {"custom_user_agent": custom_user_agent},
+        },
         scope=scope.to_json(),
-        secret_names=SecretNames(request.secret_flags, tables.secret_settings() | _PROXY_SECRETS),
+        secret_names=SecretNames(
+            request.secret_flags, {**tables.secret_settings(), **_PROXY_SECRETS}
+        ),
         journal_setting=settings.table(StoreSettings).journal_mode,
         settings_file=settings_file,
         section_crawl=scope.section_crawl,
@@ -233,21 +263,34 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
         settings=crawl_settings,
         scope=scope,
         strip_params=strip_params,
-        fetch_policy=_fetch_policy(crawl_settings, proxies),
+        fetch_policy=_fetch_policy(crawl_settings, proxies, custom_user_agent=custom_user_agent),
         new_crawl=new_crawl,
         loaded=settings,
     )
 
 
-# A proxy URL may hold a password; 015's redaction keeps its user and host (design D8).
-_PROXY_SECRETS = frozenset(f"environment.{key}" for key in SECRET_KEYS)
+# A proxy URL may hold a password; redaction keeps its user and host for diagnostics.
+_PROXY_SECRETS: Mapping[str, SecretPolicy] = {f"environment.{key}": True for key in SECRET_KEYS}
 
 
-def _fetch_policy(settings: CrawlSettings, proxies: ProxyVariables) -> FetchPolicy:
+def _fetch_policy(
+    settings: CrawlSettings, proxies: ProxyVariables, *, custom_user_agent: bool
+) -> FetchPolicy:
+    headers = as_headers(settings.header)
+    if settings.auth and any(name.lower() == "authorization" for name, _ in headers):
+        raise OpenLinxError(
+            INVALID_VALUE,
+            "Basic Auth conflicts with a custom Authorization header.",
+            hint="Use either crawl.auth or an Authorization entry in crawl.header.",
+        )
     return FetchPolicy(
         user_agent=settings.user_agent or DEFAULT_USER_AGENT,
         proxies=proxies,
         timeout_seconds=settings.timeout,
+        headers=headers,
+        custom_user_agent=custom_user_agent,
+        auth=settings.auth,
+        proxy=settings.proxy,
     )
 
 
@@ -290,8 +333,8 @@ def start_crawl(
     stop: StopSignal | None = None,
 ) -> CrawlResult:
     """`pages` builds the page executor instead of `default_page_executor`, `fetchers` opens
-    the Fetcher, and `stop` is the stop flag that `060`'s control rows set: one per run, since
-    it binds the loop of the run that first sets or awaits it (design D9, D10, D15)."""
+    the Fetcher, and the caller supplies one `stop` flag per run because it binds the loop
+    of the run that first sets or awaits it (020-add-crawl-core D15)."""
     log = WarningLog(reporter)
     planned = _Planned(
         seed=plan.seed,
@@ -328,25 +371,43 @@ def continue_crawl(
     fetchers: FetcherFactory = aiohttp_fetcher,
     stop: StopSignal | None = None,
 ) -> CrawlResult:
-    """Continues a stopped or failed Crawl from its file alone, which 060's resume calls; the
-    keyword arguments are start_crawl's, a fresh stop flag for each run included (design D20)."""
+    """Continue a stopped or failed Crawl with recorded settings and fresh secret inputs.
+
+    The keyword arguments are start_crawl's, including a fresh stop flag for each run.
+    """
     recorded = read_recorded(crawl_file.path)
+    custom_user_agent = _recorded_user_agent(recorded.config, crawl_file.path)
     # Before anything is written; the continue's unit checks it again as it writes.
     check_transition(recorded.state, "running", None)
     given = overrides.given()
+    if "proxy" not in given:
+        check_recorded_proxy(recorded.config["crawl"].get("proxy"), crawl_file.path)
+    if recorded.config["crawl"].get("auth") is not None and "auth" not in given:
+        raise OpenLinxError(
+            SECRETS_REQUIRED,
+            "Continuing this Crawl requires fresh Basic Auth credentials.",
+            hint="Supply fresh credentials through --auth or crawl.auth.",
+        )
+    headers = restored_headers(recorded.config["crawl"].get("header", []), given.pop("header", ()))
     try:
-        settings = CrawlSettings.model_validate({**recorded.config["crawl"], **given})
+        settings = CrawlSettings.model_validate(
+            {**recorded.config["crawl"], **given, "header": headers}
+        )
     # Only an override can be refused: the recorded values passed when the Crawl started.
     except ValidationError as error:
         refused = refused_given_value(error, {"crawl": given}, table="crawl")
         if refused is None:
             raise
         raise refused from error
+    if "proxy" in given:
+        check_fresh_proxy(settings.proxy)
     strip_params = strip_params_pattern(settings.strip_params)
     # The proxy variables of the continue's own environment, as a start reads them, recorded in
     # place of the start's.
     proxies = ProxyVariables.of(os.environ)
     environment = _environment(proxies)
+    runtime = {"crawl": settings.model_dump(mode="json"), **environment}
+    secret_names = SecretNames(settings={**default_tables().secret_settings(), **_PROXY_SECRETS})
     planned = _Planned(
         seed=_seed(recorded.seeds[0], strip_params),
         settings=settings,
@@ -354,15 +415,13 @@ def continue_crawl(
         strip_params=strip_params,
         crawl_mode=recorded.crawl_mode,
         seed_count=len(recorded.seeds),
-        fetch_policy=_fetch_policy(settings, proxies),
-        # The recorded config holds no secret; the continue's own proxy variables may.
-        secrets=secret_values(environment, _PROXY_SECRETS),
+        fetch_policy=_fetch_policy(settings, proxies, custom_user_agent=custom_user_agent),
+        secrets=secret_values(runtime, secret_names.settings),
     )
     started = {table: values for table, values in recorded.config.items() if table != "environment"}
     config = {
         **started,
-        "crawl": settings.model_dump(mode="json"),
-        **redact((), environment, SecretNames(settings=_PROXY_SECRETS)).config,
+        **redact((), runtime, secret_names).config,
     }
     crawl = _Crawl(
         plan=planned,
@@ -376,6 +435,29 @@ def continue_crawl(
         stop=stop or StopSignal(),
     )
     return _crawled(crawl)
+
+
+def _recorded_user_agent(config: Mapping[str, Any], path: Path) -> bool:
+    try:
+        policy = config.get("request_policy")
+        if not isinstance(policy, dict) or type(policy.get("custom_user_agent")) is not bool:
+            raise ValueError("request_policy needs a boolean custom_user_agent")
+        custom: bool = policy["custom_user_agent"]
+        if custom:
+            crawl = config.get("crawl")
+            if not isinstance(crawl, dict):
+                raise ValueError("custom_user_agent needs recorded crawl settings")
+            settings = CrawlSettings.model_validate({"header": crawl.get("header", [])})
+            if sum(name.lower() == "user-agent" for name, _ in as_headers(settings.header)) != 1:
+                raise ValueError("custom_user_agent needs one valid custom User-Agent")
+        return custom
+    except ValueError as error:
+        raise OpenLinxError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} has invalid request policy metadata.",
+            hint="Crawl again with this tool to record its request policy.",
+            details={"file": str(path)},
+        ) from error
 
 
 def _crawled(crawl: "_Crawl") -> CrawlResult:
@@ -429,8 +511,7 @@ class _Crawl:
 
     plan: _Planned
     crawl_file: CrawlFile
-    # The crawl.config a continue runs with, which the run writes and flushes before it crawls
-    # (design D20).
+    # The crawl.config a continue runs with, which the run writes and flushes before it crawls.
     continuing: Mapping[str, Any] | None
     clock: Clock
     log: WarningLog
@@ -479,8 +560,8 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
             plan = crawl.plan
             return replace(ended, failure=failure(plan.seed, plan.settings, crawl.crawl_file))
         else:
-            # Before the end is written, for completed and stopped alike: 040 reads either
-            # state as "its Issues are materialised".
+            # Run passes before writing completed or stopped so either state guarantees that
+            # post-crawl results have been materialised.
             for crawl_pass in crawl.hooks.passes:
                 await crawl_pass.run(PassContext(context.writer, crawl.clock))
             state: CrawlState = "completed" if reason is None else "stopped"
@@ -492,7 +573,7 @@ async def _crawl_and_end(crawl: _Crawl) -> _End:
 
 async def _failed_end(crawl: _Crawl, error: OpenLinxError) -> _End:
     """Recorded once more through a fresh writer, since the Crawl's own one may have ended; if
-    that fails too, the file stays running (design D16)."""
+    that fails too, the file stays running (020-add-crawl-core D16)."""
     try:
         with crawl.clock.off_loop():
             writer = await asyncio.to_thread(CrawlWriter, crawl.crawl_file.path, crawl.clock)
@@ -520,7 +601,7 @@ async def _end(
 
 @asynccontextmanager
 async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
-    """The one place a Crawl's context is built, and its resources closed (design D15)."""
+    """The one place a Crawl's context is built, and its resources closed."""
     plan, crawl_file, clock = crawl.plan, crawl.crawl_file, crawl.clock
     # Built before crawl_started reports its workers: nothing spawns before its start.
     executor = crawl.pages()
@@ -535,7 +616,10 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
         )
         # Opening and closing the writer block, so they run off the event loop.
         with clock.off_loop():
-            writer = await asyncio.to_thread(CrawlWriter, crawl_file.path, clock)
+            # The run can claim an origin per URL; its temporary SQLite store may spill to disk.
+            writer = await asyncio.to_thread(
+                CrawlWriter, crawl_file.path, clock, disk_temp_store=True
+            )
         try:
             # The engine drives the writer, so its commits keep the Crawl's clock.
             async with (
@@ -567,12 +651,12 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
             raise
         await writer.close_async()
     finally:
-        # 026's pool shuts its workers down here, however the Crawl ended.
+        # A process-backed executor must shut its workers down here, however the Crawl ended.
         await executor.close()
 
 
 def _with_subdomains(flags: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
-    """--subdomains has no setting of its own: it is resolved into scope (design D11)."""
+    """--subdomains has no setting of its own: it is resolved into scope."""
     crawl_flags = dict(flags.get("crawl", {}))
     scope = crawl_flags.get("scope", "subdomains")
     if scope != "subdomains":
@@ -626,11 +710,11 @@ def _subfolder_is_root(seed: NormalizedUrl) -> OpenLinxError:
 def _invalid_seed(text: str, reason: InvalidUrlReason) -> OpenLinxError:
     details = {"reason": reason}
     if reason == "userinfo":
-        # Never echoed: the user name and password would reach logs (design D13).
+        # Never echoed: the user name and password would reach logs.
         return OpenLinxError(
             INVALID_URL,
             "The Seed holds a user name or password, which a crawled URL must not hold.",
-            hint="Give the URL without them; --auth, planned for v0.2, will send credentials.",
+            hint="Give the URL without them; use --auth user:password to send credentials.",
             details=details,
         )
     return OpenLinxError(

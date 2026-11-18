@@ -36,6 +36,9 @@ Every crawl setting is an option of `linx crawl` and a key of the `[crawl]` tabl
 | `--retries <n>` | `retries` | `2` | How many times, 0 to 10, a request that timed out, could not connect or got a 429 or 5xx status is tried again (see [Timeouts and retries](#timeouts-and-retries)). |
 | `--max-redirects <n>` | `max_redirects` | `10` | The most consecutive redirects followed from the first URL of a Redirect Chain, 0 to 50 (see [The hop limit](#the-hop-limit)). |
 | `--user-agent <string>` | `user_agent` | `OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)` | The `User-Agent` header of every request, robots.txt's included (see [The User-Agent header](#the-user-agent-header)). |
+| `--header "Name: Value"` | `header` | `[]` | A repeatable custom header for Internal URLs and their robots.txt; sensitive values are hidden in records (see [Custom request headers](#custom-request-headers)). |
+| `--auth "user:password"` | `auth` | none | Preemptive Basic Auth for Internal URLs and their robots.txt; the whole value is hidden in records (see [Basic authentication](#basic-authentication)). |
+| `--proxy <url>` | `proxy` | none | An HTTP proxy for every request, robots.txt's included; a nonempty value overrides proxy variables, while empty uses them (see [Explicit proxy](#explicit-proxy)). |
 | `--robots-user-agent <token>` | `robots_user_agent` | `openlinx` | The token that selects robots.txt groups and crawler-prefixed `X-Robots-Tag` values (see [The robots user-agent token](#the-robots-user-agent-token)). |
 
 `--workspace` and `--format` are the global flags of every Command.
@@ -148,7 +151,7 @@ When the Crawl ends, the Command prints one JSON object on stdout. Its counts co
 | 70 | a bug in the tool ended the Crawl: no result is printed, and the crawl file stays `running` | `internal_error` |
 | 130 | the Crawl was stopped by an interrupt (see [Stopping a Crawl](#stopping-a-crawl)) | `interrupted` |
 
-A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Credentials for a site will be an option of their own (`--auth`, planned for v0.2).
+A Seed with a user name or password is refused, and the error never repeats it: give the URL without them. Supply credentials separately with [`--auth`](#basic-authentication).
 
 ### How a Crawl fails
 
@@ -204,15 +207,64 @@ The `urls` table is the queue, and nothing else is: a URL leaves `queued` only i
 
 ### Continuing a Crawl
 
-The Crawl Service continues a `stopped` or `failed` Crawl from its crawl file alone; `060`'s `linx resume` calls it, and adds `interrupted` Crawls. A continue:
+The Crawl Service continues a `stopped` or `failed` Crawl using its recorded settings and
+fresh secret inputs. The `linx resume` Command, including support for `interrupted` Crawls,
+is planned in `060` and is not implemented yet. A continue:
 
 1. builds the Crawl from the file: the `[crawl]` settings from `crawl.config`, the Scope from `crawl.scope` and the Seed from `seeds`, none of them decided again
 2. in one unit, sets `crawl.state` back to `running` with `stop_reason` NULL, writes the settings it runs with into `crawl.config`, and queues again every `error` URL and every URL skipped as `robots_unreachable`, since those outcomes are usually transient
 3. runs as a new Crawl would: it requests only `queued` URLs, so no URL fetched before is requested again, and it runs the post-crawl passes again when it ends
 
-Of the settings on this page, a continue may change the URL limit, to a higher one or none, `--concurrency` and `--rate`, as `060`'s resume options allow. The URL limit counts over the Crawl's whole life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see [Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as `seed_unreachable` again.
+Of the settings on this page, a continue may change the URL limit, to a higher one or none,
+concurrency and rate through `CrawlOverrides`. The URL limit counts over the Crawl's whole
+life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see
+[Warnings](#warnings)). A Seed still down when a failed Crawl is continued fails it as
+`seed_unreachable` again.
 
-A continue fetches through the proxy variables of its own process, not the start's, and records them in `crawl.config`'s `environment` table in place of the start's, redacted the same way (see [Proxy variables](#proxy-variables)).
+A Crawl with enabled Basic Auth records `***`, so a continue needs fresh credentials.
+The service accepts them through `CrawlOverrides.auth`; omitting that input refuses
+the continue as `secrets_required` (exit 2), with a hint naming `--auth` or `crawl.auth`,
+before opening a writer or network connection. An explicit empty string or `None`
+disables auth instead. Disabled auth records `null` and needs no fresh value on a
+later continue. Fresh credentials are masked in diagnostics and recorded as `***`
+again, so each continue with enabled auth needs fresh input. The service retains
+stored non-secret settings without reloading the current Workspace configuration.
+
+`CrawlOverrides.header` accepts a tuple of fresh `Name: Value` entries for recorded
+sensitive headers. It restores each case-insensitive name's occurrences in order;
+fresh name case is used only for matching. Recorded name case and positions stay
+unchanged, and harmless entries keep their exact stored bytes. KEEP or an empty tuple
+supplies no fresh values. Every recorded sensitive occurrence needs a fresh entry;
+otherwise the service refuses as `secrets_required` (exit 2), with a `--header` hint,
+before writer or network access.
+
+This input cannot replace the whole header list: harmless entries, unknown sensitive
+names and extra occurrences are refused as `invalid_value` (exit 2), with
+`details.key = "crawl.header"`. Malformed entries and a value that trims to `***` are
+refused the same way, without quoting the input. That marker is reserved only for
+fresh-secret restoration; starting a Crawl keeps the normal header rules. An explicit
+empty sensitive value is valid and sends an empty header. Fresh values are masked in
+diagnostics and recorded again as `Name: ***`. Restoring secrets preserves the recorded
+Internal User-Agent winner, global dedicated User-Agent and literal Accept-Encoding
+entries, and revalidates the auth/Authorization conflict before opening resources.
+
+A continue keeps a recorded explicit proxy without a password when the caller omits
+`CrawlOverrides.proxy`. If the recorded proxy is masked, omitting the input produces
+`secrets_required` (exit 2) with a hint naming `--proxy` and `crawl.proxy`. The caller
+can supply a fresh proxy URL through `CrawlOverrides.proxy`. The service masks its
+password again in the recorded config and in diagnostics. It rejects redaction
+markers, including percent-encoded password markers, and invalid proxy addresses such
+as a missing host, an invalid port or a backslash in the authority as `invalid_value` (exit 2,
+`details.key = "crawl.proxy"`). These checks run before the service opens a writer
+or network connection. A damaged retained proxy is reported as `crawl_file_invalid`
+(exit 6, `details.file`). Supply a fresh override to replace it. An explicit empty
+string or `None` replaces the recorded proxy with environment handling, including
+`NO_PROXY`.
+
+With no explicit proxy, a continue fetches through the proxy variables of its own
+process, not the start's. It records the current variables in `crawl.config`'s
+`environment` table in place of the start's, redacted the same way
+(see [Proxy variables](#proxy-variables)).
 
 ### When one URL fails
 
@@ -223,7 +275,7 @@ One URL never stops the Crawl: what goes wrong with it is recorded on its row, a
 | The request gets no HTTP response | `fetch_state` = `error`, `status_code` NULL, and a `fetch_error` code with its detail in `fetch_error_message`: `dns_error` (the host name does not resolve, or cannot be looked up, such as `a..b.test`), `connection_refused` (nothing listens on the port), `invalid_response` (the answer is not HTTP), `tls_error` (the TLS handshake failed, such as a self-signed or expired certificate), `timeout` (no complete response within `--timeout`), `connection_error` (any other failure, a connection reset in the middle of the body included), `watchdog` (the request had not ended when the watchdog cancelled it, see [Backstops](#backstops)). The last attempt's, after the retries (see [Timeouts and retries](#timeouts-and-retries)). |
 | The body is in a coding it does not decode as, such as a gzip label on plain bytes | `fetch_state` = `error`, `fetch_error` = `invalid_response` (see [Body size and compression](#body-size-and-compression)). |
 | A Page's body is larger than 20 MiB | It is recorded with `body_truncated` = 1 and is not parsed: `parse_error` = `body_too_large`. |
-| A Page's body is in a coding that was not offered | It is recorded as received and is not parsed: `parse_error` = `unsupported_encoding`. |
+| A Page's body is in an unsupported coding | It is recorded as received and is not parsed: `parse_error` = `unsupported_encoding`. |
 | The body has bytes its character encoding cannot hold | Nothing: they are decoded as replacement characters, and the Page is parsed as usual. |
 | A registered extractor raises an error | `parsed` stays 1 and the Page's Links are followed; `parse_error` = `extractor_error`, and `parse_error_message` names the extractor and the error's type, such as `title: ValueError`. Only that extractor's output is missing. |
 | A registered handler raises an error | The URL is recorded without that handler's rows; the other handlers' rows are kept. |
@@ -343,7 +395,24 @@ With `--no-check-external`, no External URL is requested. Each one is still reco
 
 ### Origins
 
-Every URL belongs to an origin: its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)), and has `http_version`, the HTTP version that the origin's requests use, which is filled from v0.2 and NULL until then.
+Every URL belongs to an origin, made up of its scheme, host and port, such as `https://site.test` or `http://site.test:8080`, with a default port left out. The `origins` table holds one row for each origin of a recorded URL, requested or not, with its `host` and whether its URLs are Internal (`is_internal`), and `urls.origin_id` points to it. `http://site.test` and `https://site.test` are two origins of one host. The row also records the origin's robots.txt (see [robots.txt](#robotstxt)).
+
+`origins.http_version` reports the origin's offered HTTP capability. Ordinary Crawl
+requests use HTTP/1.1. A requested plain HTTP origin gets `http_1_1`. The first request
+to an HTTPS origin in each run schedules one TLS probe, including for External origins
+and with `--ignore-robots`. The probe records `http_2` when the origin selects `h2` via
+ALPN, or `http_1_1` after any other successful handshake, including one with no ALPN
+selection. A failed, timed-out or cancelled probe leaves `NULL` for that run.
+Unmeasured origins, including in v0.1 Crawl files, also have `NULL`. The probe follows
+the same DNS routing, proxy settings and TLS trust as ordinary requests and
+sends only TLS traffic to the origin. For direct DNS lookups of an origin or proxy,
+a final dot keeps the name absolute. TLS uses the name without trailing dots.
+Probes share the Crawl's connection and per-host limits. One `--timeout` budget starts
+at scheduling and covers waiting for a connection slot, DNS, TCP, any proxy CONNECT
+and TLS. The CONNECT response head can total up to 65,536 bytes, including the status
+line and final blank line. On normal completion the Crawl waits for probes to end. On
+stop it cancels pending and active probes, then waits for them to release their DNS
+and connection resources and exit.
 
 ### `--scope`
 
@@ -402,11 +471,90 @@ An agent reads it to know what a Crawl covered without parsing its command line.
 
 ### The User-Agent header
 
-Every request, robots.txt's included, carries the header `User-Agent: OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, where the version is the tool's and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` replaces it on every request. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null; the default it stood for follows from `crawl.tool_version`. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+By default, every request, robots.txt's included, carries the header `User-Agent: OpenLinx/<version> (+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)`, where the version is the tool's and the URL is the page that tells a site owner what the crawler does and how to limit or block it. `--user-agent <string>` supplies its global replacement, subject to [custom header precedence](#custom-request-headers): a CLI custom User-Agent wins on Internal requests over a Workspace dedicated value. It holds visible ASCII characters, spaces and tabs only: an empty value or one of spaces only, which is empty on the wire, a CR or LF, which would end the header or add one, and a character outside ASCII, which servers and log pipelines misread, are rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3). When it is not given, `crawl.config` records `user_agent` as null. Each run generates the default from the running tool's version; `crawl.tool_version` identifies the version that created the Crawl, so a continue with a newer tool can send a newer default. The robots.txt group that applies is chosen by another value, [the robots user-agent token](#the-robots-user-agent-token).
+
+### Custom request headers
+
+Use `linx crawl https://example.com/ --header "X-Env: staging"` to add a header to
+Internal requests. Repeat `--header` for several entries, or set a list in the Workspace:
+
+```toml
+[crawl]
+header = ["X-Env: staging", "X-Token: abc123"]
+```
+
+Each entry needs a token name, a colon and a value containing visible ASCII characters,
+spaces or tabs. Empty values are allowed except for User-Agent. Invalid names, CR, LF and other control characters
+are refused before any request: `invalid_value` (exit 2) for flags, `settings_invalid`
+(exit 3) for the settings file. A checked Internal URL outside the Seed folder still
+receives these headers; External requests do not. Each robots.txt redirect is classified
+again, and retries and outage probes retain the correct Internal identity.
+
+Explicit inputs win over implicit/default values. Among explicit inputs, CLI wins over
+Workspace settings. The CLI header list replaces the entire Workspace list. Within one
+source, an explicitly supplied dedicated `--user-agent` / `user_agent` wins over a custom
+User-Agent, independently of argument order. An omitted option contributes no override;
+a supplied literal equal to the default is still explicit. A generated default never
+wins over a header-only User-Agent. The dedicated value is global; a custom User-Agent
+applies only to Internal URLs. For example, Workspace `user_agent = "File/1"` with CLI
+`--header "User-Agent: Header/1"` sends Header/1 internally and File/1 externally.
+Each request carries exactly one User-Agent. Multiple custom User-Agent entries are
+refused case-insensitively, even if equal or overridden by a dedicated value. Other
+accepted repeated entries keep their order. Neither User-Agent nor Accept-Encoding is
+a reserved custom name.
+
+While a Seed Redirect Chain is open, its Page and robots lookup share provisional Scope;
+each robots redirect target is classified again. Once the chain settles, ordinary requests
+use final Scope. A continue preserves the chosen User-Agent policy and harmless inputs;
+see [request policy metadata](crawl-store.md#what-a-crawl-records-about-itself).
+
+Recorded config and argv keep names, order, repeated entries and harmless values. `Cookie`
+and names containing `auth`, `token`, `secret`, `key` or `password`, ignoring case, retain
+only their names and `***` values. For example, the list above records
+`["X-Env: staging", "X-Token: ***"]`. `linx commands` describes `--header` as repeatable,
+with `setting` = `crawl.header` and boolean `secret` = `true`.
+
+The same sensitive values are replaced by `***` when hook or transport errors quote them;
+harmless values remain visible. This applies to emitted diagnostics, stored warnings, and
+the failure messages in `urls.fetch_error_message` and `origins.robots_fetch_error_message`.
+
+### Basic authentication
+
+Use `linx crawl https://example.com/ --auth "alice:s3cret"`, or set
+`auth = "alice:s3cret"` under `[crawl]` in the Workspace. Internal requests and their
+robots.txt carry preemptive Basic Auth; External requests receive no generated
+Authorization header. Nonempty resolved auth conflicts with any custom Authorization
+header, ignoring the header name's case. The conflict is refused as `invalid_value`
+(exit 2) before a Crawl file or connection opens, even when both values come from the
+Workspace.
+
+Each URL and robots.txt redirect hop uses its own Internal decision, so an External
+target receives neither Basic Auth nor custom headers from the source. Checked Internal
+URLs outside the Seed folder, retries and the Seed's outage probes still receive both.
+
+A nonempty value needs a colon. The first colon separates user and password; either
+part may be empty and later colons belong to the password. The exact input is encoded
+as UTF-8 and then Base64, without trimming or Unicode normalization. For example,
+`test:123£` sends `Authorization: Basic dGVzdDoxMjPCow==`. Servers requiring a legacy
+encoding for non-ASCII credentials may be incompatible; the client does not negotiate
+or retry with another encoding.
+
+ASCII control characters (U+0000–U+001F and U+007F), missing colons and strings that
+cannot be strictly encoded as UTF-8 are refused before writer or network access:
+`invalid_value` (exit 2) for flag/service inputs, `settings_invalid` (exit 3) for
+Workspace inputs. Validation diagnostics never quote the credentials.
+
+Omitted auth defaults to disabled. `--auth ""` explicitly disables Workspace auth and
+allows a custom Authorization header. Disabled auth records `null` in config;
+otherwise the entire value records as `***`, even if it resembles a URL. Supplied argv
+values stay redacted, including `--auth=***` for joined inputs and empty values.
+Diagnostic masking hides the raw credentials, a nonempty password, the Base64 payload
+and the full Basic value using the same UTF-8 bytes. `linx commands` describes
+`--auth` with `setting` = `crawl.auth` and boolean `secret` = `true`.
 
 ### Cookies
 
-The Crawl keeps no cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. A site that needs a session cookie shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
+The Crawl stores no session cookies: a cookie that a response sets is never sent with a later request, so every URL is requested as a first visit is. An explicit Internal-only `Cookie` custom header can supply a cookie. A site that needs a session cookie otherwise shows it, as it does to a search engine's crawler, in redirect loops or 403 responses.
 
 ### Response headers
 
@@ -426,23 +574,78 @@ The `response_headers` table keeps the headers of each URL whose last attempt go
 
 ### Body size and compression
 
-- **Compression:** every request, robots.txt's included, sends `Accept-Encoding: gzip, deflate, br`, and the Crawl decodes those codings itself: gzip, deflate (the zlib format, or raw deflate, as some servers send) and br, several of them in the reverse order of the `Content-Encoding` header, whose repeated lines count as one list. A gzip body of several members is decoded whole, as gunzip reads it.
-- **Sizes:** every response records `content_encoding`, the header as received, `transferred_bytes`, the body as it came over the network, and `size_bytes`, the body after decoding. A script sent as 2,500 bytes of gzip that holds 10,000 bytes has `transferred_bytes` = 2500 and `size_bytes` = 10000. An image or any other Resource has its sizes recorded too, and is never parsed.
-- **The 20 MiB cap:** reading a body stops within one read past 20 MiB, at most 20 MiB of it is kept, and at most 20 MiB of it is decoded, so a small compressed body that would expand to gigabytes stops there. A body past the cap, as transferred or as decoded, has `body_truncated` = 1, `transferred_bytes` the bytes read and `size_bytes` NULL, since its full size was never measured. A Page past the cap is not parsed: `parse_error` = `body_too_large`.
-- **A body that fails to decode,** a body labelled gzip that is not, or a stream that ends inside its coding, is recorded with `fetch_state` = `error` and `fetch_error` = `invalid_response`, and is not retried.
-- **A coding that was not offered,** such as zstd from a server that ignores `Accept-Encoding`, is kept as received: the URL is `fetched` with `size_bytes` NULL, and a Page in it is not parsed, `parse_error` = `unsupported_encoding`.
+- **Compression preferences:** by default every request, robots.txt's included, sends `Accept-Encoding: gzip, deflate, br, zstd`. A custom `--header "Accept-Encoding: identity"` (or Workspace `header` entry) replaces the entire default on Internal requests, including robots.txt and retries; External requests retain the default. The [custom header precedence](#custom-request-headers) applies. An explicit `Accept-Encoding:` sends a present, empty field. Repeated non-empty entries form one ordered list and remain separate, in their original case and order, in the recorded settings; an empty entry cannot accompany another Accept-Encoding entry.
+- **Preference syntax:** coding tokens, `identity`, `*` and optional RFC 9110 weights are accepted, including unknown names such as `x-unknown`. For example, `br;q=1, gzip;q=0.5, identity;q=0` is valid. A qvalue is `0` or `1`, optionally followed by a dot and up to three digits (only zeros after `1`); `0.` and `1.` are valid. Spaces and tabs are allowed around the semicolon, but not around `=`. Empty comma elements, unknown parameters and malformed weights fail before network access: `invalid_value` for CLI or service inputs, `settings_invalid` for Workspace settings.
+- **Decoder support.** The Crawl decodes gzip, deflate (zlib or raw deflate), br and zstd,
+  including codings omitted from `Accept-Encoding` or assigned `q=0`. It decodes stacked
+  codings in reverse `Content-Encoding` order, treating repeated fields as one ordered
+  list. It also joins the decoded content of successive gzip members.
+- **zstd frames.** The Crawl joins the decoded content of consecutive data frames and
+  skips skippable frames. It checks the window of each data frame, including single-segment
+  frames. A window above 8 MiB yields `invalid_response`, even when the frame would decode
+  to a small body.
+- **Sizes.** `content_encoding` records the `Content-Encoding` value, with repeated fields
+  joined in order. `transferred_bytes` counts the body bytes read before decoding, and
+  `size_bytes` counts the bytes in the complete decoded body. A 10,000-byte script sent as
+  2,500 bytes of gzip has `size_bytes` = 10000 and `transferred_bytes` = 2500. Images and
+  other Resources also have sizes recorded.
+- **The 20 MiB cap.** The cap applies independently to the body as transferred, the output
+  of each intermediate decoding stage, and the final decoded body. A complete body exactly
+  at the cap is allowed. On exceeding any of these limits, the Crawl stops reading and records
+  `body_truncated` = 1 and `size_bytes` NULL. `transferred_bytes` includes the full last
+  chunk read and can exceed 20 MiB. An oversized Page records `parsed` = 0 and
+  `parse_error` = `body_too_large`.
+- **Failed decoding.** When the Crawl encounters a corrupt or incomplete stream,
+  it records `fetch_state` = `error` and `fetch_error` = `invalid_response` and skips retries.
+- **Unsupported codings.** If `Content-Encoding` includes an unsupported coding such as
+  `x-unknown`, the Crawl keeps the bytes as received up to the cap. For a complete
+  response it records `fetch_state` = `fetched` and `size_bytes` NULL. A Page records
+  `parsed` = 0 and `parse_error` = `unsupported_encoding`, even when the request
+  advertised the coding.
 
 ### URL length
 
 A URL longer than 2,000 characters, counted on the normalised URL with its non-ASCII characters percent-encoded, is not requested: it is recorded with `fetch_state` = `skipped` and `skip_reason` = `url_too_long`, before any `--include` or `--exclude` pattern is matched against it.
 
+### Explicit proxy
+
+`--proxy http://127.0.0.1:3128` or `[crawl] proxy = "http://127.0.0.1:3128"`
+routes every request through that HTTP proxy, including robots.txt and External URLs.
+A nonempty explicit proxy overrides the proxy variables, including `NO_PROXY`.
+The flag takes priority over the Workspace setting. A schemeless value such as
+`proxy.corp:3128` becomes `http://proxy.corp:3128`.
+
+An explicit empty flag (`--proxy ""`) overrides a Workspace proxy and restores
+environment handling, including `NO_PROXY`; it does not disable environment proxies.
+An empty Workspace proxy also uses the environment. The resolved setting records as
+`null` for empty input, or as the normalized URL otherwise.
+
+Credentials may be included as `http://u:pw@proxy.corp:3128`. Recorded argv keeps
+the spelling of the proxy argument, so `u:pw@proxy.corp:3128` becomes
+`u:***@proxy.corp:3128`. The normalized `crawl.config` value is
+`http://u:***@proxy.corp:3128`. A valid explicit proxy without a password remains visible.
+Warnings and saved failure messages hide an explicit proxy password both as
+written in the URL and after percent decoding.
+The continue service accepts a fresh URL through `CrawlOverrides.proxy`.
+See [Continuing a Crawl](#continuing-a-crawl).
+
+HTTPS requests and ALPN probes use CONNECT through the HTTP proxy. The request
+target and `Host` both carry the destination host and port, including the default
+port and any final DNS dot. Proxy URL credentials authenticate the tunnel.
+CONNECT carries neither the Crawl’s Authorization header nor its custom origin
+headers. Inside the tunnel, Internal requests receive their configured identity.
+External requests omit it. Proxy credentials stay at the proxy, and TLS verifies the
+origin’s certificate and hostname.
+
 ### Proxy variables
 
-The Crawl honours the standard proxy variables, as curl, pip and uv do. It is the one place where the tool reads the environment.
+Without a nonempty explicit proxy, the Crawl honours the standard proxy variables,
+as curl, pip and uv do. It is the one place where the tool reads the environment.
 - **Which proxy:** `HTTP_PROXY` for http URLs and `HTTPS_PROXY` for https URLs. Each is read under its lower-case and its upper-case name, as curl reads them, and when both are set, the lower-case one wins; an empty variable counts as unset. A proxy without a scheme, such as `proxy.corp:3128`, is an http proxy. `ALL_PROXY` and the variables of other schemes are not read.
+- **TLS to the proxy:** with `HTTPS_PROXY=https://proxy.corp:8443`, both requests and the ALPN probe verify the proxy's certificate and host name before sending CONNECT. They verify the origin's certificate and host name separately inside the tunnel.
 - **Bypass:** `NO_PROXY` is a comma-separated list of host names and domain suffixes, with or without a leading dot, or `*` for every host. A host it names, or a host under a domain suffix it names, is requested directly: `site.test` covers `site.test` and `www.site.test`, but not `mysite.test`. Ports, IP addresses and IP ranges in `NO_PROXY` are not read.
 - **When:** the variables are read once, when a run starts, and every request of the run, robots.txt's included, follows them. A resumed Crawl reads them again.
-- **Recorded:** the variables that are set are recorded in the `environment` table of `crawl.config`, under `http_proxy`, `https_proxy` and `no_proxy`. The password of a proxy URL is recorded as `***`, as in `http://u:***@proxy:3128`, and a proxy URL without a password is recorded as `***`.
+- **Recorded:** the variables that are set are recorded in the `environment` table of `crawl.config`, under `http_proxy`, `https_proxy` and `no_proxy`. The password of a proxy URL is recorded as `***`, as in `http://u:***@proxy:3128`, and a proxy URL without a password is recorded as `***`. Warnings and saved failure messages hide environment proxy passwords in both their original and percent-decoded forms.
 
 ### TLS
 

@@ -1,4 +1,4 @@
-"""Crawl Depth and the depth barrier (020-add-crawl-core D3; seam 3+6)."""
+"""Verify Crawl Depth and the depth barrier over HTTP and stored rows."""
 
 import pytest
 
@@ -132,7 +132,8 @@ def test_a_late_check_lowers_the_depth_of_a_url_still_queued(
                 "/b2": Page(body="<p>B2</p>"),
                 "/hold": Page(body="<p>H</p>", delay=SLOW),
                 # Slow, so /b2, read once depth 2 has ended with the lowered /x, starts well
-                # after it (022 D2: a pass reads the open depth again from its top).
+                # after it (022-add-fetch-policy D2: a pass reads the open depth again from its
+                # top).
                 "/x": Page(body="<p>X</p>", delay=SLOW / 4),
             }
         )

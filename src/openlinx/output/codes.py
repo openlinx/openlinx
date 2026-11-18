@@ -1,4 +1,4 @@
-"""Exit codes and the list of diagnostic codes (design D5 of 010-add-workspace-and-cli-contract)."""
+"""Declare diagnostic codes and their associated exit codes."""
 
 from dataclasses import dataclass
 from enum import IntEnum
@@ -9,8 +9,7 @@ from openlinx.naming import SETTINGS_FILE_NAME
 type Level = Literal["error", "warning", "info"]
 # How the warning log keeps a warning of the code: each one; once per the detail once_per
 # names; counted, one entry whose count is the URLs it affected; pauses, one entry counting
-# the network pauses; or for its run only, which a continue drops (design D10 of
-# 020-add-crawl-core).
+# the network pauses; or for its run only, which a continue drops.
 type Kept = Literal["each", "once", "counted", "pauses", "run"]
 
 
@@ -105,6 +104,12 @@ INVALID_VALUE = _declare(
 )
 UNKNOWN_FIELD = _declare(
     "unknown_field", "error", ExitCode.USAGE, "A --fields name the Command does not have."
+)
+SECRETS_REQUIRED = _declare(
+    "secrets_required",
+    "error",
+    ExitCode.USAGE,
+    "Continuing a Crawl requires fresh secret values; the hint names the required input.",
 )
 INVALID_CURSOR = _declare(
     "invalid_cursor",

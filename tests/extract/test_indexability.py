@@ -1,4 +1,4 @@
-"""Indexability of a Page (030-add-page-data, page-data; seam 4)."""
+"""Verify Page Indexability through pure extraction."""
 
 from tests.support.page_data import page_row, unprepared_page_row
 

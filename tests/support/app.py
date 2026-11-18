@@ -1,4 +1,4 @@
-"""The fixture app the scenarios use (design D8 of 010-add-workspace-and-cli-contract)."""
+"""Build the fixture app with Commands used by CLI contract scenarios."""
 
 import sys
 from collections.abc import Iterator
@@ -218,7 +218,7 @@ def example_read_crawl(
     crawl: CrawlOpt = LATEST,
     output_format: FormatOpt = Format.JSON,
 ) -> Any:
-    """Reads the --crawl Crawl and reports its id, as the Commands of 050 will."""
+    """Read the selected Crawl and report its id, exercising the shared crawl option."""
     # Imported here, as in every Command that reads a Crawl: sqlalchemy stays off --help.
     from openlinx.store.selection import resolve_crawl
 

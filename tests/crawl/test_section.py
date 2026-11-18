@@ -1,4 +1,4 @@
-"""Scope over HTTP and Section Crawls (020-add-crawl-core D4, crawling; seam 3+6)."""
+"""Verify Scope and Section Crawls through HTTP and stored results."""
 
 import json
 
@@ -56,6 +56,53 @@ def test_pages_outside_the_folder_are_checked_but_not_followed(
         ),
         query(crawl_file, "SELECT id FROM urls WHERE url = ?", [server.url("/shop/item")]),
     ) == ([("fetched", 0)], [])
+
+
+def test_a_checked_internal_url_still_gets_custom_headers(
+    temp_workspace: TempWorkspace, fixture_hosts: StartHosts
+) -> None:
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/docs/": Page(body='<a href="/outside">Outside</a>'),
+                "/outside": Page(body='<a href="/deeper">Deeper</a>'),
+                "/deeper": Page(body="Deeper"),
+            }
+        ),
+        NO_OTHER_SITE,
+    )
+
+    result = crawl_result(
+        "http://site.test/docs/",
+        resolver=hosts.resolver,
+        scope="subfolder",
+        auth="alice:s3cret",
+        header=["X-Env: staging", "X-Token: abc123", "x-env: audit"],
+    )
+
+    assert result.summary.state == "completed"
+    assert [
+        (request.path, request.headers.getall("Authorization", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/docs/", ["Basic YWxpY2U6czNjcmV0"]),
+        ("/outside", ["Basic YWxpY2U6czNjcmV0"]),
+    ]
+    assert [
+        (request.path, request.headers.getall("X-Env", []), request.headers.getall("X-Token", []))
+        for request in hosts.site.requests
+    ] == [
+        ("/robots.txt", ["staging", "audit"], ["abc123"]),
+        ("/docs/", ["staging", "audit"], ["abc123"]),
+        ("/outside", ["staging", "audit"], ["abc123"]),
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT is_internal, in_scope, fetch_state, parsed FROM urls WHERE url = ?",
+        ["http://site.test/outside"],
+    ) == [(1, 0, "fetched", 0)]
+    assert hosts.other.requests == ()
 
 
 def test_a_url_that_matches_no_include_pattern_is_checked_but_not_followed(

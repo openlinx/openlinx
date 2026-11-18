@@ -1,5 +1,4 @@
-"""Cookie values are never kept: they are redacted where the Fetcher decodes the headers
-(022-add-fetch-policy D7)."""
+"""Redact cookie values as the Fetcher decodes response headers."""
 
 from openlinx.store.redaction import REDACTED
 
