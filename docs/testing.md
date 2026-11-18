@@ -72,8 +72,11 @@ does not add it to the direct test seams.
 The ALPN capability-probe tests in [tests/crawl/alpn/](../tests/crawl/alpn/)
 cover admission, deadlines, lifecycle and system DNS.
 
-The post-Crawl Pass lifecycle tests live in
-[tests/crawl/hooks/](../tests/crawl/hooks/).
+[tests/crawl/hooks/](../tests/crawl/hooks/) contains the tests for
+[post-Crawl Pass lifecycle](../tests/crawl/hooks/test_post_crawl_passes.py) and
+[Handler persistence](../tests/crawl/hooks/test_handler_persistence.py), which checks the
+values Handlers receive and how their rows reach the Store. Other Hook cases are in
+[test_hooks.py](../tests/crawl/test_hooks.py).
 
 Shared helpers are in `tests/support/` and the fixture site in `tests/fixture_site/` (see [Helpers](#helpers)).
 
@@ -105,7 +108,7 @@ Never replace our own modules or our own CLI with a double. Installer tests use 
 
 Two existing checks pin a specific implementation choice with a measured cost:
 
-- [test_hooks.py](../tests/crawl/test_hooks.py),
+- [test_handler_persistence.py](../tests/crawl/hooks/test_handler_persistence.py),
   `test_a_handler_s_rows_for_a_url_are_written_in_one_statement`, counts SQLAlchemy
   `before_cursor_execute` events for the fixture handler's inserts. Several rows
   for each URL must use one statement, preserving per-URL batching rather than
