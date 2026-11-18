@@ -523,7 +523,7 @@ IMPORT_RULES = (
     ),
     ImportRule("openlinx.crawl.pages", ("openlinx.crawl.robots", "openlinx.crawl.engine")),
     ImportRule("openlinx.crawl.robots", ("openlinx.crawl.pages", "openlinx.crawl.engine")),
-    # The one cycle between the crawl core and the store runs through urls, which imports nothing.
+    # The store can reuse this URL leaf without an import cycle because it has no OpenLinx imports.
     ImportRule("openlinx.store", ("openlinx.crawl",), allowed=("openlinx.crawl.urls",)),
     # The parse pool's workers import pages, so they never load the writer.
     ImportRule("openlinx.crawl.pages", ("openlinx.store",), allowed=("openlinx.store.records",)),

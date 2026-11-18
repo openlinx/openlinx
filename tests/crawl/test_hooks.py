@@ -612,8 +612,8 @@ def test_recording_that_fails_for_every_url_fails_the_crawl(
     result = crawl_result(server.url("/"), hooks)
     error = result.failure and result.failure.diagnostic
 
-    # A bug in row code, not the disk: freeing space would not help, and the record_failed
-    # warning names the first URL.
+    # The Handler's row-writing code raises for each article, so the hint points to fixing the
+    # code before resuming.
     assert (
         *_end_of(result),
         error and error.code,
