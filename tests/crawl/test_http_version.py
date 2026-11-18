@@ -1,16 +1,22 @@
 """Verify the HTTP capability recorded by a Crawl of real fixture origins."""
 
+import asyncio
+import socket
 import sqlite3
 import ssl
 from contextlib import closing
 from pathlib import Path
+from typing import Literal
 
+import pytest
 import trustme
+from aiohttp.abc import ResolveResult
 
 from openlinx.services.crawling import CrawlOverrides
+from openlinx.store.records import HttpVersion
 from tests.fixture_site.hosts import FixtureResolver, StartHosts
-from tests.fixture_site.routes import Page, Site, Status
-from tests.fixture_site.server import Serve
+from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
+from tests.fixture_site.server import Serve, ServerHandle
 from tests.fixture_site.tls import StartTlsHosts
 from tests.support.alpn import with_wrong_name_for_probe
 from tests.support.crawling import continued, crawl_result
@@ -179,6 +185,122 @@ def test_an_external_origin_is_measured(temp_workspace: TempWorkspace, fixture_s
     assert query(
         result.crawl_file, "SELECT origin, is_internal, http_version FROM origins ORDER BY origin"
     ) == [("http://site.test", 1, "http_1_1"), ("https://other.test", 0, "http_2")]
+
+
+class _RobotsRedirectResolver(FixtureResolver):
+    def __init__(self, servers: dict[tuple[str, int], ServerHandle], *, tls: bool) -> None:
+        super().__init__(servers)
+        self._tls = tls
+        self._probe: asyncio.Task[object] | None = None
+        self._probe_started = asyncio.Event()
+
+    async def resolve(
+        self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
+    ) -> list[ResolveResult]:
+        if host == "other.test" and port == 443 and host in self.lookups:
+            # The ordinary request resolved this name to reach /remote-rules. Its dedicated
+            # probe resolves it again, with the ordinary session's route already cached.
+            self._probe = asyncio.current_task()
+            self._probe_started.set()
+        if self._tls and host == "rules.test":
+            # For HTTPS the last robots hop waits for the real TLS task to finish. The Seed
+            # is still waiting on robots.txt, so its Link cannot have been recorded yet.
+            await self._probe_started.wait()
+            assert self._probe is not None
+            await asyncio.wait({self._probe})
+        return await super().resolve(host, port, family)
+
+
+@pytest.mark.parametrize(
+    ("scheme", "capability", "check_external"),
+    [("http", "http_1_1", False), ("https", "http_2", True)],
+)
+def test_robots_redirect_capability_survives_late_url_discovery(
+    temp_workspace: TempWorkspace,
+    fixture_site: Serve,
+    scheme: Literal["http", "https"],
+    capability: HttpVersion,
+    check_external: bool,
+) -> None:
+    target = f"{scheme}://other.test"
+    site = fixture_site(
+        Site(
+            {
+                "/robots.txt": Redirect(f"{target}/remote-rules"),
+                "/": Page(body=f'<a href="{target}/page">Partner</a>'),
+            }
+        )
+    )
+    ca = trustme.CA()
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ca.issue_cert("other.test").configure_cert(tls)
+    tls.set_alpn_protocols(["h2", "http/1.1"])
+    other = fixture_site(
+        Site(
+            {
+                "/remote-rules": Redirect("http://rules.test/allow"),
+                "/robots.txt": Status(404),
+                "/page": Page(body="<title>Partner</title>"),
+            }
+        ),
+        tls if scheme == "https" else None,
+    )
+    rules = fixture_site(Site({"/allow": Robots("User-agent: *\nAllow: /\n")}))
+    resolver = _RobotsRedirectResolver(
+        {
+            ("site.test", 80): site,
+            ("other.test", 443 if scheme == "https" else 80): other,
+            ("rules.test", 80): rules,
+        },
+        tls=scheme == "https",
+    )
+
+    result = crawl_result(
+        "http://site.test/",
+        resolver=resolver,
+        trust_anchors=ca.cert_pem.bytes().decode("ascii"),
+        check_external=check_external,
+        concurrency=2,
+        retries=0,
+        network_wait=0,
+        timeout=10,
+    )
+
+    assert result.summary.state == "completed"
+    assert [request.path for request in site.requests] == ["/robots.txt", "/"]
+    assert [request.path for request in rules.requests] == ["/allow"]
+    assert [request.path for request in other.requests] == (
+        ["/remote-rules", "/robots.txt", "/page"] if check_external else ["/remote-rules"]
+    )
+    assert resolver.lookups.count("other.test") == (2 if check_external else 1)
+    assert query(
+        result.crawl_file,
+        "SELECT url, discovered_via, status_code, attempt_count, skip_reason FROM urls ORDER BY id",
+    ) == [
+        ("http://site.test/", "seed", 200, 1, None),
+        (
+            f"{target}/page",
+            "hyperlink",
+            200 if check_external else None,
+            1 if check_external else 0,
+            None if check_external else "external_not_checked",
+        ),
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT origin, host, is_internal, robots_state, robots_status_code, http_version "
+        "FROM origins ORDER BY id",
+    ) == [
+        ("http://site.test", "site.test", 1, "ok", 200, "http_1_1"),
+        (
+            target,
+            "other.test",
+            0,
+            "missing" if check_external else None,
+            404 if check_external else None,
+            capability,
+        ),
+    ]
 
 
 def test_probe_failure_leaves_url_requests_unchanged(

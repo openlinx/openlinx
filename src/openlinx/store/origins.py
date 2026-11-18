@@ -34,21 +34,45 @@ _HTTP_VERSION = (
     )
     .values(http_version=bindparam("capability"))
 )
-# The writer connection lasts one run. A cursor over claim IDs keeps completed and pending
-# origins deduplicated without retaining either in memory or changing the Crawl schema.
+# The writer connection lasts one run. Keep both pending probes and observations made
+# before URL discovery here, so neither requires an in-memory index or public schema fields.
 _claims = Table(
     "http_version_claims",
     MetaData(),
     Column("id", Integer, primary_key=True),
     Column("origin", Text, nullable=False, unique=True),
-    Column("deadline", Float, nullable=False),
+    # Plain HTTP needs no TLS work and has no deadline.
+    Column("deadline", Float),
+    Column("capability", Text),
     schema="temp",
     prefixes=["TEMPORARY"],
 )
 _CREATE_CLAIMS = CreateTable(_claims, if_not_exists=True)
+# A robots redirect can reach an origin before the first URL creates its public row.
+_APPLY_CAPABILITY_ON_DISCOVERY = """
+CREATE TEMP TRIGGER IF NOT EXISTS origins_apply_http_version
+AFTER INSERT ON main.origins
+WHEN NEW.http_version IS NULL
+BEGIN
+    UPDATE origins SET http_version = claim.capability
+    FROM temp.http_version_claims AS claim
+    WHERE origins.id = NEW.id AND claim.origin = NEW.origin AND claim.capability IS NOT NULL;
+END
+"""
 _CLAIM = insert(_claims).on_conflict_do_nothing(index_elements=[_claims.c.origin])
 _NEXT_CLAIM = (
-    select(_claims).where(_claims.c.id > bindparam("after")).order_by(_claims.c.id).limit(1)
+    select(_claims.c.id, _claims.c.origin, _claims.c.deadline)
+    .where(_claims.c.id > bindparam("after"), _claims.c.deadline.is_not(None))
+    .order_by(_claims.c.id)
+    .limit(1)
+)
+_OBSERVED = insert(_claims).values(
+    origin=bindparam("origin_key"), capability=bindparam("capability")
+)
+_REMEMBER_CAPABILITY = _OBSERVED.on_conflict_do_update(
+    index_elements=[_claims.c.origin],
+    set_={"capability": _OBSERVED.excluded.capability},
+    where=_claims.c.capability.is_distinct_from(_OBSERVED.excluded.capability),
 )
 # Bound names differ from the columns: SQLAlchemy keeps a column's own name for its SET value.
 _ROBOTS_TXT = (
@@ -89,6 +113,7 @@ def record_origins(connection: Connection, rows: Sequence[OriginRow]) -> None:
 
 def init_http_version_claims(connection: Connection) -> None:
     connection.execute(_CREATE_CLAIMS)
+    connection.exec_driver_sql(_APPLY_CAPABILITY_ON_DISCOVERY)
 
 
 def claim_http_version(origin: str, deadline: float) -> Callable[[Connection], bool]:
@@ -113,10 +138,12 @@ def next_http_version_claim(after: int) -> Callable[[Connection], tuple[int, str
 
 
 def record_http_version(origin: str, version: HttpVersion) -> Callable[[Connection], None]:
+    """Record capability now and make it available to a later origin insert in this run."""
     values = {"origin_key": origin, "capability": version}
 
     def unit(connection: Connection) -> None:
-        connection.execute(_HTTP_VERSION, values)
+        if connection.execute(_REMEMBER_CAPABILITY, values).rowcount == 1:
+            connection.execute(_HTTP_VERSION, values)
 
     return unit
 

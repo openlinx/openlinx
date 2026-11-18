@@ -63,8 +63,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     fetcher = context.fetcher
     measure = fetcher.probe_http_version if isinstance(fetcher, ProbesHttpVersion) else None
     http_versions = HttpVersions(context.writer, context.fetch_policy, context.clock, measure)
-    if measure is not None:
-        await context.writer.run_async(init_http_version_claims)
+    await context.writer.run_async(init_http_version_claims)
 
     requester = Requester(
         context.fetcher,
