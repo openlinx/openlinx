@@ -3,14 +3,17 @@
 import asyncio
 import gzip
 import hashlib
+import subprocess
 import tracemalloc
 import zlib
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import brotlicffi
 import pytest
 
 from openlinx.crawl.fetch.body import BODY_LIMIT, Body, BodyDecodingError, read_body
+from tests.support.processes import python_command
 
 # A product listing, as a shop's category page repeats it.
 ROW = b'<li class="product"><a href="/p/1">Trail shoe</a> <span>89.00</span></li>\n'
@@ -118,28 +121,82 @@ def test_a_bomb_in_one_chunk_is_decoded_only_up_to_the_cap(coding: str) -> None:
     assert (len(body.data), body.truncated, peak < 8 * limit) == (limit, True, True)
 
 
-@pytest.mark.parametrize("coding", ["br", "br, gzip", "gzip, br"])
-async def test_brotli_allocates_output_within_a_small_remaining_budget(coding: str) -> None:
-    page = ROW * 1000
-    if coding == "gzip, br":
-        expected = b"hello"
-        # The gzip member ends within the cap, but the intermediate still exceeds it.
-        packed = _packed(gzip.compress(expected, mtime=0) + page, "br")
-    else:
-        expected = page[:512]
-        packed = _packed(page, "br")
-        if coding == "br, gzip":
-            packed = gzip.compress(packed, mtime=0)
+@pytest.mark.parametrize(
+    ("coding", "first", "last", "expected"),
+    [
+        ("br", "0b028068656c6c6f", "f56918f82582e2b14020cb2f00", b"hello" + b"A" * 507),
+        # gzip wrapping the same Brotli chunks. A sync flush leaves gzip open through both.
+        (
+            "br, gzip",
+            "1f8b0800000000000003e2666ac848cdc9c907000000ffff",
+            "fa9a29f143b5e9d1460785d3fa0c00000000ffff",
+            b"hello" + b"A" * 507,
+        ),
+        # Brotli wrapping a gzip prefix for "hello", then 100 kB of empty deflate blocks.
+        (
+            "gzip, br",
+            "0b0a801f8b0800000000000003ca48cdc9c907000000ffff",
+            "f56918f82700e2b02840cb2f00",
+            b"hello",
+        ),
+    ],
+    ids=["br", "br after gzip", "br before gzip"],
+)
+def test_brotli_allocates_output_within_a_small_remaining_budget(
+    coding: str, first: str, last: str, expected: bytes
+) -> None:
+    # A process-wide peak would also include allocations from pytest coverage and other threads.
+    root = Path(__file__).resolve().parents[2]
+    command = python_command(
+        "-I",
+        "-S",
+        "-c",
+        "import asyncio, sys\n"
+        "sys.path[:0] = sys.argv[1:4]\n"
+        "from tests.crawl.test_body import _check_brotli_budget\n"
+        "asyncio.run(_check_brotli_budget(*sys.argv[4:]))",
+        str(root),
+        str(root / "src"),
+        str(Path(brotlicffi.__file__).resolve().parents[1]),
+        coding,
+        first,
+        last,
+        expected.hex(),
+    )
+    child = subprocess.run(
+        command.argv, env=command.env, capture_output=True, text=True, timeout=30, check=False
+    )
+
+    assert child.returncode == 0, child.stderr
+
+
+async def _check_brotli_budget(coding: str, first: str, last: str, expected: str) -> None:
+    head, tail = bytes.fromhex(first), bytes.fromhex(last)
+    baseline = 0
+
+    async def chunks() -> AsyncIterator[bytes]:
+        nonlocal baseline
+        yield head
+        if coding != "br":
+            # The prefix produces "hello" and initializes gzip's fixed workspace, which stays
+            # live while the next chunk expands. zlib-ng allocates over 32 KiB for that state.
+            baseline = tracemalloc.get_traced_memory()[0]
+            tracemalloc.reset_peak()
+        yield tail
 
     tracemalloc.start()
     try:
-        body = await read_body(_pieces(packed), coding, limit=512)
+        body = await read_body(chunks(), coding, limit=512)
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
 
-    assert (body.data, body.truncated) == (expected, True)
-    assert peak < 16 * 1024
+    assert (body.data, body.truncated, body.transferred_bytes) == (
+        bytes.fromhex(expected),
+        True,
+        len(head) + len(tail),
+    )
+    assert peak - baseline < 16 * 1024, f"{coding}: {peak - baseline} B of peak allocations"
 
 
 def test_stacked_codings_are_decoded_last_first() -> None:
