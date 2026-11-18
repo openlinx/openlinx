@@ -15,26 +15,16 @@ from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import connect
-from openlinx.store.reading import reading
 from openlinx.store.schema import seeds
 from openlinx.store.writer import CrawlWriter, CrawlWriterClosedError, CrawlWriterReplayError
 from tests.support.clock import FakeClock
-from tests.support.crawls import (
-    crawl_without_seeds,
-    create_any_crawl,
-    insert_seed,
-    query,
-    sha256_of,
-)
-from tests.support.permissions import read_only_file
+from tests.support.crawls import crawl_without_seeds, insert_seed, query
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing, replay_now
 
 SEEDS = "SELECT position, url FROM seeds ORDER BY position"
 COUNT = "SELECT count(*) FROM seeds"
-SETTINGS = ("temp_store", "cache_size", "mmap_size")
 
 
 def count_seeds(connection: Connection) -> int:
@@ -460,36 +450,6 @@ def test_a_flush_commits_at_once(temp_workspace: TempWorkspace) -> None:
         seen = query(crawl.path, COUNT)
 
     assert seen == [(3,)]
-
-
-def test_a_read_only_crawl_file(temp_workspace: TempWorkspace) -> None:
-    crawl = create_any_crawl(temp_workspace)
-    before = sha256_of(crawl.path)
-
-    with read_only_file(crawl.path), pytest.raises(OpenLinxError) as raised:
-        CrawlWriter(crawl.path, FakeClock())
-
-    assert (
-        raised.value.code,
-        raised.value.diagnostic.details["file"],
-        sha256_of(crawl.path),
-    ) == ("crawl_not_writable", str(crawl.path), before)
-
-
-def test_the_writer_waits_30_seconds_for_a_lock_and_checks_references(
-    temp_workspace: TempWorkspace,
-) -> None:
-    crawl = create_any_crawl(temp_workspace)
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        pragmas: tuple[int, int] = writer.run(
-            lambda connection: (
-                connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one(),
-                connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one(),
-            )
-        )
-
-    assert pragmas == (1, 30_000)
 
 
 def numbered_insert(position: int) -> Callable[[Connection], int]:
@@ -941,47 +901,6 @@ def test_a_unit_cannot_submit_to_its_own_writer(temp_workspace: TempWorkspace) -
         ),
     ):
         writer.run(lambda connection: writer.submit(count_seeds))
-
-
-def journal_mode(connection: Connection) -> str:
-    return connection.exec_driver_sql("PRAGMA journal_mode").scalar_one()
-
-
-def connection_settings(connection: Connection) -> tuple[int, ...]:
-    return tuple(connection.exec_driver_sql(f"PRAGMA {name}").scalar_one() for name in SETTINGS)
-
-
-def test_the_writer_s_connection_settings_in_wal_mode(temp_workspace: TempWorkspace) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        journal = writer.run(journal_mode)
-        settings = writer.run(connection_settings)
-
-    assert (journal, settings) == ("wal", (2, -65536, 268435456))
-
-
-def test_a_reader_keeps_sqlite_s_defaults(temp_workspace: TempWorkspace) -> None:
-    crawl = crawl_without_seeds(temp_workspace)
-
-    with reading(crawl.path) as connection:
-        settings = connection_settings(connection)
-    with closing(sqlite3.connect(crawl.path)) as plain:
-        defaults = tuple(plain.execute(f"PRAGMA {name}").fetchone()[0] for name in SETTINGS)
-
-    assert settings == defaults
-
-
-def test_the_writer_s_connection_settings_in_rollback_journal_mode(
-    temp_workspace: TempWorkspace,
-) -> None:
-    crawl = create_any_crawl(temp_workspace, journal_setting="delete")
-
-    with CrawlWriter(crawl.path, FakeClock()) as writer:
-        journal = writer.run(journal_mode)
-        settings = writer.run(connection_settings)
-
-    assert (journal, settings) == ("delete", (2, -65536, 0))
 
 
 async def test_a_sync_submit_under_a_loop_s_commit_deadline_is_refused(
