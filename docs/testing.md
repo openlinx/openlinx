@@ -69,6 +69,12 @@ does not add it to the direct test seams.
 | `tests/js/` | 9, the Report script |
 | `tests/` | the repository's own guards: dependencies, naming, line endings, docs links, isolation |
 
+The ALPN capability-probe tests in [tests/crawl/alpn/](../tests/crawl/alpn/)
+cover admission, deadlines, lifecycle and system DNS.
+
+The post-Crawl Pass lifecycle tests live in
+[tests/crawl/hooks/](../tests/crawl/hooks/).
+
 Shared helpers are in `tests/support/` and the fixture site in `tests/fixture_site/` (see [Helpers](#helpers)).
 
 ### Boundary doubles
