@@ -72,8 +72,8 @@ the same fields in each item by default.
   "applies_to": "internal_pages",
   "thresholds": {"max_chars": {"value": 60, "default": 60, "unit": "characters"}},
   "description": "A Page's first title is longer than max_chars characters.",
-  "why_it_matters": "Search engines cut a long title short in their results, so its end, often the brand or what sets the page apart, is not shown.",
-  "how_to_fix": "Shorten the title to the limit, with the words that describe the page first."
+  "why_it_matters": "Search engines cut a long title short in their results, so its end, often the brand or what sets the Page apart, is not shown.",
+  "how_to_fix": "Shorten the title to the limit, with the words that describe the Page first."
 }
 ```
 

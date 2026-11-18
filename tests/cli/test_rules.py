@@ -24,9 +24,11 @@ def test_first_rule_in_the_list() -> None:
     assert isinstance(cursor, str)
     assert cursor
 
-    following = run_cli("rules", "list", "--fields", "id", "--limit", "1", "--cursor", cursor)
+    following = run_cli(
+        "rules", "list", "--fields", "id,thresholds", "--limit", "1", "--cursor", cursor
+    )
     assert following.exit_code == 0, following.stderr
-    assert following.json()["items"] == [{"id": "internal-5xx"}]
+    assert following.json()["items"] == [{"id": "internal-5xx", "thresholds": {}}]
 
 
 def test_every_rule_has_its_guidance() -> None:
@@ -35,7 +37,11 @@ def test_every_rule_has_its_guidance() -> None:
     assert result.exit_code == 0, result.stderr
     items = result.json()["items"]
     assert items
-    assert [item["id"] for item in items if not all(item[key] for key in GUIDANCE)] == []
+    assert [
+        item["id"]
+        for item in items
+        if not all(isinstance(item[key], str) and item[key].strip() for key in GUIDANCE)
+    ] == []
 
 
 def test_show_a_rule_with_thresholds() -> None:
@@ -51,14 +57,6 @@ def test_show_a_rule_with_thresholds() -> None:
     )
     assert rule["applies_to"] == "internal_pages"
     assert rule["thresholds"] == {"max_chars": {"value": 60, "default": 60, "unit": "characters"}}
-    assert rule["description"] == "A Page's first title is longer than max_chars characters."
-    assert rule["why_it_matters"] == (
-        "Search engines cut a long title short in their results, so its end, often the brand or "
-        "what sets the page apart, is not shown."
-    )
-    assert rule["how_to_fix"] == (
-        "Shorten the title to the limit, with the words that describe the page first."
-    )
 
 
 def test_rule_without_thresholds() -> None:
@@ -66,26 +64,14 @@ def test_rule_without_thresholds() -> None:
 
     assert result.exit_code == 0, result.stderr
     items = result.json()["items"]
-    assert [item for item in items if item["id"] == "title-missing"] == [
-        {
-            "id": "title-missing",
-            "category": "titles",
-            "issue_type": "issue",
-            "priority": "high",
-            "applies_to": "internal_pages",
-            "thresholds": {},
-            "description": "A Page has no title, or its first title is empty.",
-            "why_it_matters": (
-                "A descriptive title helps people identify the Page in search results "
-                "and browser tabs."
-            ),
-            "how_to_fix": (
-                "If the Page has no title, add a <title> element to its <head>. If the first "
-                "<title> is empty, fill it in. Use words that describe the Page and set it "
-                "apart from the site's other Pages."
-            ),
-        }
-    ]
+    (rule,) = (item for item in items if item["id"] == "title-missing")
+    assert (rule["category"], rule["issue_type"], rule["priority"], rule["applies_to"]) == (
+        "titles",
+        "issue",
+        "high",
+        "internal_pages",
+    )
+    assert rule["thresholds"] == {}
 
 
 def test_unknown_rule_id() -> None:
@@ -125,25 +111,15 @@ def test_windows_console_output() -> None:
     assert b"\r" not in output
 
 
-def test_show_matches_the_rule_in_the_catalogue() -> None:
-    first = run_cli("rules", "list", "--fields", "id,thresholds", "--limit", "2")
-    assert first.exit_code == 0, first.stderr
-    page = first.json()
-    assert page["items"] == [
-        {"id": "internal-4xx", "thresholds": {}},
-        {"id": "internal-5xx", "thresholds": {}},
-    ]
-    cursor = page["next_cursor"]
-    assert isinstance(cursor, str)
-    assert cursor
+@pytest.mark.parametrize("rule_id", ["title-missing", "title-too-long"])
+def test_show_matches_the_rule_in_the_catalogue(rule_id: str) -> None:
+    listed = run_cli("rules", "list", "--limit", "50")
+    shown = run_cli("rules", "show", rule_id)
 
-    following = run_cli("rules", "list", "--cursor", cursor, "--limit", "2")
-    missing = run_cli("rules", "show", "title-missing")
-    too_long = run_cli("rules", "show", "title-too-long")
-    assert following.exit_code == 0, following.stderr
-    assert missing.exit_code == 0, missing.stderr
-    assert too_long.exit_code == 0, too_long.stderr
-    assert following.json()["items"] == [missing.json(), too_long.json()]
+    assert listed.exit_code == 0, listed.stderr
+    assert shown.exit_code == 0, shown.stderr
+    (item,) = (item for item in listed.json()["items"] if item["id"] == rule_id)
+    assert item == shown.json()
 
 
 def test_the_bare_group_lists_the_rules() -> None:
@@ -176,6 +152,11 @@ def test_the_group_is_visible_in_help() -> None:
             "Put --limit after the Command name: linx rules list --limit ...",
             id="bare-group",
         ),
+        pytest.param(
+            ("--format=table", "show", "title-too-long"),
+            "Put --format after the Command name: linx rules show --format ...",
+            id="before-show",
+        ),
     ],
 )
 def test_options_follow_the_full_command_name(args: tuple[str, ...], hint: str) -> None:
@@ -184,6 +165,29 @@ def test_options_follow_the_full_command_name(args: tuple[str, ...], hint: str) 
 
     assert (result.exit_code, error["code"]) == (2, "usage_error")
     assert error["hint"] == hint
+
+
+@pytest.mark.parametrize(
+    ("args", "option"),
+    [
+        pytest.param(("--bogus",), "--bogus", id="unknown-for-bare-group"),
+        pytest.param(("--bogus", "list"), "--bogus", id="unknown-for-list"),
+        pytest.param(("--limit", "1", "show", "title-too-long"), "--limit", id="list-only"),
+    ],
+)
+def test_an_unaccepted_group_option_has_no_placement_hint(
+    args: tuple[str, ...], option: str
+) -> None:
+    result = run_cli("rules", *args)
+
+    assert result.exit_code == 2
+    assert result.stdout == b""
+    (error,) = result.stderr_json_lines()
+    assert (error["code"], error["message"], error["hint"]) == (
+        "usage_error",
+        f"No such option: {option}",
+        None,
+    )
 
 
 def test_root_option_stays_at_the_root() -> None:

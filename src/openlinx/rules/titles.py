@@ -28,9 +28,9 @@ TITLE_TOO_LONG = Rule(
     description="A Page's first title is longer than max_chars characters.",
     why_it_matters=(
         "Search engines cut a long title short in their results, so its end, often the brand or "
-        "what sets the page apart, is not shown."
+        "what sets the Page apart, is not shown."
     ),
-    how_to_fix="Shorten the title to the limit, with the words that describe the page first.",
+    how_to_fix="Shorten the title to the limit, with the words that describe the Page first.",
     reproduce_sql=NO_ROWS,
     thresholds=(Threshold("max_chars", 60, "characters"),),
 )
