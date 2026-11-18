@@ -17,7 +17,7 @@ from openlinx.store.records import HttpVersion
 from tests.fixture_site.hosts import FixtureResolver, StartHosts
 from tests.fixture_site.routes import Page, Redirect, Robots, Site, Status
 from tests.fixture_site.server import Serve, ServerHandle
-from tests.fixture_site.tls import StartTlsHosts
+from tests.fixture_site.tls import SniLog, StartTlsHosts
 from tests.support.alpn import with_wrong_name_for_probe
 from tests.support.crawling import continued, crawl_result
 from tests.support.crawls import query
@@ -66,6 +66,33 @@ def test_an_origin_that_offers_only_http_1_1(
     assert query(crawl_file, "SELECT origin, http_version FROM origins") == [
         ("https://site.test", "http_1_1")
     ]
+
+
+@pytest.mark.parametrize("seed", ["https://site.test./", "https://site.test../"])
+def test_an_absolute_origin_name_keeps_its_dns_root(
+    temp_workspace: TempWorkspace, fixture_site: Serve, seed: str
+) -> None:
+    ca = trustme.CA()
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ca.issue_cert("site.test").configure_cert(tls)
+    tls.set_alpn_protocols(["h2", "http/1.1"])
+    sni = SniLog()
+    tls.sni_callback = sni.record
+    site = fixture_site(Site({"/": Page(body="<title>Home</title>")}), tls)
+    resolver = FixtureResolver({("site.test.", 443): site})
+
+    result = crawl_result(
+        seed,
+        resolver=resolver,
+        trust_anchors=ca.cert_pem.bytes().decode("ascii"),
+        retries=0,
+        network_wait=0,
+    )
+
+    assert query(result.crawl_file, "SELECT url, status_code FROM urls") == [(seed, 200)]
+    assert query(result.crawl_file, "SELECT http_version FROM origins") == [("http_2",)]
+    assert resolver.lookups == ("site.test.", "site.test.")
+    assert sni.names == ("site.test", "site.test")
 
 
 def test_a_listener_with_no_alpn_selection_is_http_1_1_capable(

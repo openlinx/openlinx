@@ -113,6 +113,9 @@ class AlpnProbe:
         return None
 
     async def _addresses(self, host: str, port: int) -> list[ResolveResult]:
+        # Match aiohttp's DNS lookup: an absolute name keeps exactly one root dot.
+        if host.endswith(".."):
+            host = host.rstrip(".") + "."
         if not is_ip_address(host):
             if self._resolver is None:
                 return await resolve_system(host, port)

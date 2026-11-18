@@ -7,7 +7,7 @@ import trustme
 
 from tests.fixture_site.hosts import FixtureResolver
 from tests.fixture_site.routes import Page, Site
-from tests.fixture_site.server import RequestLog, ServerHandle
+from tests.fixture_site.server import RequestLog, Serve, ServerHandle
 from tests.fixture_site.tls import SniLog, StartTlsHosts
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
@@ -85,13 +85,25 @@ def test_the_alpn_probe_uses_its_own_authenticated_tunnel(
     ]
 
 
-@pytest.mark.parametrize("proxy_certificate", ["trusted", "untrusted", "wrong-name"])
+@pytest.mark.parametrize(
+    ("proxy_certificate", "proxy_name", "dns_name"),
+    [
+        ("trusted", "proxy.test", "proxy.test"),
+        ("trusted", "proxy.test.", "proxy.test."),
+        ("trusted", "proxy.test..", "proxy.test."),
+        ("untrusted", "proxy.test", "proxy.test"),
+        ("wrong-name", "proxy.test", "proxy.test"),
+    ],
+    ids=["trusted", "absolute", "repeated-dot", "untrusted", "wrong-name"],
+)
 def test_the_alpn_probe_verifies_the_environment_proxy_before_connect(
     temp_workspace: TempWorkspace,
     fixture_tls_hosts: StartTlsHosts,
     fixture_proxy: StartProxy,
     monkeypatch: pytest.MonkeyPatch,
     proxy_certificate: str,
+    proxy_name: str,
+    dns_name: str,
 ) -> None:
     hosts = fixture_tls_hosts(
         Site({"/": Page(body="<title>Secure shop</title>")}), Site({}), alpn=("h2", "http/1.1")
@@ -103,8 +115,8 @@ def test_the_alpn_probe_verifies_the_environment_proxy_before_connect(
     sni = SniLog()
     proxy_tls.sni_callback = sni.record
     proxy = fixture_proxy(hosts.resolver, auth=("u", "pw"), tls=proxy_tls)
-    resolver = FixtureResolver({("proxy.test", 8443): ServerHandle(proxy.url, RequestLog())})
-    monkeypatch.setenv("HTTPS_PROXY", "https://u:pw@proxy.test:8443")
+    resolver = FixtureResolver({(dns_name, 8443): ServerHandle(proxy.url, RequestLog())})
+    monkeypatch.setenv("HTTPS_PROXY", f"https://u:pw@{proxy_name}:8443")
     anchors = hosts.trust_anchors
     if proxy_certificate != "untrusted":
         anchors += ca.cert_pem.bytes().decode("ascii")
@@ -131,5 +143,54 @@ def test_the_alpn_probe_verifies_the_environment_proxy_before_connect(
         assert origins == [("https://site.test", None)]
         assert proxy.connect_requests == ()
         assert hosts.secure_site.requests == ()
-    assert resolver.lookups == ("proxy.test", "proxy.test")
+    assert resolver.lookups == (dns_name, dns_name)
     assert sni.names == ("proxy.test", "proxy.test")
+
+
+@pytest.mark.parametrize(
+    ("authority", "proxy_dns_name", "tls_name", "expected_sni"),
+    [
+        ("site.test.", "site.test.", "site.test", "site.test"),
+        ("site.test..", "site.test..", "site.test", "site.test"),
+        ("127.0.0.1", "127.0.0.1", "127.0.0.1", None),
+        ("[::1]", "::1", "::1", None),
+    ],
+    ids=["absolute", "repeated-dot", "ipv4", "ipv6"],
+)
+def test_a_tunneled_origin_uses_the_same_tls_identity_as_the_probe(
+    temp_workspace: TempWorkspace,
+    fixture_site: Serve,
+    fixture_proxy: StartProxy,
+    authority: str,
+    proxy_dns_name: str,
+    tls_name: str,
+    expected_sni: str | None,
+) -> None:
+    ca = trustme.CA()
+    tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ca.issue_cert(tls_name).configure_cert(tls)
+    tls.set_alpn_protocols(["h2", "http/1.1"])
+    sni = SniLog()
+    tls.sni_callback = sni.record
+    site = fixture_site(Site({"/": Page(body="<title>Home</title>")}), tls)
+    proxy = fixture_proxy(FixtureResolver({(proxy_dns_name, 443): site}))
+
+    result = crawl_result(
+        f"https://{authority}/",
+        proxy=proxy.url,
+        trust_anchors=ca.cert_pem.bytes().decode("ascii"),
+        retries=0,
+        network_wait=0,
+    )
+
+    assert query(result.crawl_file, "SELECT url, fetch_error, status_code FROM urls") == [
+        (f"https://{authority}/", None, 200)
+    ]
+    assert query(result.crawl_file, "SELECT origin, http_version FROM origins") == [
+        (f"https://{authority}", "http_2")
+    ]
+    assert [request.target for request in proxy.connect_requests] == [
+        f"{authority}:443",
+        f"{authority}:443",
+    ]
+    assert sni.names == (expected_sni, expected_sni)

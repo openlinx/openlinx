@@ -405,12 +405,14 @@ ALPN, or `http_1_1` after any other successful handshake, including one with no 
 selection. A failed, timed-out or cancelled probe leaves `NULL` for that run.
 Unmeasured origins, including in v0.1 Crawl files, also have `NULL`. The probe follows
 the same DNS routing, proxy settings and TLS trust as ordinary requests and
-sends only TLS traffic to the origin. Probes share the Crawl's connection and per-host
-limits. One `--timeout` budget starts at scheduling and covers waiting for a connection
-slot, DNS, TCP, any proxy CONNECT and TLS. The CONNECT response head can total up to
-65,536 bytes, including the status line and final blank line. On normal completion the
-Crawl waits for probes to end. On stop it cancels pending and active probes, then waits
-for them to release their DNS and connection resources and exit.
+sends only TLS traffic to the origin. For direct DNS lookups of an origin or proxy,
+a final dot keeps the name absolute. TLS uses the name without trailing dots.
+Probes share the Crawl's connection and per-host limits. One `--timeout` budget starts
+at scheduling and covers waiting for a connection slot, DNS, TCP, any proxy CONNECT
+and TLS. The CONNECT response head can total up to 65,536 bytes, including the status
+line and final blank line. On normal completion the Crawl waits for probes to end. On
+stop it cancels pending and active probes, then waits for them to release their DNS
+and connection resources and exit.
 
 ### `--scope`
 

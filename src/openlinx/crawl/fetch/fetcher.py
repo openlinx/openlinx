@@ -183,10 +183,16 @@ class AiohttpFetcher:
         url = yarl.URL(request.url, encoded=True)
         fetched_at, started = self._clock.now(), self._clock.monotonic()
         try:
+            proxy = self._policy.proxy_for(request.url)
+            server_hostname = None
+            if proxy is not None and url.scheme == "https" and (host := url.raw_host):
+                # aiohttp strips DNS root dots for direct TLS, but not after CONNECT.
+                server_hostname = host.rstrip(".")
             async with self._session.get(
                 url,
                 allow_redirects=False,
-                proxy=self._policy.proxy_for(request.url),
+                proxy=proxy,
+                server_hostname=server_hostname,
                 headers=request_headers(self._policy, is_internal=request.is_internal),
             ) as response:
                 headers = tuple(
