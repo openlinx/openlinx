@@ -201,6 +201,17 @@ def test_store_codes_are_self_described() -> None:
     assert {code: diagnostics[code]["exit_code"] for code in expected} == expected
 
 
+def test_rule_codes_are_self_described() -> None:
+    result = run_cli("commands")
+
+    assert result.exit_code == 0, result.stderr
+    assert [
+        (diagnostic["code"], diagnostic["level"], diagnostic["exit_code"])
+        for diagnostic in result.json()["diagnostics"]
+        if diagnostic["code"] == "rule_not_found"
+    ] == [("rule_not_found", "error", 4)]
+
+
 def test_warning_and_info_codes_of_this_change() -> None:
     diagnostics = {d["code"]: d for d in run_cli("commands").json()["diagnostics"]}
 
