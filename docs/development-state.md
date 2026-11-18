@@ -20,7 +20,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) | Groups 1–14 complete on the integration branch, including Standards and Spec review. [Tasks](../openspec/changes/022-add-fetch-policy/tasks.md). |
+| 022 fetching | [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) | All 156 tasks complete and archived on the integration branch after Standards and Spec review. [Archived tasks](../openspec/changes/archive/2026-11-18-022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -64,11 +64,13 @@ cross-OS CI remain open.
 Detached Crawls, `status`, `stop` and `resume` remain planned. Later draft task groups require
 reconciliation with the implemented lifecycle before they are built.
 
-### Fetching on the integration branch
+### Archived fetching change
 
-All 156 tasks are complete on `coord/022-fetch-v02-2026-11-15`. Groups 11–14
-cover per-hop Internal identity, explicit proxy routing and fresh credentials on
-continue, offered HTTP capability and bounded response decoding. Standards and
+The change is archived on `coord/022-fetch-v02-2026-11-15` with the
+[Fetching](../openspec/specs/fetching/spec.md) and
+[Crawling](../openspec/specs/crawling/spec.md) specifications synced. Groups
+11–14 cover per-hop Internal identity, explicit proxy routing and fresh credentials
+on continue, offered HTTP capability and bounded response decoding. Standards and
 Spec review closed on the code at `ee7ee390`. Its full CI matrix passed on
 Linux, macOS and Windows with Python 3.12, 3.13 and 3.14. [Reviewed code](https://github.com/openlinx/openlinx/tree/ee7ee390a67c57acd0b33e469c45940cceffabd4) · [CI run](https://github.com/openlinx/openlinx/actions/runs/44218956051).
 
