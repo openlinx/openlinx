@@ -726,15 +726,20 @@ def test_units_waited_for_with_run_take_no_room_in_the_window(
         running.set()
         hold.wait()
 
+    submitted: list[Future[int]] = []
     with CrawlWriter(crawl.path, FakeClock()) as writer:
         runner = threading.Thread(target=writer.run, args=(held,))
         runner.start()
         running.wait()
-        submitted = finishes(lambda: submit_inserts(writer, 2000))
+        filled_while_held = finishes(lambda: submitted.extend(submit_inserts(writer, 2000)))
         hold.set()
         runner.join()
+        assert filled_while_held
 
-    assert submitted
+        writer.flush()
+        positions = list(range(1, 2001))
+        assert [position for position, _ in query(crawl.path, SEEDS)] == positions
+        assert [future.result(timeout=0) for future in submitted] == positions
 
 
 def test_a_failing_submitted_unit_frees_its_room_in_the_window(
