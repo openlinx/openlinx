@@ -39,6 +39,9 @@ OpenLinx is an open-source, agent-first SEO crawler, run as the `linx` command: 
 - **Errors:** an error a user sees is an `OpenLinxError` with a code from `openlinx.output.codes`. A broken internal contract raises `TypeError` or `RuntimeError`.
 - **Settings precedence:** explicit input wins over implicit or default values. Preserve whether an input was supplied, even when it equals the default; follow [Settings](docs/architecture.md#settings) when resolving conflicts.
 - **Tests:** only the boundary doubles listed in docs/testing.md, never a mock of our own modules. Expected values are literals taken from the spec. Use `127.0.0.1`, never `localhost`.
+- **Tests of reported success:** when a scenario requires work to happen, check its observable result against the requested input. For example, a smoke test that requests 105 Pages checks how many Pages reached the Store.
+- **Diagnostic tests:** when the contract allows rewording, try a valid paraphrase and a message that gives the wrong reason for the same error. The test must accept the first and catch the second. Match exact wording when the contract specifies it.
+- **Test organization:** place a new scenario with the behavior it exercises. When a module grows a distinct responsibility, follow the [test organization plan](docs/test-organization-plan.md#safe-migration) for moving its cases and update the navigation in [testing.md](docs/testing.md).
 - **Store:** a unit that runs once per URL or Page executes a statement built at import. A unit may run twice, so it has no effect outside its connection.
 - **Docs in the same slice:** new codes, settings, options and Commands are documented where their area is.
 - **Commits and pull requests:** follow the format in [CONTRIBUTING.md](CONTRIBUTING.md#commits-and-pull-requests). No `Co-Authored-By` or "generated with" lines. No competitor names except Screaming Frog.
