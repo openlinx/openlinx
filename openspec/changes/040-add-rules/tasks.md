@@ -13,6 +13,10 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **Order against `020` and `030`:** the slice starts once `020`'s first pull request (its groups 1–6: `urls` with `is_internal`, `in_scope`, `fetch_state`, `status_code`, `fetch_error`, `parsed` and `parse_error`) and `030`'s slice (its groups 1–3: `pages` with the title and heading columns) are on main. A Rule whose columns come later (`020`'s `blocked_by_robots_txt` in task 10.5; `022`-min's redirect and size columns; `030`'s Indexability, canonical, directive, link and content columns) is registered with a query that returns no rows until its own task, which names what it waits for where it is not obvious.
 
+**Release scope.** v0.1 ships the [15 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after release, within the existing ROADMAP milestones. Plan their Rule-specific work in 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9 for v0.2. The pixel threshold for `title-too-long` also waits for v0.2. For shared behaviour, use a v0.1 Rule to exercise snapshots, disabling, empty Issue results and resume. Keep the examples that depend on a deferred Rule, including the image Resource example in 10.4, for the post-release plan. Each group's documentation and review cover the Rules in that release.
+
+**Implemented registration and settings (groups 1–2).** The CLI lists seven Rules. Four are in the v0.1 set: `internal-4xx`, `internal-5xx`, `title-missing` and `title-too-long` (`max_chars`, default 60). Three already registered for the settings scenarios belong to the later set: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each accepts `enabled`, defaulting to true. The registered Rules still use no-row queries. URL evaluation, public reproducing queries and Issues remain open in the tasks below.
+
 ## 1. Rule model and the rules Command (slice)
 
 - [x] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. Add the Rule model and register `internal-4xx` and `internal-5xx` with guidance and no-row queries until 4.1 and 4.4. The second Rule makes the one-item page return a cursor. Add `linx rules list` on `010`'s output contract, with bare `linx rules` dispatching to it. Check the full Command path in `linx commands` (D18). This group describes the built-in catalogue. Workspace-resolved `enabled` and the public `reproduce_sql` field arrive in 2.2 and 3.3.
@@ -36,13 +40,13 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 3. Rules as queries, stored Issues and live Issues (slice)
 
-- [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Create the `rules` table in `openlinx.store.issues` through `018`'s `public_table()` (`STRICT`, `WITHOUT ROWID`, keyed by the Rule id), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
+- [ ] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Declare `rules` in `openlinx.store.schema` through `018`'s `public_table()` (ordinary `STRICT` rowid table with a TEXT primary key), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
 - [ ] 3.2 Drive "Categories are an enumeration" at seam 6 (`values` on `rules.category`).
 - [ ] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Expose the Rule model's `reproduce_sql` in list and show and store it in the Crawl's `rules` table (D15). Keep the no-row query for any Rule whose condition is still pending.
 - [ ] 3.4 Drive "Missing title" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. The query reads `030`'s `title_count` and `title_1` (its group 2) from `pages`, joined to `urls` for `parsed` = 1 (design D2). The test writes `urls` rows through `020`'s store units and `pages` rows through `030`'s `write_page` (`openlinx.store.pages`) with a `PageRow` (`openlinx.store.page_records`), only for a URL that is a Page by `030`'s predicate, as builders, after `030` task 2.3.
 - [ ] 3.5 Drive "Empty title counts as missing" at seam 2.
 - [ ] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.
-- [ ] 3.7 Drive "Issue row counts its Affected URLs" at seam 3+6. Create `affected_urls` and the `issues` view in `openlinx.store.issues`, and add the post-crawl pass to `020`'s `default_hooks()` in `openlinx.services.hooks`: one unit per enabled Rule that replaces its rows with `INSERT … SELECT` from its query (design D5, D15). Check the units with `017`'s `replay_now(writer)`.
+- [ ] 3.7 Drive "Issue row counts its Affected URLs" at seam 3+6. Declare `affected_urls` (`STRICT`, `WITHOUT ROWID`, keyed by `(rule_id, url_id)`) and the `issues` view in `openlinx.store.schema`, and add the post-crawl pass to `020`'s `default_hooks()` in `openlinx.services.hooks`: one unit per enabled Rule that replaces its rows with `INSERT … SELECT` from its query (design D5, D15). Check the units with `017`'s `replay_now(writer)`.
 - [ ] 3.8 Drive "A Rule's query returns its stored Affected URLs" at seam 3+6, over every enabled Rule. From here on it checks every Rule registered later.
 - [ ] 3.9 Drive "Keys of the Rule tables" at seam 6.
 - [ ] 3.10 Drive "Issues is a view" at seam 6. It is the schema's first view, so extend `018`'s declaration and contract test to views (design D7).
@@ -124,7 +128,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 8.10 Drive "Noindex from X-Robots-Tag only" and "Noindex from both sources" at seam 2. This is a trivial pair: `detail.sources`. Register `noindex`.
 - [ ] 8.11 Drive "Nofollow from meta robots" at seam 2, and register `nofollow`.
 - [ ] 8.12 Drive "Meta refresh used" at seam 2, and register `meta-refresh`.
-- [ ] 8.13 Docs: add the 5 canonical Rules and the 3 directive Rules to the catalogue in `docs/rules.md`.
+- [ ] 8.13 Docs: add the canonical and directive Rules for the current release to `docs/rules.md`. For v0.1, check “Catalogue size” and “Rule ids are unique kebab-case” at seam 1 for coverage of the 15 ROADMAP ids and uniqueness across all registrations.
 - [ ] 8.14 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. Content, URL and image Rules
@@ -142,7 +146,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 9.11 Drive "Srcset candidates are not counted twice" at seam 2.
 - [ ] 9.12 Drive "All images described" at seam 2.
 - [ ] 9.13 Drive "Image over the size limit" and "Image at the size limit" at seam 2. This is a trivial pair: one boundary. Register `image-too-large`.
-- [ ] 9.14 Drive "Broken external image" at seam 2 by registering `image-broken`, the 42nd Rule. In the same red step, write "Catalogue size" and "Rule ids are unique kebab-case" at seam 1, which fail until this Rule exists.
+- [ ] 9.14 Drive "Broken external image" at seam 2 by registering `image-broken`, the 42nd Rule. In the same red step, check "Full catalogue size after v0.1" and "Rule ids are unique kebab-case" at seam 1 against the full 42-Rule catalogue.
 - [ ] 9.15 Drive "An image that failed to be recorded is not broken" at seam 2, with the reason in the query's SQL comment.
 - [ ] 9.16 Docs: add the 2 content Rules, 5 URL Rules and 3 image Rules to the catalogue in `docs/rules.md`, and check that the catalogue lists exactly the 42 ids that `linx rules list` returns.
 - [ ] 9.17 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
