@@ -4,11 +4,17 @@ import json
 import re
 import subprocess
 import sys
+from contextlib import closing
 from tempfile import TemporaryFile
 
 import pytest
 
+from openlinx.store.connections import connect
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
 from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli
+from tests.support.crawling import crawled
+from tests.support.crawls import query
 from tests.support.processes import console_process, python_command
 from tests.support.workspace import TempWorkspace
 
@@ -59,6 +65,34 @@ def test_show_a_rule_with_thresholds(temp_workspace: TempWorkspace) -> None:
     )
     assert rule["applies_to"] == "internal_pages"
     assert rule["thresholds"] == {"max_chars": {"value": 60, "default": 60, "unit": "characters"}}
+
+
+def test_the_rules_command_prints_the_reproducing_query(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site({"/": Page(body="<title>Home</title>")}))
+    file = crawled(server.url("/"))
+
+    shown = run_cli("rules", "show", "title-missing")
+    assert shown.exit_code == 0, shown.stderr
+    reproduce_sql = shown.json()["reproduce_sql"]
+    stored = dict(query(file, "SELECT id, reproduce_sql FROM rules"))
+    assert isinstance(reproduce_sql, str)
+    assert reproduce_sql == stored["title-missing"]
+    with closing(connect(file, read_only=True)) as connection:
+        rows = connection.execute(reproduce_sql)
+        assert tuple(column[0] for column in rows.description) == ("url_id", "detail")
+        assert rows.fetchall() == []
+
+    listed = run_cli("rules", "list", "--limit", "50")
+    assert listed.exit_code == 0, listed.stderr
+    assert {rule["id"]: rule["reproduce_sql"] for rule in listed.json()["items"]} == stored
+
+    selected = run_cli("rules", "list", "--limit", "50", "--fields", "id,reproduce_sql")
+    assert selected.exit_code == 0, selected.stderr
+    assert selected.json()["items"] == [
+        {"id": rule["id"], "reproduce_sql": stored[rule["id"]]} for rule in listed.json()["items"]
+    ]
 
 
 def test_override_shown_by_the_rules_command(temp_workspace: TempWorkspace) -> None:

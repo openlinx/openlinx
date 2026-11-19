@@ -74,7 +74,8 @@ the same fields in each item by default.
   "thresholds": {"max_chars": {"value": 60, "default": 60, "unit": "characters"}},
   "description": "A Page's first title is longer than max_chars characters.",
   "why_it_matters": "Search engines cut a long title short in their results, so its end, often the brand or what sets the Page apart, is not shown.",
-  "how_to_fix": "Shorten the title to the limit, with the words that describe the Page first."
+  "how_to_fix": "Shorten the title to the limit, with the words that describe the Page first.",
+  "reproduce_sql": "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
 }
 ```
 
@@ -130,9 +131,10 @@ If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, runnin
 `rules.title-to-long` in `details.errors[0].key`. Its hint reads
 `Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
 
-## Planned evaluation and configuration
+## Reproducing queries
 
-The planned evaluation uses a SQL query per Rule over stored Crawl data. The query identifies
-Affected URLs. Per-Crawl Rule records, Issue evaluation and the Health Score are planned.
-The catalogue output will also expose the reproducing query.
+Both Commands include `reproduce_sql`, a read-only SQL query over the crawl file that returns
+Affected URLs as `url_id` and `detail`. The Crawl records the same query alongside the effective
+settings in its [`rules` table](schema.md#table-rules). Pending Rule conditions use a query that
+returns no rows. Issue evaluation and the Health Score are planned.
 [Planned v0.1 catalogue](../ROADMAP.md#the-v01-rules)

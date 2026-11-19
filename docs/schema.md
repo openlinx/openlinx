@@ -364,3 +364,4 @@ One row for each Rule in the catalogue, with its configuration at Crawl creation
 | `description` | TEXT | no | | | | What the Rule checks. |
 | `why_it_matters` | TEXT | no | | | | Why its Issues matter. |
 | `how_to_fix` | TEXT | no | | | | How to fix its Issues. |
+| `reproduce_sql` | TEXT | no | | | | The Rule's read-only SELECT over this Crawl, returning its Affected URLs as url_id and detail. |

@@ -42,7 +42,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 - [x] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Declare `rules` in `openlinx.store.schema` through `018`'s `public_table()` (ordinary `STRICT` rowid table with a TEXT primary key), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
 - [x] 3.2 Drive "Categories are an enumeration" at seam 6 (`values` on `rules.category`).
-- [ ] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Expose the Rule model's `reproduce_sql` in list and show and store it in the Crawl's `rules` table (D15). Keep the no-row query for any Rule whose condition is still pending.
+- [x] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Expose the Rule model's `reproduce_sql` in list and show and store it in the Crawl's `rules` table (D15). Keep the no-row query for any Rule whose condition is still pending.
 - [ ] 3.4 Drive "Missing title" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. The query reads `030`'s `title_count` and `title_1` (its group 2) from `pages`, joined to `urls` for `parsed` = 1 (design D2). The test writes `urls` rows through `020`'s store units and `pages` rows through `030`'s `write_page` (`openlinx.store.pages`) with a `PageRow` (`openlinx.store.page_records`), only for a URL that is a Page by `030`'s predicate, as builders, after `030` task 2.3.
 - [ ] 3.5 Drive "Empty title counts as missing" at seam 2.
 - [ ] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.

@@ -74,6 +74,7 @@ def _item(rule: "Rule", configured: Mapping[str, Any]) -> dict[str, Any]:
         "description": rule.description,
         "why_it_matters": rule.why_it_matters,
         "how_to_fix": rule.how_to_fix,
+        "reproduce_sql": rule.reproduce_sql,
     }
 
 
@@ -95,6 +96,7 @@ def rule_rows(configured: Mapping[str, Mapping[str, Any]]) -> tuple[RuleRow, ...
             description=rule.description,
             why_it_matters=rule.why_it_matters,
             how_to_fix=rule.how_to_fix,
+            reproduce_sql=rule.reproduce_sql,
         )
         for rule in RULES
     )

@@ -1424,6 +1424,13 @@ rules = public_table(
     Column("description", Text, nullable=False, comment="What the Rule checks."),
     Column("why_it_matters", Text, nullable=False, comment="Why its Issues matter."),
     Column("how_to_fix", Text, nullable=False, comment="How to fix its Issues."),
+    Column(
+        "reproduce_sql",
+        Text,
+        nullable=False,
+        comment="The Rule's read-only SELECT over this Crawl, returning its Affected URLs "
+        "as url_id and detail.",
+    ),
     comment="One row for each Rule in the catalogue, with its configuration at Crawl creation.",
     change=40,
 )
