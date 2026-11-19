@@ -146,7 +146,7 @@ The `titles` category SHALL contain these Rules, all over `internal_pages`:
 
 In v0.1, `title-too-long` checks characters only. `030-add-page-data` fills `title_1_width_px` from v0.2, and the Rule's `max_pixels` threshold and its `width_px` detail key arrive with it, so v0.1 shows no threshold that cannot fire.
 
-#### Scenario: Missing title
+#### Scenario: Missing title produces an Affected URL
 - **WHEN** an analysed Page has `title_count` 0
 - **THEN** `title-missing` fires for it
 

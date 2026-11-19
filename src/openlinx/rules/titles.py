@@ -17,7 +17,11 @@ TITLE_MISSING = Rule(
         "<title> is empty, fill it in. Use words that describe the Page and set it "
         "apart from the site's other Pages."
     ),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql="""\
+SELECT pages.url_id, NULL AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1 AND pages.title_count = 0""",
 )
 TITLE_TOO_LONG = Rule(
     id="title-too-long",

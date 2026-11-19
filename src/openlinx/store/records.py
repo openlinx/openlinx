@@ -214,6 +214,14 @@ class RuleRow:
     reproduce_sql: str
 
 
+@dataclass(frozen=True, slots=True)
+class AffectedUrl:
+    """A URL matched by a Rule, with its measured values when the Rule reports them."""
+
+    url_id: int
+    detail: dict[str, Any] | None
+
+
 @dataclass(frozen=True, kw_only=True)
 class NewCrawl:
     workspace: Workspace
