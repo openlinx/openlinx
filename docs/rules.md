@@ -41,7 +41,7 @@ This example replaces the returned cursor with a placeholder.
 
 ```json
 {
-  "total": 8,
+  "total": 9,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "<opaque cursor>"
 }
@@ -137,6 +137,10 @@ If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, runnin
 `linx rules list` exits with code 3. The `settings_invalid` diagnostic on stderr identifies
 `rules.title-to-long` in `details.errors[0].key`. Its hint reads
 `Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
+
+The response-code Rules report Internal HTTP client errors (400–499), server errors
+(500–599) and requests that received no response. Their Affected URLs record the
+status code or fetch error in `detail`.
 
 ## Read Issues from a crawl file
 

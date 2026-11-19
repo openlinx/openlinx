@@ -45,4 +45,25 @@ WHERE is_internal = 1 AND fetch_state IN ('fetched', 'error')
   AND status_code BETWEEN 500 AND 599""",
 )
 
-RULES = (INTERNAL_4XX, INTERNAL_5XX)
+INTERNAL_NO_RESPONSE = Rule(
+    id="internal-no-response",
+    category="response_codes",
+    issue_type="issue",
+    priority="high",
+    applies_to="internal_urls",
+    description="An Internal URL got no HTTP response.",
+    why_it_matters=(
+        "Visitors and search engines cannot reach the content. Repeated failures can "
+        "reduce how often a search engine crawls the site."
+    ),
+    how_to_fix=(
+        "Check detail.error and the server logs. For a timeout, check response times. "
+        "For DNS, connection or TLS errors, check the host and its network configuration."
+    ),
+    reproduce_sql="""\
+SELECT id AS url_id, json_object('error', fetch_error) AS detail
+FROM urls
+WHERE is_internal = 1 AND fetch_state = 'error'""",
+)
+
+RULES = (INTERNAL_4XX, INTERNAL_5XX, INTERNAL_NO_RESPONSE)

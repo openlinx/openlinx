@@ -162,3 +162,25 @@ def test_server_error(fixture_hosts: StartHosts) -> None:
         ("http://site.test/503", {"status_code": 503}),
         ("http://site.test/599", {"status_code": 599}),
     ]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_no_response(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site({"/": Page(body='<a href="/slow">Slow</a>'), "/slow": Page(body="Late", delay=3)})
+    )
+    result = crawl_result(server.url("/"), timeout=1, retries=0)
+    rows = query(
+        result.crawl_file,
+        "SELECT id, fetch_state, fetch_error FROM urls WHERE url = ?",
+        (server.url("/slow"),),
+    )
+    [(slow_id, state, reason)] = rows
+    assert (state, reason, result.summary.state) == ("error", "timeout", "completed")
+    affected = query(
+        result.crawl_file,
+        "SELECT url_id, detail FROM affected_urls WHERE rule_id = 'internal-no-response'",
+    )
+    assert [(url_id, json.loads(detail)) for url_id, detail in affected] == [
+        (slow_id, {"error": "timeout"})
+    ]
