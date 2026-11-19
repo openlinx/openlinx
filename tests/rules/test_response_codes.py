@@ -1,5 +1,7 @@
 """Verify response-code Rules over URLs written by a real Crawl."""
 
+import json
+
 import pytest
 
 from openlinx.rules.response_codes import INTERNAL_4XX
@@ -86,4 +88,36 @@ def test_external_urls_are_not_internal_urls(fixture_hosts: StartHosts) -> None:
 
     assert evaluate_rule(file, INTERNAL_4XX) == [
         AffectedUrl(url_id=internal_id, detail={"status_code": 404})
+    ]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_client_error_recorded_by_a_crawl(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/gone">Gone</a>'),
+                "/gone": Status(404, body="Not found", content_type="text/plain"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    url = server.url("/gone")
+    assert query(
+        file,
+        """SELECT is_internal, fetch_state, status_code, content_type, parsed,
+                  EXISTS(SELECT 1 FROM pages WHERE pages.url_id = urls.id)
+           FROM urls WHERE url = ?""",
+        (url,),
+    ) == [(1, "fetched", 404, "text/plain", 0, 0)]
+
+    affected = query(
+        file,
+        """SELECT urls.url, affected_urls.detail
+           FROM affected_urls JOIN urls ON urls.id = affected_urls.url_id
+           WHERE affected_urls.rule_id = 'internal-4xx'""",
+    )
+    assert [(affected_url, json.loads(detail)) for affected_url, detail in affected] == [
+        (url, {"status_code": 404})
     ]

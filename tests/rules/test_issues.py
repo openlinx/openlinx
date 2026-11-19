@@ -29,8 +29,12 @@ from tests.support.writer import replay_now
 
 RULE_PAGES = Site(
     {
-        "/rules/": Page(body='<title>Rules</title><a href="/rules/untitled">Untitled</a>'),
+        "/rules/": Page(
+            body='<title>Rules</title><a href="/rules/untitled">Untitled</a>'
+            '<a href="/rules/gone">Gone</a>'
+        ),
         "/rules/untitled": Page(body="<p>Missing title</p>"),
+        "/rules/gone": Status(404, body="Not found", content_type="text/plain"),
     }
 )
 
@@ -131,7 +135,12 @@ def test_a_rule_s_query_returns_its_stored_affected_urls(fixture_site: StartSite
     assert query(file, "SELECT state FROM crawl") == [("completed",)]
     assert (server.url("/rules/untitled"), None) in stored_missing_titles(file)
     rules = dict(query(file, "SELECT id, reproduce_sql FROM rules WHERE enabled = 1"))
-    assert "title-missing" in rules
+    assert {"title-missing", "internal-4xx"} <= rules.keys()
+    assert query(
+        file,
+        "SELECT url FROM affected_urls JOIN urls ON urls.id = affected_urls.url_id "
+        "WHERE rule_id = 'internal-4xx'",
+    ) == [(server.url("/rules/gone"),)]
     for rule_id, sql in rules.items():
         stored = query(
             file, "SELECT url_id, detail FROM affected_urls WHERE rule_id = ?", (rule_id,)

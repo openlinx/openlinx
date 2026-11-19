@@ -20,7 +20,7 @@ from openlinx.store.issues import (
 )
 from openlinx.store.records import AffectedUrl, Issue, RuleRow
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawls import query
 
 _RULE_PAGES = Site(
@@ -29,12 +29,13 @@ _RULE_PAGES = Site(
         "/rules/z-titled": Page(
             body='<title>Pears</title><a href="/rules/a-titled">Tea</a>',
         ),
-        "/rules/a-titled": Page(body="<title>Tea</title>"),
+        "/rules/a-titled": Page(body='<title>Tea</title><a href="/rules/gone">Gone</a>'),
+        "/rules/gone": Status(404, body="Not found", content_type="text/plain"),
     }
 )
 
-# The fixture supplies a second Issue with measured detail while only title-missing can fire
-# in the catalogue. Returning URLs in reverse ID order makes the reader's ordering observable.
+# Returning the fixture Rule's two URLs in reverse ID order makes the reader's ordering
+# observable even when the catalogue Rules produce no Issue with multiple Affected URLs.
 _TITLE_LENGTH = Rule(
     id="fixture-title-length",
     category="titles",
@@ -127,15 +128,20 @@ def test_live_and_materialised_issues_agree(fixture_site: StartSite) -> None:
     assert stored_affected == live_affected
 
     ids = dict(query(crawl_file, "SELECT url, id FROM urls"))
+    gone = ids[server.url("/rules/gone")]
     missing = ids[server.url("/rules/")]
     pears = ids[server.url("/rules/z-titled")]
     tea = ids[server.url("/rules/a-titled")]
-    fixture_issues = [
-        issue
-        for issue in live_issues
-        if issue.rule_id in {"title-missing", "title-too-long", "fixture-title-length"}
-    ]
+    rule_ids = {"internal-4xx", "title-missing", "title-too-long", "fixture-title-length"}
+    fixture_issues = [issue for issue in live_issues if issue.rule_id in rule_ids]
     assert fixture_issues == [
+        Issue(
+            rule_id="internal-4xx",
+            category="response_codes",
+            issue_type="issue",
+            priority="high",
+            affected_count=1,
+        ),
         Issue(
             rule_id="title-missing",
             category="titles",
@@ -151,6 +157,7 @@ def test_live_and_materialised_issues_agree(fixture_site: StartSite) -> None:
             affected_count=2,
         ),
     ]
+    assert live_affected["internal-4xx"] == [AffectedUrl(url_id=gone, detail={"status_code": 404})]
     assert live_affected["title-missing"] == [AffectedUrl(url_id=missing, detail=None)]
     assert live_affected["title-too-long"] == []
     assert live_affected["fixture-title-length"] == [
