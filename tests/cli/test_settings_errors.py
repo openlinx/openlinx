@@ -118,3 +118,106 @@ def test_a_settings_file_that_is_a_folder_is_invalid_and_nothing_is_created(shop
     result = run_cli("init", app=example_app())
 
     assert (result.exit_code, (shop / ".openlinx").exists()) == (3, False)
+
+
+def test_interleaved_rule_settings_keep_their_file_order(shop: Path) -> None:
+    (shop / "openlinx.toml").write_text(
+        """[rules]
+"title-too-long".max_chars = -1
+'h2-missing' . enabled = "off"
+title-too-long."enabled" = 0
+""",
+        encoding="utf-8",
+    )
+
+    result = run_cli("rules", "list")
+    (error,) = result.stderr_json_lines()
+
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert [problem["key"] for problem in error["details"]["errors"]] == [
+        "rules.title-too-long.max_chars",
+        "rules.h2-missing.enabled",
+        "rules.title-too-long.enabled",
+    ]
+
+
+def test_problem_order_uses_toml_key_parts_and_parents(shop: Path) -> None:
+    (shop / "openlinx.toml").write_text(
+        """crawl.concurrency = 0
+"crawl.header" = 1
+store.journal_mode = "invalid"
+crawl.header = [42]
+unknown.child = 1
+crawl.max_urls = -1
+""",
+        encoding="utf-8",
+    )
+
+    result = run_cli("init")
+    (error,) = result.stderr_json_lines()
+
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert [problem["key"] for problem in error["details"]["errors"]] == [
+        "crawl.concurrency",
+        "crawl.header",
+        "store.journal_mode",
+        "crawl.header.0",
+        "unknown",
+        "crawl.max_urls",
+    ]
+
+
+def test_inline_rule_keys_keep_their_order_around_a_multiline_string(shop: Path) -> None:
+    (shop / "openlinx.toml").write_text(
+        '''example.token = """Text resembling settings:
+[rules]
+h2-missing.enabled = true # part of the string"""
+rules = {title-too-long.enabled = 1, 'h2-missing'.enabled = 1, title-too-long.max_chars = -1}
+''',
+        encoding="utf-8",
+    )
+
+    result = run_cli("init", app=example_app())
+    (error,) = result.stderr_json_lines()
+
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert [problem["key"] for problem in error["details"]["errors"]] == [
+        "rules.title-too-long.enabled",
+        "rules.h2-missing.enabled",
+        "rules.title-too-long.max_chars",
+    ]
+
+
+def test_array_table_item_problems_keep_their_header_positions(shop: Path) -> None:
+    (shop / "openlinx.toml").write_bytes(
+        b"[[crawl.header]]\n[store]\njournal_mode = 'invalid'\n[[crawl.header]]\n"
+    )
+
+    result = run_cli("init")
+    (error,) = result.stderr_json_lines()
+
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert [problem["key"] for problem in error["details"]["errors"]] == [
+        "crawl.header.0",
+        "store.journal_mode",
+        "crawl.header.1",
+    ]
+
+
+def test_error_positions_use_the_spelling_that_supplied_a_root_table(shop: Path) -> None:
+    (shop / "openlinx.toml").write_bytes(
+        b"CRAWL.concurrency = 0\n"
+        b"crawl.max_urls = 20\n"
+        b"store.journal_mode = 'invalid'\n"
+        b"CRAWL.max_urls = -1\n"
+    )
+
+    result = run_cli("init")
+    (error,) = result.stderr_json_lines()
+
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert [problem["key"] for problem in error["details"]["errors"]] == [
+        "crawl.concurrency",
+        "store.journal_mode",
+        "crawl.max_urls",
+    ]

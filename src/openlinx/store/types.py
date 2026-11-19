@@ -7,6 +7,8 @@ import orjson
 from sqlalchemy import Dialect, Integer, Text
 from sqlalchemy.types import TypeDecorator
 
+from openlinx.json_numbers import encode_json
+
 
 class Timestamp(TypeDecorator[datetime]):
     """UTC as `YYYY-MM-DDTHH:MM:SS.sssZ`, which sorts as text."""
@@ -26,8 +28,14 @@ class Json(TypeDecorator[Any]):
     cache_ok = True
     format: ClassVar[str] = "json"
 
+    # SQLAlchemy omits keyword-only parameters from the compiled statement's type cache key.
+    def __init__(self, wide_integers: bool = False) -> None:
+        super().__init__()
+        self.wide_integers = wide_integers
+
     def process_bind_param(self, value: Any, dialect: Dialect) -> str | None:
-        return None if value is None else orjson.dumps(value).decode()
+        encode = encode_json if self.wide_integers else orjson.dumps
+        return None if value is None else encode(value).decode()
 
 
 class Flag(TypeDecorator[bool]):

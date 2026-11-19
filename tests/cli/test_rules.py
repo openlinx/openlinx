@@ -75,6 +75,29 @@ def test_override_shown_by_the_rules_command(temp_workspace: TempWorkspace) -> N
     assert item["thresholds"] == expected
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(("show", "title-too-long"), id="show-json"),
+        pytest.param(("show", "title-too-long", "--format", "table"), id="show-table"),
+        pytest.param(("list", "--fields", "thresholds"), id="list-json"),
+        pytest.param(("list", "--fields", "thresholds", "--format", "jsonl"), id="list-jsonl"),
+        pytest.param(("list", "--fields", "thresholds", "--format", "table"), id="list-table"),
+    ],
+)
+def test_rules_display_a_threshold_above_the_unsigned_64_bit_range(
+    temp_workspace: TempWorkspace, args: tuple[str, ...]
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(
+        b"[rules.title-too-long]\nmax_chars = 18446744073709551617\n"
+    )
+
+    result = run_cli("rules", *args)
+
+    assert result.exit_code == 0, result.stderr
+    assert re.search(rb'"value"\s*:\s*18446744073709551617\s*[,}]', result.stdout), result.stdout
+
+
 def test_rules_use_the_explicit_workspace(temp_workspace: TempWorkspace) -> None:
     (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
     other = temp_workspace.root / "other"

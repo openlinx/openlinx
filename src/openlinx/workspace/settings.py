@@ -12,9 +12,9 @@ from pydantic import BaseModel, ValidationError, create_model
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
+    InitSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
-    TomlConfigSettingsSource,
 )
 
 from openlinx.naming import COMMAND_NAME
@@ -22,6 +22,7 @@ from openlinx.output.codes import INVALID_VALUE, SETTINGS_INVALID
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.workspace.discovery import Workspace
 from openlinx.workspace.tables import SettingsTables, keyed_entry
+from openlinx.workspace.toml_order import Key, file_positions
 
 
 @dataclass(frozen=True)
@@ -48,33 +49,41 @@ def load_settings(
         name: (table, {} if keyed_entry(table) is not None else table())
         for name, table in tables.items()
     }
-    root_model = create_model(
-        "OpenLinxSettings", __base__=_sources(workspace.settings_file), **fields
-    )
     settings_file = workspace.settings_file
     if settings_file.exists() and not settings_file.is_file():
         raise _invalid(settings_file, "is not a file", [{"key": None, "message": "Not a file."}])
     values: dict[str, Any] = dict(flags or {})
     try:
-        return Settings(root_model(**values))
+        # Validate and order diagnostics from the same bytes even if the file is replaced.
+        source = settings_file.read_bytes().decode("utf-8") if settings_file.is_file() else ""
+        file_values = tomllib.loads(source)
     except UnicodeDecodeError as error:
         problem: dict[str, Any] = {"key": None, "message": "The file is not UTF-8.", "line": None}
         raise _invalid(settings_file, "is not UTF-8", [problem]) from error
     except tomllib.TOMLDecodeError as error:
         problem = {"key": None, "message": str(error), "line": _line(error)}
         raise _invalid(settings_file, "is not valid TOML", [problem]) from error
+    root_model = create_model("OpenLinxSettings", __base__=_sources(file_values), **fields)
+    try:
+        return Settings(root_model(**values))
     except ValidationError as error:
         refused = refused_given_value(error, values)
         if refused is not None:
             raise refused from error
-        problems: list[dict[str, Any]] = [
-            {"key": ".".join(str(part) for part in problem["loc"]), "message": problem["msg"]}
-            for problem in error.errors()
-        ]
+        problems = error.errors()
+        if len(problems) > 1:
+            positions = file_positions(source)
+            # Ask the file's settings source which spelling supplied each canonical root.
+            # Distinct TOML tables can have names that differ only in case.
+            source_roots = InitSettingsSource(root_model, {key: key for key in file_values})()
+            problems.sort(key=lambda problem: _position(problem["loc"], positions, source_roots))
         raise _invalid(
             settings_file,
             "is invalid",
-            _in_file_order(problems, settings_file),
+            [
+                {"key": ".".join(map(str, problem["loc"])), "message": problem["msg"]}
+                for problem in problems
+            ],
             hint=_suggestion(error, root_model),
         ) from error
 
@@ -134,31 +143,13 @@ def _invalid(
     )
 
 
-def _in_file_order(errors: list[dict[str, Any]], settings_file: Path) -> list[dict[str, Any]]:
-    # tomllib keeps the file's order, so a key's index in the flattened document is its place.
-    order = {key: index for index, key in enumerate(_dotted_keys(_read_toml(settings_file)))}
-
-    def place(error: dict[str, Any]) -> int:
-        parts = str(error["key"]).split(".")
-        prefixes = (".".join(parts[:size]) for size in range(len(parts), 0, -1))
-        return next((order[prefix] for prefix in prefixes if prefix in order), len(order))
-
-    return sorted(errors, key=place)
-
-
-def _read_toml(settings_file: Path) -> dict[str, Any]:
-    return (
-        tomllib.loads(settings_file.read_text(encoding="utf-8")) if settings_file.is_file() else {}
-    )
-
-
-def _dotted_keys(table: Mapping[str, Any], prefix: str = "") -> list[str]:
-    keys: list[str] = []
-    for key, value in table.items():
-        keys.append(prefix + key)
-        if isinstance(value, Mapping):
-            keys += _dotted_keys(value, f"{prefix}{key}.")
-    return keys
+def _position(key: Key, positions: Mapping[Key, int], source_roots: Mapping[str, str]) -> int:
+    if key and isinstance(key[0], str):
+        key = (source_roots.get(key[0], key[0]), *key[1:])
+    # Validators can report a child of a value assigned as a whole.
+    while key and key not in positions:
+        key = key[:-1]
+    return positions.get(key, len(positions))
 
 
 def _line(error: tomllib.TOMLDecodeError) -> int | None:
@@ -190,7 +181,7 @@ def _toml_fields(model: type[BaseModel]) -> dict[str, FieldInfo]:
     return {field.alias or key: field for key, field in model.model_fields.items()}
 
 
-def _sources(settings_file: Path) -> type[BaseSettings]:
+def _sources(file_values: dict[str, Any]) -> type[BaseSettings]:
     class Root(BaseSettings):
         model_config = SettingsConfigDict(extra="forbid")
 
@@ -204,6 +195,6 @@ def _sources(settings_file: Path) -> type[BaseSettings]:
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             # No env, .env or secrets source: settings come only from flags and the settings file.
-            return (init_settings, TomlConfigSettingsSource(settings_cls, toml_file=settings_file))
+            return (init_settings, InitSettingsSource(settings_cls, file_values))
 
     return Root

@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import msgspec
 import orjson
 from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import DBAPIError
@@ -113,8 +114,8 @@ def read_recorded(path: Path) -> RecordedCrawl:
         return RecordedCrawl(
             state=row.state,
             crawl_mode=row.crawl_mode,
-            # The Json type writes JSON text and reads it back as written.
-            config=orjson.loads(row.config),
+            # JSON integers outside 64 bits must survive replay as integers.
+            config=msgspec.json.decode(row.config, type=dict[str, Any]),
             scope=orjson.loads(row.scope),
             seeds=tuple(urls),
             warnings=tuple(orjson.loads(row.warnings)),

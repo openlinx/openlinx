@@ -176,7 +176,7 @@ crawl = public_table(
     ),
     Column(
         "config",
-        Json,
+        Json(wide_integers=True),
         nullable=False,
         comment="The resolved settings and service-owned request_policy metadata, "
         "secrets redacted.",
