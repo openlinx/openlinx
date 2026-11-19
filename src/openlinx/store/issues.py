@@ -193,24 +193,24 @@ def read_url_issues(
     """Issues for one URL in catalogue order, followed by other stored Rules in Rule id order."""
     with reading(crawl_file) as connection:
         if _materialised(connection):
-            rows = connection.execute(
-                select(affected_urls.c.rule_id, affected_urls.c.detail).where(
-                    affected_urls.c.url_id == url_id
-                )
+            statement = select(affected_urls.c.rule_id, affected_urls.c.detail).where(
+                affected_urls.c.url_id == url_id
             )
-            return _catalogue_order(
-                {
-                    rule_id: UrlIssue(rule_id=rule_id, url_id=url_id, detail=decode_detail(detail))
-                    for rule_id, detail in rows
-                },
-                catalogue,
-            )
-        result = []
-        for rule in _enabled_rules(connection, catalogue):
-            found = _found(rule)
-            details: Select[str | None] = select(found.c.detail).where(found.c.url_id == url_id)
-            for detail in connection.scalars(details):
-                result.append(
-                    UrlIssue(rule_id=rule.id, url_id=url_id, detail=decode_detail(detail))
+        else:
+            branches = []
+            for rule in _enabled_rules(connection, catalogue):
+                found = _found(rule)
+                branches.append(
+                    select(literal(rule.id).label("rule_id"), found.c.detail).where(
+                        found.c.url_id == url_id
+                    )
                 )
-        return result
+            if not branches:
+                return []
+            # A rollback journal releases its read lock between statements.
+            statement = select(union_all(*branches).subquery())
+        by_id = {
+            rule_id: UrlIssue(rule_id=rule_id, url_id=url_id, detail=decode_detail(detail))
+            for rule_id, detail in connection.execute(statement)
+        }
+    return _catalogue_order(by_id, catalogue)
