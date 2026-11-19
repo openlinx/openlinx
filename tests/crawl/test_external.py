@@ -86,7 +86,7 @@ def test_each_url_points_to_its_origin(
             routes={
                 "/": Page(
                     body='<a href="/about">About</a> <a href="http://other.test/page">Other</a> '
-                    # Nothing listens on 8080: a DNS error, whose origin is recorded all the same.
+                    # The origin is recorded even when the fixture resolver has no route to it.
                     '<a href="http://other.test:8080/port">Port</a>'
                 ),
                 "/about": Page(body="<p>About</p>"),
@@ -153,4 +153,8 @@ def test_dead_external_links_do_not_fail_the_crawl(
         "http://site.test/", resolver=hosts.resolver, concurrency=1, network_wait=0
     )
 
+    assert query(
+        result.crawl_file,
+        "SELECT fetch_error, count(*) FROM urls WHERE is_internal = 0 GROUP BY fetch_error",
+    ) == [("dns_error", 12)]
     assert result.summary.state == "completed"

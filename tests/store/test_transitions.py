@@ -19,21 +19,23 @@ def _allowed(current: CrawlState, target: CrawlState, reason: StopReason | None)
 
 
 def test_only_the_listed_transitions_are_allowed() -> None:
-    allowed = [
-        (current, target)
-        for current, target in product(STATES, STATES)
-        if any(_allowed(current, target, reason) for reason in REASONS)
-    ]
+    allowed = {
+        (current, target, reason)
+        for current, target, reason in product(STATES, STATES, REASONS)
+        if _allowed(current, target, reason)
+    }
 
-    assert sorted(allowed) == sorted(
-        [
-            ("running", "completed"),
-            ("running", "stopped"),
-            ("running", "failed"),
-            ("stopped", "running"),
-            ("failed", "running"),
-        ]
-    )
+    assert allowed == {
+        ("running", "completed", None),
+        ("running", "stopped", "max_urls"),
+        ("running", "stopped", "interrupt"),
+        ("running", "stopped", "requested"),
+        ("running", "failed", "seed_unreachable"),
+        ("running", "failed", "site_unreachable"),
+        ("running", "failed", "write_failed"),
+        ("stopped", "running", None),
+        ("failed", "running", None),
+    }
 
 
 def test_an_early_end_needs_a_reason_of_its_kind() -> None:

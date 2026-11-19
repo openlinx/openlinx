@@ -148,7 +148,11 @@ def test_tls_errors_never_pause_the_crawl(temp_workspace: TempWorkspace) -> None
     )
 
     assert (
+        query(
+            result.crawl_file,
+            "SELECT count(*) FROM urls WHERE is_internal=1 AND fetch_error='tls_error'",
+        ),
         result.summary.state,
         result.summary.stop_reason,
         [name for name, _ in reporter.events if name == "crawl_paused"],
-    ) == ("completed", None, [])
+    ) == ([(12,)], "completed", None, [])
