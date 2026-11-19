@@ -13,11 +13,15 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     MetaData,
+    Select,
     Table,
     Text,
+    func,
     literal_column,
     or_,
+    select,
 )
+from sqlalchemy.sql.ddl import CreateView
 
 from openlinx.naming import COMMAND_NAME, SETTINGS_FILE_NAME
 from openlinx.store.page_records import (
@@ -94,7 +98,7 @@ def one_of(column: ColumnElement[Any], values: Iterable[str]) -> ColumnElement[b
 
 
 def public_tables() -> list[Table]:
-    """The declared tables but the internal ones, whose names start with an underscore."""
+    """Public tables and views in declaration order."""
     return [table for table in metadata.tables.values() if not table.name.startswith("_")]
 
 
@@ -115,6 +119,28 @@ def public_table(
         sqlite_strict=True,
         sqlite_with_rowid=not without_rowid,
     )
+
+
+def public_view(
+    name: str, *columns: Column[Any], query: Select[Any], comment: str, change: int
+) -> Table:
+    """Declare a public view with the column metadata exposed by the schema Command.
+
+    SQLite's view metadata loses nullability and declared types of computed columns.
+    """
+    # Checked before CreateView, which adds the view to the metadata.
+    if [column.name for column in query.selected_columns] != [column.name for column in columns]:
+        raise TypeError(f"The view {name} declares other columns than its query selects.")
+    view = CreateView(query, name, metadata=metadata).table
+    for declared in columns:
+        column = view.c[declared.name]
+        column.type = declared.type
+        column.nullable = declared.nullable
+        column.comment = declared.comment
+        column.info.update(declared.info)
+    view.comment = comment
+    view.info["change"] = change
+    return view
 
 
 crawl = public_table(
@@ -1432,5 +1458,79 @@ rules = public_table(
         "as url_id and detail.",
     ),
     comment="One row for each Rule in the catalogue, with its configuration at Crawl creation.",
+    change=40,
+)
+
+affected_urls = public_table(
+    "affected_urls",
+    Column(
+        "rule_id",
+        Text,
+        ForeignKey("rules.id"),
+        primary_key=True,
+        comment="The Rule that fired.",
+    ),
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The Affected URL.",
+    ),
+    Column(
+        "detail",
+        Json,
+        comment="Measured values as an object with the keys listed for the Rule, or NULL "
+        "when the Rule lists none.",
+    ),
+    comment="One row per Rule and Affected URL from the last post-crawl pass.",
+    change=40,
+    without_rowid=True,
+)
+
+issues = public_view(
+    "issues",
+    Column(
+        "rule_id",
+        Text,
+        nullable=False,
+        comment="The Rule that fired.",
+        info={"references": "rules.id"},
+    ),
+    Column(
+        "category", Text, nullable=False, comment="The Rule's category.", info=rules.c.category.info
+    ),
+    Column(
+        "issue_type",
+        Text,
+        nullable=False,
+        comment="The Issue Type of the Rule's Issues.",
+        info=rules.c.issue_type.info,
+    ),
+    Column(
+        "priority",
+        Text,
+        nullable=False,
+        comment="The Priority of the Rule's Issues.",
+        info=rules.c.priority.info,
+    ),
+    Column(
+        "affected_count",
+        Integer,
+        nullable=False,
+        comment="The number of the Rule's rows in affected_urls.",
+    ),
+    # Grouped by the primary key's prefix, so the count reads affected_urls in key order.
+    query=select(
+        rules.c.id.label("rule_id"),
+        rules.c.category,
+        rules.c.issue_type,
+        rules.c.priority,
+        func.count().label("affected_count"),
+    )
+    .join_from(affected_urls, rules, affected_urls.c.rule_id == rules.c.id)
+    .group_by(affected_urls.c.rule_id),
+    comment="One row per Rule with at least one Affected URL in the last post-crawl pass.",
     change=40,
 )

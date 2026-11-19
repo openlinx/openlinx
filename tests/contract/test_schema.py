@@ -117,6 +117,8 @@ def declared_schema() -> dict[str, dict[str, Any]]:
     """
     tables = {}
     for item in describe_schema().tables:
+        if item["kind"] == "view":
+            continue
         table = metadata.tables[item["name"]]
         tables[item["name"]] = {
             "strict": table.dialect_options["sqlite"]["strict"],
@@ -166,7 +168,7 @@ def test_every_table_is_strict(temp_workspace: TempWorkspace) -> None:
     tables = file_schema(create_any_crawl(temp_workspace).path)
 
     assert {name: table["strict"] for name, table in tables.items()} == {
-        table["name"]: True for table in describe_schema().tables
+        table["name"]: True for table in describe_schema().tables if table["kind"] == "table"
     }, "a table is not STRICT: declare it with public_table(...), which makes it STRICT"
 
 
