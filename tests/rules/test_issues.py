@@ -1,6 +1,10 @@
 """Read stored Issue counts and verify per-Rule replacement on Writer replay."""
 
+import json
+from decimal import Decimal
+from operator import itemgetter
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Connection
@@ -15,6 +19,13 @@ from tests.support.crawling import crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import replay_now
+
+RULE_PAGES = Site(
+    {
+        "/rules/": Page(body='<title>Rules</title><a href="/rules/untitled">Untitled</a>'),
+        "/rules/untitled": Page(body="<p>Missing title</p>"),
+    }
+)
 
 
 @pytest.fixture
@@ -87,3 +98,35 @@ def test_replay_replaces_only_the_affected_urls_of_one_rule(
         "WHERE rule_id = 'internal-4xx' AND url = ?",
         (root + "titled",),
     ) == [(root + "titled",)]
+
+
+def _json_number(token: str) -> tuple[Decimal]:
+    # A tuple keeps JSON numbers distinct from booleans. JSON arrays decode as lists.
+    return (Decimal(token),)
+
+
+def _decoded_details(rows: list[tuple[Any, ...]]) -> list[tuple[int, object]]:
+    decoded = []
+    for url_id, detail in sorted(rows, key=itemgetter(0)):
+        value = None
+        if detail is not None:
+            value = json.loads(detail, parse_int=_json_number, parse_float=_json_number)
+            assert isinstance(value, dict), f"expected a JSON object in detail, got {detail!r}"
+        decoded.append((url_id, value))
+    return decoded
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_a_rule_s_query_returns_its_stored_affected_urls(fixture_site: StartSite) -> None:
+    server = fixture_site(RULE_PAGES)
+    file = crawled(server.url("/rules/"))
+
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    assert (server.url("/rules/untitled"), None) in stored_missing_titles(file)
+    rules = dict(query(file, "SELECT id, reproduce_sql FROM rules WHERE enabled = 1"))
+    assert "title-missing" in rules
+    for rule_id, sql in rules.items():
+        stored = query(
+            file, "SELECT url_id, detail FROM affected_urls WHERE rule_id = ?", (rule_id,)
+        )
+        assert _decoded_details(query(file, sql)) == _decoded_details(stored), rule_id
