@@ -32,7 +32,7 @@ class BodyDecodingError(ValueError):
 class Body:
     # Decoded, unless its coding is unsupported: then as received.
     data: bytes
-    # Larger than the cap, as transferred or as decoded, so not read in full.
+    # True when the wire input or any decoding stage exceeded its byte budget.
     truncated: bool
     # The bytes read from the connection, before decoding.
     transferred_bytes: int
@@ -315,9 +315,9 @@ def _decoder(content_encoding: str | None, limit: int) -> _Chain | None:
 async def read_body(
     chunks: AsyncIterable[bytes], coding: str | None, limit: int = BODY_LIMIT
 ) -> Body:
-    """The body that `chunks` stream in the Content-Encoding `coding`, decoded, cut at `limit`
-    bytes as transferred and at each decoding stage; reading stops at the cap. An unsupported
-    coding is kept as received; BodyDecodingError for one that fails to decode."""
+    """Keep at most `limit` bytes, applying the budget to wire input and each decoding stage.
+    Truncation requires an overrun. The transfer count includes the whole last chunk read.
+    Unsupported codings keep their wire bytes. Invalid streams raise BodyDecodingError."""
     decoder = _decoder(coding, limit) if is_decodable(coding) else None
     parts: list[bytes] = []
     size = transferred = 0
