@@ -1,6 +1,6 @@
 """Declare the Rules for HTTP response codes."""
 
-from openlinx.rules.model import NO_ROWS, Rule
+from openlinx.rules.model import Rule
 
 INTERNAL_4XX = Rule(
     id="internal-4xx",
@@ -38,7 +38,11 @@ INTERNAL_5XX = Rule(
         "Find the failure in the server's error log for the URL, fix it, then request the URL "
         "again. A 503 during maintenance should carry a Retry-After header."
     ),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql="""\
+SELECT id AS url_id, json_object('status_code', status_code) AS detail
+FROM urls
+WHERE is_internal = 1 AND fetch_state IN ('fetched', 'error')
+  AND status_code BETWEEN 500 AND 599""",
 )
 
 RULES = (INTERNAL_4XX, INTERNAL_5XX)

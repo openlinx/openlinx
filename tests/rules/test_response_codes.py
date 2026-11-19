@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from openlinx.rules.response_codes import INTERNAL_4XX
+from openlinx.rules.response_codes import INTERNAL_4XX, INTERNAL_5XX
 from openlinx.store.issues import evaluate_rule
 from openlinx.store.records import AffectedUrl
 from tests.fixture_site.hosts import StartHosts
@@ -120,4 +120,45 @@ def test_client_error_recorded_by_a_crawl(fixture_site: StartSite) -> None:
     )
     assert [(affected_url, json.loads(detail)) for affected_url, detail in affected] == [
         (url, {"status_code": 404})
+    ]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_server_error(fixture_hosts: StartHosts) -> None:
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/": Page(
+                    body='<a href="/499">Before</a><a href="/500">First</a>'
+                    '<a href="/503">Unavailable</a><a href="/599">Last</a>'
+                    '<a href="/600">After</a><a href="http://other.test/503">External</a>'
+                ),
+                "/499": Status(499),
+                "/500": Status(500),
+                "/503": Status(503),
+                "/599": Status(599),
+                "/600": Status(600),
+            }
+        ),
+        Site({"/503": Status(503)}),
+    )
+    file = crawl_result("http://site.test/", resolver=hosts.resolver, retries=0).crawl_file
+    rows = query(
+        file,
+        "SELECT url, id, status_code FROM urls WHERE status_code >= 499 ORDER BY url",
+    )
+    assert [(url, code) for url, _, code in rows] == [
+        ("http://other.test/503", 503),
+        ("http://site.test/499", 499),
+        ("http://site.test/500", 500),
+        ("http://site.test/503", 503),
+        ("http://site.test/599", 599),
+        ("http://site.test/600", 600),
+    ]
+    urls = {url_id: url for url, url_id, _ in rows}
+
+    assert sorted((urls[row.url_id], row.detail) for row in evaluate_rule(file, INTERNAL_5XX)) == [
+        ("http://site.test/500", {"status_code": 500}),
+        ("http://site.test/503", {"status_code": 503}),
+        ("http://site.test/599", {"status_code": 599}),
     ]
