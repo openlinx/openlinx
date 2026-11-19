@@ -160,6 +160,37 @@ def test_misspelt_rule_id(temp_workspace: TempWorkspace) -> None:
     assert "title-too-long" in re.findall(r"[\w-]+", error.get("hint") or "")
 
 
+def test_unknown_key(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.h2-missing]\nmax_chars = 10\n")
+
+    result = run_cli("rules", "list")
+
+    assert result.exit_code == 3
+    assert result.stdout == b""
+    (error,) = result.stderr_json_lines()
+    assert error["code"] == "settings_invalid"
+    assert error["details"]["errors"][0]["key"] == "rules.h2-missing.max_chars"
+
+
+def test_h2_missing_is_listed_as_a_heading_rule() -> None:
+    result = run_cli("rules", "list", "--limit", "50")
+
+    assert result.exit_code == 0, result.stderr
+    items = result.json()["items"]
+    ids = [item["id"] for item in items]
+    assert "h2-missing" in ids
+    assert ids.index("title-too-long") < ids.index("h2-missing") < ids.index("url-parameters")
+    (item,) = (item for item in items if item["id"] == "h2-missing")
+    assert (item["category"], item["issue_type"], item["priority"], item["applies_to"]) == (
+        "headings",
+        "opportunity",
+        "low",
+        "internal_pages",
+    )
+    assert item["thresholds"] == {}
+    assert item["enabled"] is True
+
+
 def test_a_rule_enabled_setting_requires_a_boolean(temp_workspace: TempWorkspace) -> None:
     settings_file = temp_workspace.root / "openlinx.toml"
     settings_file.write_bytes(b'[rules.internal-4xx]\nenabled = "false"\n')

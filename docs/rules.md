@@ -37,7 +37,7 @@ linx rules list --limit 1 --fields id,category
 
 ```json
 {
-  "total": 5,
+  "total": 6,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "eyJ2IjoxLCJxIjoiNTAzZmFkY2E1NzU2NzNkOSIsImsiOjF9"
 }
