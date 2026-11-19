@@ -134,6 +134,7 @@ Moved from the `-o` bullet of 010's D3. 010's `Output` object holds the optional
 
 ### D14. Issues are read through 040's reader
 Every Issue that `summary`, `issues`, `issues <rule-id>` and `page <url>` show comes from `040`'s Issues reader, which this change never bypasses:
+- **One read snapshot per response.** After Crawl selection, the Query Service uses `reading(..., snapshot=True)` so choosing live or materialised Issues and reading their data and recorded Rule metadata all see the same snapshot in WAL and in rollback-journal mode. With a rollback journal this read may delay a Writer commit until the response data has been collected. The Service releases the read before formatting and between requests for pages. The default Store read behavior used by `015` and `040` remains unchanged.
 - **Materialised** when `crawl.state` is `completed` or `stopped`: the `issues` view, whose `affected_count` is a COUNT over `affected_urls`, and `affected_urls` by its key prefix or by `affected_urls_url_id`.
 - **Live** in every other state (`running`, `failed`, `interrupted`): every enabled Rule's `reproduce_sql`, run read-only over the stored rows. `affected_urls` is ignored, because after a resume it holds the previous pass's rows.
 - `issues <rule-id>` adds the Rule's `reproduce_sql` to its `rule`, so an agent can rerun it with `sql` and read the Affected URLs as they are now.
