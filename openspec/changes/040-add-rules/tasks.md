@@ -54,7 +54,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.12 Drive "Issue Types are an enumeration" at seam 6 (`values` on `issues.issue_type`).
 - [x] 3.13 Drive "Issue visible before the Crawl ends" at seam 3+6, with a fixture page that delays its response by 5 s: the Issues reader and its live path (design D16).
 - [x] 3.14 Drive "A Crawl without a final pass is read live" at seam 2: the path chosen by the Crawl State.
-- [ ] 3.15 Drive "Live and materialised Issues agree" at seam 3+6.
+- [x] 3.15 Drive "Live and materialised Issues agree" at seam 3+6.
 - [ ] 3.16 Drive "Missing H2" at seam 2, over `030`'s `h2_count` and `h2_1`, after `030` task 3.4.
 - [ ] 3.17 Drive "Disabled Rule produces no Issue" at seam 3+6.
 - [ ] 3.18 Drive "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2).
