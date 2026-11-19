@@ -42,14 +42,17 @@ The initial sample review found two test-quality candidates, confirmed by source
 inspection only. Reproduce them before changing tests; neither establishes a
 historical failure to follow red/green.
 
-- [ ] In `tests/test_code_style.py`, `fake_clock_with_real_io` accepts the presence
-  of `fetcher=` even when its value is `None`. Add a failing negative case for
-  `crawl_result(..., clock=FakeClock(), fetcher=None)` and make the guard reject
+- [x] In `tests/test_code_style.py`, two new tests reproduced a gap in
+  `fake_clock_with_real_io`: `crawl_result` and `continued` use aiohttp when
+  `fetcher=None` and no factory is supplied. Timing tests can use
+  `crawl_result(seed, clock=clock, fetcher=FakeFetcher(clock, pages))`. An explicit
+  FakeFetcher factory takes precedence over `fetcher=None`. With a FakeClock,
+  the guard now rejects
   that real-I/O path while preserving permitted FakeFetcher cases.
-- [ ] In `tests/crawl/test_network_pause.py`, the 1800-second case of
-  `test_probes_back_off_to_once_a_minute` builds expectations with `range`, as the
-  implementation does. Replace the expected schedule with independent literals,
-  retaining the full case and proving it catches a changed probe interval.
+- [x] In `tests/crawl/test_network_pause.py`, the 1800-second case of
+  `test_probes_back_off_to_once_a_minute` now asserts all 33 literal probe times,
+  from 5 to 1780 seconds. Changing the probe interval from 60 to 61 seconds
+  made `1800-times7` fail when the fifth probe moved from 100 to 101 seconds.
 
 The preparatory comment sample found no actionable defect. The completed pilot
 below identified two wording and assertion-alignment issues. Preserve the

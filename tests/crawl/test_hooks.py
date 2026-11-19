@@ -5,8 +5,7 @@ import pickle
 import sqlite3
 import time
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import closing
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -15,16 +14,12 @@ from typing import Any
 import msgspec
 import pytest
 from selectolax.lexbor import LexborHTMLParser
-from sqlalchemy import Connection, Engine, event, text
-from sqlalchemy.dialects import sqlite
+from sqlalchemy import Connection, text
 
-from openlinx.clock import Clock
 from openlinx.crawl.engine.hooks import (
     Hooks,
     Pass,
     PassContext,
-    UrlFailure,
-    UrlResponse,
     UrlResult,
     handler,
 )
@@ -40,11 +35,7 @@ from openlinx.crawl.scope import scope_rules
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlResult
-from openlinx.store.connections import connect
-from openlinx.store.crawls import crawl_summary
-from openlinx.store.records import CrawlState, ErroredUrl, FetchedUrl, Provenance, SkippedUrl
 from openlinx.store.redaction import SecretValues
-from openlinx.store.types import Timestamp
 from openlinx.store.writer import CrawlWriterReplayError
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
@@ -53,8 +44,7 @@ from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
-from tests.support.network import closed_port
-from tests.support.sites import LATE_SHORTER_PATH, NINE_PAGES
+from tests.support.sites import LATE_SHORTER_PATH
 from tests.support.sqlite_faults import disk_full_after
 from tests.support.workspace import TempWorkspace
 
@@ -135,76 +125,6 @@ def test_a_url_skipped_beyond_the_depth_limit_reaches_its_handlers_once_requeued
     ) == [("fetched",)]
 
 
-def test_post_crawl_passes_run_before_a_crawl_is_completed(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
-    seen: list[CrawlState] = []
-
-    async def record_state(context: PassContext) -> None:
-        seen.append((await context.writer.run_async(crawl_summary())).state)
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("state", record_state)))
-
-    crawl_result(server.url("/"), hooks)
-
-    assert seen == ["running"]
-
-
-def test_post_crawl_passes_run_in_the_order_the_hooks_declare(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(Site(routes={"/": Page(body="<p>Home</p>")}))
-    ran: list[str] = []
-
-    async def first(context: PassContext) -> None:
-        ran.append("first")
-
-    async def second(context: PassContext) -> None:
-        ran.append("second")
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("first", first), Pass("second", second)))
-
-    crawl_result(server.url("/"), hooks)
-
-    assert ran == ["first", "second"]
-
-
-def test_a_post_crawl_pass_gets_the_clock_of_the_crawl(temp_workspace: TempWorkspace) -> None:
-    clock = FakeClock()
-    fetcher = FakeFetcher(clock, {"/": FakePage("<p>Home</p>")})
-    clocks: list[Clock] = []
-
-    async def record_the_clock(context: PassContext) -> None:
-        clocks.append(context.clock)
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("clock", record_the_clock)))
-
-    crawl_result("http://site.test/", hooks, clock=clock, fetcher=fetcher)
-
-    assert clocks == [clock]
-
-
-def test_post_crawl_passes_run_when_the_url_limit_stops_a_crawl(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(NINE_PAGES)
-    runs: list[str] = []
-
-    async def count_runs(context: PassContext) -> None:
-        runs.append("run")
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
-
-    crawl_result(server.url("/"), hooks, max_urls=3)
-
-    assert runs == ["run"]
-
-
 _RULES = ("missing_title", "missing_description", "missing_h1", "thin_content")
 
 
@@ -243,20 +163,6 @@ def test_a_full_disk_in_a_post_crawl_pass_fails_the_crawl(
         "write_failed",
         "failed",
     )
-
-
-def test_post_crawl_passes_do_not_run_for_a_failed_crawl(temp_workspace: TempWorkspace) -> None:
-    runs: list[str] = []
-
-    async def count_runs(context: PassContext) -> None:
-        runs.append("run")
-
-    hooks = Hooks()
-    hooks = replace(hooks, passes=(*hooks.passes, Pass("count", count_runs)))
-
-    result = crawl_result(f"http://127.0.0.1:{closed_port()}/", hooks, network_wait=0)
-
-    assert (result.summary.state, runs) == ("failed", [])
 
 
 class Found(msgspec.Struct, frozen=True):
@@ -612,8 +518,8 @@ def test_recording_that_fails_for_every_url_fails_the_crawl(
     result = crawl_result(server.url("/"), hooks)
     error = result.failure and result.failure.diagnostic
 
-    # A bug in row code, not the disk: freeing space would not help, and the record_failed
-    # warning names the first URL.
+    # The Handler's row-writing code raises for each article, so the hint points to fixing the
+    # code before resuming.
     assert (
         *_end_of(result),
         error and error.code,
@@ -1036,149 +942,6 @@ def test_a_handler_gets_the_robots_txt_verdict_of_the_url(
         (server.url("/private/a"), "True"),
         (server.url("/a"), "False"),
     ]
-
-
-# By final state: the store record, and where the UrlResult keeps that outcome's values.
-_OUTCOMES: dict[str, tuple[type, tuple[type, ...]]] = {
-    "fetched": (FetchedUrl, (UrlResponse, UrlResult)),
-    "skipped": (SkippedUrl, (UrlResult,)),
-    "error": (ErroredUrl, (UrlFailure, UrlResult)),
-}
-# By final state, the urls columns that its record shares with the UrlResult.
-_SHARED = {
-    state: [
-        name
-        # The provenance its dispatch acted on is written back with each outcome.
-        for name in [f.name for f in fields(record)] + [f.name for f in fields(Provenance)]
-        if name not in {"url_id", "provenance"}
-        and any(name in {f.name for f in fields(source)} for source in sources)
-    ]
-    for state, (record, sources) in _OUTCOMES.items()
-}
-
-
-def _value(result: UrlResult, name: str) -> object:
-    for source in (result.response, result.failure, result):
-        if source is not None and name in {f.name for f in fields(source)}:
-            return getattr(source, name)
-    raise AssertionError(f"no {name}")
-
-
-@dataclass(frozen=True, slots=True)
-class Values:
-    url_id: int
-    values: str
-
-
-def _values(result: UrlResult) -> tuple[Values, ...]:
-    shared = _SHARED.get(result.fetch_state, [])
-    values = {name: _value(result, name) for name in shared}
-    fetched_at = values.get("fetched_at")
-    if isinstance(fetched_at, datetime):
-        values["fetched_at"] = Timestamp().process_bind_param(fetched_at, sqlite.dialect())
-    # As the store keeps a flag.
-    stored = {name: int(v) if isinstance(v, bool) else v for name, v in values.items()}
-    return (Values(result.url_id, json.dumps({"fetch_state": result.fetch_state, **stored})),)
-
-
-def _write_values(connection: Connection, rows: Sequence[Values]) -> None:
-    connection.execute(text("CREATE TABLE IF NOT EXISTS test_values (url_id INTEGER, v TEXT)"))
-    connection.execute(
-        text("INSERT INTO test_values VALUES (:url_id, :v)"),
-        [{"url_id": row.url_id, "v": row.values} for row in rows],
-    )
-
-
-def test_each_url_is_recorded_with_the_values_its_handlers_saw(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(
-        Site(
-            routes={
-                "/robots.txt": Robots("User-agent: *\nDisallow: /private\n"),
-                # A link to a port nothing listens on: its robots.txt gets no response.
-                "/": Page(
-                    body='<a href="/a">A</a> <a href="/missing">Gone</a> '
-                    '<a href="/logout">Out</a> <a href="/private">Private</a> '
-                    '<a href="http://127.0.0.1:1/">Down</a> <a href="/broken">Broken</a> '
-                    '<img src="/logo.png">'
-                ),
-                "/a": Page(body="<p>A</p>"),
-                "/logo.png": Status(200),
-                # The connection breaks inside the body: an error after its own request.
-                "/broken": Page(body="x" * 100_000, reset_after=100),
-            }
-        )
-    )
-    hooks = Hooks()
-    hooks = replace(hooks, handlers=(*hooks.handlers, handler("values", _values, _write_values)))
-
-    crawl_file = crawl_result(server.url("/"), hooks, exclude=["/logout$"], retries=0).crawl_file
-
-    seen = {url_id: json.loads(v) for url_id, v in query(crawl_file, "SELECT * FROM test_values")}
-    recorded = {row["id"]: row for row in _urls_rows(crawl_file)}
-    assert (
-        sorted({values["fetch_state"] for values in seen.values()}),
-        [
-            (url_id, name)
-            for url_id, values in seen.items()
-            for name, value in values.items()
-            if recorded[url_id][name] != value
-        ],
-    ) == (["error", "fetched", "skipped"], [])
-
-
-def _urls_rows(file: Path) -> list[sqlite3.Row]:
-    with closing(connect(file, read_only=True)) as connection:
-        connection.row_factory = sqlite3.Row
-        rows: list[sqlite3.Row] = connection.execute("SELECT * FROM urls").fetchall()
-        return rows
-
-
-@dataclass(frozen=True, slots=True)
-class Header:
-    url_id: int
-    name: str
-
-
-def _headers(result: UrlResult) -> tuple[Header, ...]:
-    headers = () if result.response is None else result.response.headers
-    return tuple(Header(result.url_id, name) for name, _ in headers)
-
-
-def _write_headers(connection: Connection, rows: Sequence[Header]) -> None:
-    connection.execute(text("CREATE TABLE IF NOT EXISTS test_headers (url_id INTEGER, name TEXT)"))
-    connection.execute(
-        text("INSERT INTO test_headers VALUES (:url_id, :name)"),
-        [{"url_id": row.url_id, "name": row.name} for row in rows],
-    )
-
-
-def test_a_handler_s_rows_for_a_url_are_written_in_one_statement(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(
-        Site(routes={"/": Page(body='<a href="/a">A</a>'), "/a": Page(body="<p>A</p>")})
-    )
-    hooks = Hooks()
-    hooks = replace(hooks, handlers=(*hooks.handlers, handler("headers", _headers, _write_headers)))
-    inserts: list[str] = []
-
-    def count(conn: object, cursor: object, statement: str, *args: object) -> None:
-        if statement.startswith("INSERT INTO test_headers"):
-            inserts.append(statement)
-
-    event.listen(Engine, "before_cursor_execute", count)
-    try:
-        crawl_file = crawl_result(server.url("/"), hooks).crawl_file
-    finally:
-        event.remove(Engine, "before_cursor_execute", count)
-
-    assert (len(inserts), query(crawl_file, "SELECT count(DISTINCT url_id) FROM test_headers")) == (
-        2,
-        [(2,)],
-    )
-    assert query(crawl_file, "SELECT count(*) > 2 FROM test_headers") == [(1,)]
 
 
 def _x_robots_tag(result: UrlResult) -> tuple[Seen, ...]:

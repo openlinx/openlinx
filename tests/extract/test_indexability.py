@@ -52,20 +52,22 @@ def test_server_error() -> None:
 def test_each_status_class_has_its_reason() -> None:
     # A redirect served as HTML, a page removed for good, a transforming proxy's 2xx, a bot
     # block such as LinkedIn's 999, and the last server error code.
-    statuses = {
-        301: unprepared_page_row(status_code=301).indexability_status,
-        410: unprepared_page_row(status_code=410).indexability_status,
-        203: page_row("<p>Proxied</p>", status_code=203).indexability_status,
-        999: unprepared_page_row(status_code=999).indexability_status,
-        599: unprepared_page_row(status_code=599).indexability_status,
+    rows = {
+        301: unprepared_page_row(status_code=301),
+        410: unprepared_page_row(status_code=410),
+        203: page_row("<p>Proxied</p>", status_code=203),
+        999: unprepared_page_row(status_code=999),
+        599: unprepared_page_row(status_code=599),
     }
 
-    assert statuses == {
-        301: "redirected",
-        410: "client_error",
-        203: None,
-        999: "client_error",
-        599: "server_error",
+    assert {
+        status: (row.indexability, row.indexability_status) for status, row in rows.items()
+    } == {
+        301: ("non_indexable", "redirected"),
+        410: ("non_indexable", "client_error"),
+        203: ("indexable", None),
+        999: ("non_indexable", "client_error"),
+        599: ("non_indexable", "server_error"),
     }
 
 

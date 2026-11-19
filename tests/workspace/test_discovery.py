@@ -51,6 +51,7 @@ def test_a_settings_file_alone_marks_a_workspace(temp_workspace: TempWorkspace) 
 
 
 def test_fallback_to_the_global_workspace(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.home.parent / ".openlinx").mkdir()
     notes = temp_workspace.home / "work" / "notes"
     notes.mkdir(parents=True)
 
