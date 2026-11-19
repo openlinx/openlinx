@@ -38,3 +38,12 @@ def test_indexes_of_affected_urls() -> None:
         "unique": False,
         "where": None,
     } in reduced
+
+
+def test_issue_types_are_an_enumeration() -> None:
+    result = run_cli("schema", "issues")
+    assert result.exit_code == 0, result.stderr
+
+    (issues,) = result.json()["items"]
+    (issue_type,) = (column for column in issues["columns"] if column["name"] == "issue_type")
+    assert issue_type["values"] == ["issue", "warning", "opportunity"]
