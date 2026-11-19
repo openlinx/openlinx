@@ -25,3 +25,22 @@ def test_missing_title_produces_an_affected_url(fixture_site: StartSite) -> None
     [(missing_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/missing"),))
 
     assert evaluate_rule(file, TITLE_MISSING) == [AffectedUrl(url_id=missing_id, detail=None)]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_empty_title_counts_as_missing(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Present</title><a href="/empty">Empty title</a>'),
+                "/empty": Page(body="<title></title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    [(empty_id, title_count, title_1)] = query(
+        file, "SELECT url_id, title_count, title_1 FROM pages WHERE url_path = '/empty'"
+    )
+    assert (title_count, title_1) == (1, "")
+
+    assert evaluate_rule(file, TITLE_MISSING) == [AffectedUrl(url_id=empty_id, detail=None)]

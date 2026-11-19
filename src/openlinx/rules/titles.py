@@ -21,7 +21,7 @@ TITLE_MISSING = Rule(
 SELECT pages.url_id, NULL AS detail
 FROM pages
 JOIN urls ON urls.id = pages.url_id
-WHERE urls.parsed = 1 AND pages.title_count = 0""",
+WHERE urls.parsed = 1 AND (pages.title_count = 0 OR pages.title_1 = '')""",
 )
 TITLE_TOO_LONG = Rule(
     id="title-too-long",
