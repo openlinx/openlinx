@@ -1,9 +1,8 @@
 # Comment review and test quality plan
 
-Status: review preparation is active; implementation follows 022. Comment review,
-test quality review and test organization are separate work items. The directory
-map and migration slices still need review. Do not reorganize tests alongside
-unfinished fetch-policy implementation.
+Status after 022: the pilot review is complete. Comment review, test quality fixes
+and test moves are separate work items. The directory map and migration slices
+still need review.
 
 The goal is to make tests easy to find and understand while preserving every
 existing contract and regression guard. Keep the public seams and boundary doubles
@@ -55,11 +54,50 @@ historical failure to follow red/green.
   from 5 to 1780 seconds. Changing the probe interval from 60 to 61 seconds
   made `1800-times7` fail when the fifth probe moved from 100 to 101 seconds.
 
-The comment sample found no actionable defect; preserve the explanations of
-handler type checking and writer savepoint cost. Complete the wider review before
-claiming the comment policy is satisfied throughout the repository. Keep the
-documented SQL-batching and replay tests: [testing.md](testing.md) explicitly permits
-those narrow checks of implementation behaviour.
+The preparatory comment sample found no actionable defect. The completed pilot
+below identified two wording and assertion-alignment issues. Preserve the
+explanations of handler type checking and writer savepoint cost. Keep the
+documented SQL-batching and replay tests permitted by [testing.md](testing.md).
+
+### Post-022 pilot
+
+On Linux at the 022 merge commit `62253122`, the pilot reviewed all functions
+and comments in [hooks](../tests/crawl/test_hooks.py), [writer](../tests/store/test_writer.py),
+[network pause](../tests/crawl/test_network_pause.py), [code style](../tests/test_code_style.py)
+and [request headers](../tests/crawl/test_request_headers.py). All 268 collected
+cases from 207 test functions passed. Their exact node IDs, including parameter
+IDs, matched the full Linux collection. The pilot covers 5 of 177 collected
+Python test modules, leaving 172 modules and 2,403 of 2,671 node IDs to review.
+
+Four isolated mutations exposed gaps in existing tests:
+
+- [ ] In the [Hook row-value test](../tests/crawl/test_hooks.py), dropping the `values` Handler's
+  row for `/a` passed the row-value comparison. Check the exact URL set and row
+  count before comparing values. [Per-response hook contract](../openspec/specs/crawling/spec.md#requirement-per-response-hook)
+- [ ] In the [Writer window test](../tests/store/test_writer.py), dropping the 2,000th submitted
+  unit passed the test that checks whether `run` consumes a window slot. Check
+  that all accepted units complete after the held unit is released. [Writer contract](../openspec/specs/crawl-store/spec.md#requirement-submitting-units-with-their-outcome-at-the-commit)
+- [ ] The [insert_urls guard](../tests/test_code_style.py) passed when the
+  Seed insert bypassed the helper with an inline statement in `store/urls.py`.
+  The CLI regression failed with exit 70. Add inline positive and negative
+  cases for the module that owns the helper. [022 D2](../openspec/changes/archive/2026-11-18-022-add-fetch-policy/design.md#d2-redirects-are-url-rows)
+- [ ] The [TID251 guard](../tests/test_code_style.py) passed with the same glob
+  in both Ruff ignore tables when only `per-file-ignores` contained TID251.
+  Ruff still suppressed TID251. Check rules from both tables for that glob.
+
+In [code style](../tests/test_code_style.py), describe the leaf `crawl.urls`
+module's absence of OpenLinx imports and the resulting lack of a module-level
+cycle. In [hooks](../tests/crawl/test_hooks.py), keep the explanation of the
+recording-failure hint and align the first-URL comment with a check that observes
+the warning's `first_url` field. Keep the explanations of
+[typed Hook factories](testing.md#hook-type-contracts) and
+[optimistic Writer replay](testing.md#narrow-implementation-checks).
+
+Continue the review with [Hook type contracts](../tests/test_handler_types.py),
+[writer throughput](../tests/test_writer_throughput.py),
+[Requester behaviour](../tests/crawl/test_requester.py) and
+[CLI header input](../tests/cli/test_request_headers.py). Keep corrections to
+assertions and comments separate from file moves.
 
 ## Preparation after 022
 
