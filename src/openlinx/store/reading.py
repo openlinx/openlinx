@@ -19,6 +19,10 @@ from openlinx.store.schema import SCHEMA_VERSION, crawl
 def reading(path: Path) -> Iterator[Connection]:
     try:
         with opening(path, role="read") as engine, engine.connect() as connection:
+            # Legacy SQLite transactions do not begin on SELECT. Pin the operation in WAL;
+            # a rollback-journal reader must release its shared lock between statements.
+            if connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal":
+                connection.exec_driver_sql("BEGIN")
             _check_schema_version(connection, path)
             yield connection
     except DBAPIError as error:

@@ -1,9 +1,8 @@
 """Evaluate catalogue Rules and materialise their Affected URLs in the Crawl."""
 
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import orjson
 from sqlalchemy import (
@@ -13,37 +12,41 @@ from sqlalchemy import (
     Subquery,
     Text,
     bindparam,
-    case,
     delete,
+    false,
     func,
     insert,
     literal,
     select,
     text,
+    true,
     union_all,
 )
 
-from openlinx.rules.model import Rule
 from openlinx.store.reading import reading
-from openlinx.store.records import AffectedUrl, CrawlState, Issue
+from openlinx.store.records import AffectedUrl, CrawlState, Issue, UrlIssue
+from openlinx.store.rule_queries import RuleQuery, rule_not_computable, rule_not_found
 from openlinx.store.schema import affected_urls, crawl, issues, rules
 from openlinx.store.writer import Unit
 
 
-def evaluate_rule(crawl_file: Path, rule: Rule) -> list[AffectedUrl]:
-    """Run the catalogue Rule's query through a read-only connection."""
+def evaluate_rule(crawl_file: Path, rule: RuleQuery) -> list[AffectedUrl]:
+    """Evaluate the registered query when the Crawl records its Rule as enabled."""
     with reading(crawl_file) as connection:
+        if not _recorded_rule_enabled(connection, rule.id):
+            return []
         return _affected_urls(connection, select(_found(rule)))
 
 
-def _found(rule: Rule) -> Subquery:
+def _found(rule: RuleQuery) -> Subquery:
+    # text() recognises :name inside SQL literals. Escape it and terminate trailing SQL comments.
     sql = rule.reproduce_sql.replace(":", "\\:") + "\n"
     return text(sql).columns(url_id=Integer, detail=Text).subquery()
 
 
 def _affected_urls(connection: Connection, statement: Select[int, str | None]) -> list[AffectedUrl]:
     return [
-        AffectedUrl(url_id=url_id, detail=None if detail is None else orjson.loads(detail))
+        AffectedUrl(url_id=url_id, detail=decode_detail(detail))
         for url_id, detail in connection.execute(statement)
     ]
 
@@ -52,10 +55,8 @@ _DELETE = delete(affected_urls).where(affected_urls.c.rule_id == bindparam("rule
 _ENABLED = select(rules.c.id).where(rules.c.enabled == 1)
 
 
-def affected_urls_unit(rule: Rule) -> Unit[None]:
+def affected_urls_unit(rule: RuleQuery) -> Unit[None]:
     """Replace one Rule's result atomically, including when its new result is empty."""
-    # text() treats :name as a parameter even inside SQL literals. Preserve the catalogue
-    # query verbatim and end a trailing line comment before SQLAlchemy closes the subquery.
     found = _found(rule)
     statement = insert(affected_urls).from_select(
         ["rule_id", "url_id", "detail"], select(literal(rule.id), found.c.url_id, found.c.detail)
@@ -85,88 +86,131 @@ async def materialise_issues(writer: _IssueWriter, units: Mapping[str, Unit[None
 
 
 _ISSUE_STATE = select(crawl.c.state)
-_STORED_ISSUES = select(
-    issues.c.rule_id.label("id"),
-    issues.c.category,
-    issues.c.issue_type,
-    issues.c.priority,
-    issues.c.affected_count,
+_STORED_ISSUES = select(issues)
+_ISSUE_COLUMNS = (
+    rules.c.id.label("rule_id"),
+    rules.c.category,
+    rules.c.issue_type,
+    rules.c.priority,
 )
+_EMPTY_ISSUES = select(*_ISSUE_COLUMNS, literal(0).label("affected_count")).where(false())
+_AFFECTED = select(affected_urls.c.url_id, affected_urls.c.detail)
+_RULE_ENABLED = select(rules.c.enabled).where(rules.c.id == bindparam("rule_id"))
+_RECORDED_IDS = select(rules.c.id)
 
 
-@contextmanager
-def _reading_issues(crawl_file: Path) -> Iterator[tuple[Connection, bool]]:
+def _materialised(connection: Connection) -> bool:
+    state: CrawlState = connection.execute(_ISSUE_STATE).scalar_one()
+    return state in ("completed", "stopped")
+
+
+def _enabled_rules(connection: Connection, catalogue: Sequence[RuleQuery]) -> list[RuleQuery]:
+    # SQLite resolves even unreachable query branches. A Rule absent or disabled in the
+    # Crawl can name columns introduced after that Crawl was created.
+    enabled = _enabled_rule_ids(connection)
+    return [rule for rule in catalogue if rule.id in enabled]
+
+
+def issues_in(connection: Connection, catalogue: Sequence[RuleQuery]) -> Select[Any]:
+    """A composable issues view on a reading() connection."""
+    if _materialised(connection):
+        return _STORED_ISSUES
+    counts = [
+        select(*_ISSUE_COLUMNS, func.count().label("affected_count"))
+        .select_from(rules.join(_found(rule), true()))
+        .where(rules.c.id == rule.id)
+        .group_by(rules.c.id)
+        for rule in _enabled_rules(connection, catalogue)
+    ]
+    if not counts:
+        return _EMPTY_ISSUES
+    return select(union_all(*counts).subquery())
+
+
+def _recorded_rule_enabled(connection: Connection, rule_id: str) -> bool:
+    enabled: bool | None = connection.execute(
+        _RULE_ENABLED, {"rule_id": rule_id}
+    ).scalar_one_or_none()
+    if enabled is None:
+        raise rule_not_found(rule_id, connection.scalars(_RECORDED_IDS).all())
+    return enabled
+
+
+def affected_urls_in(
+    connection: Connection, rule_id: str, catalogue: Sequence[RuleQuery]
+) -> Select[Any]:
+    """One Rule's url_id and raw JSON detail on a reading() connection."""
+    enabled = _recorded_rule_enabled(connection, rule_id)
+    if _materialised(connection):
+        return _AFFECTED.where(affected_urls.c.rule_id == rule_id)
+    if not enabled:
+        return _AFFECTED.where(false())
+    for rule in catalogue:
+        if rule.id == rule_id:
+            return select(_found(rule))
+    raise rule_not_computable(rule_id)
+
+
+def _catalogue_order[T](by_id: Mapping[str, T], catalogue: Sequence[RuleQuery]) -> list[T]:
+    known = [rule.id for rule in catalogue if rule.id in by_id]
+    return [by_id[rule_id] for rule_id in (*known, *sorted(by_id.keys() - set(known)))]
+
+
+def read_issues(crawl_file: Path, catalogue: Sequence[RuleQuery]) -> list[Issue]:
+    """Issues in catalogue order, followed by other recorded Rules in Rule id order."""
     with reading(crawl_file) as connection:
-        # SQLite's legacy transaction mode does not start a transaction for SELECT.
-        # A Writer may publish a new result and State between these two reads.
-        connection.exec_driver_sql("BEGIN")
-        state: CrawlState = connection.execute(_ISSUE_STATE).scalar_one()
-        yield connection, state in ("completed", "stopped")
-
-
-def _live_issues(catalogue: tuple[Rule, ...]) -> Select[str, str, str, str, int]:
-    statements = [
-        select(
-            literal(position).label("catalogue_order"),
-            rules.c.id,
-            rules.c.category,
-            rules.c.issue_type,
-            rules.c.priority,
-            select(func.count())
-            .select_from(_found(rule))
-            .scalar_subquery()
-            .label("affected_count"),
-        ).where(rules.c.id == rule.id, rules.c.enabled == 1)
-        for position, rule in enumerate(catalogue)
-    ]
-    live = union_all(*statements).subquery()
-    return select(
-        live.c.id, live.c.category, live.c.issue_type, live.c.priority, live.c.affected_count
-    ).order_by(live.c.catalogue_order)
-
-
-def read_issues(crawl_file: Path, catalogue: tuple[Rule, ...]) -> list[Issue]:
-    """The Issues from the final pass or from the enabled Rules over current rows."""
-    with _reading_issues(crawl_file) as (connection, materialised):
-        if materialised:
-            order = {rule.id: position for position, rule in enumerate(catalogue)}
-            statement = _STORED_ISSUES
-            if order:
-                statement = statement.order_by(
-                    case(order, value=issues.c.rule_id, else_=len(order))
-                )
-            rows = connection.execute(statement.order_by(issues.c.rule_id)).all()
-        elif catalogue:
-            rows = connection.execute(_live_issues(catalogue)).all()
-        else:
-            return []
-
-    return [
-        Issue(
-            rule_id=row.id,
-            category=row.category,
-            issue_type=row.issue_type,
-            priority=row.priority,
-            affected_count=row.affected_count,
-        )
-        for row in rows
-        if row.affected_count
-    ]
+        by_id = {
+            row.rule_id: Issue(
+                rule_id=row.rule_id,
+                category=row.category,
+                issue_type=row.issue_type,
+                priority=row.priority,
+                affected_count=row.affected_count,
+            )
+            for row in connection.execute(issues_in(connection, catalogue))
+        }
+    return _catalogue_order(by_id, catalogue)
 
 
 def read_affected_urls(
-    crawl_file: Path, rule_id: str, catalogue: tuple[Rule, ...]
+    crawl_file: Path, rule_id: str, catalogue: Sequence[RuleQuery]
 ) -> list[AffectedUrl]:
     """One Rule's Affected URLs from the final pass or current rows, ordered by URL id."""
-    with _reading_issues(crawl_file) as (connection, materialised):
-        if materialised:
-            stored = select(affected_urls.c.url_id, affected_urls.c.detail).where(
-                affected_urls.c.rule_id == rule_id
-            )
-            return _affected_urls(connection, stored.order_by(affected_urls.c.url_id))
+    with reading(crawl_file) as connection:
+        found = affected_urls_in(connection, rule_id, catalogue).subquery()
+        return _affected_urls(
+            connection, select(found.c.url_id, found.c.detail).order_by(found.c.url_id)
+        )
 
-        rule = next(rule for rule in catalogue if rule.id == rule_id)
-        found = _found(rule)
-        enabled = _ENABLED.where(rules.c.id == rule_id).exists()
-        live = select(found.c.url_id, found.c.detail).where(enabled)
-        return _affected_urls(connection, live.order_by(found.c.url_id))
+
+def decode_detail(detail: str | None) -> dict[str, Any] | None:
+    return None if detail is None else orjson.loads(detail)
+
+
+def read_url_issues(
+    crawl_file: Path, url_id: int, catalogue: Sequence[RuleQuery]
+) -> list[UrlIssue]:
+    """Issues for one URL in catalogue order, followed by other stored Rules in Rule id order."""
+    with reading(crawl_file) as connection:
+        if _materialised(connection):
+            rows = connection.execute(
+                select(affected_urls.c.rule_id, affected_urls.c.detail).where(
+                    affected_urls.c.url_id == url_id
+                )
+            )
+            return _catalogue_order(
+                {
+                    rule_id: UrlIssue(rule_id=rule_id, url_id=url_id, detail=decode_detail(detail))
+                    for rule_id, detail in rows
+                },
+                catalogue,
+            )
+        result = []
+        for rule in _enabled_rules(connection, catalogue):
+            found = _found(rule)
+            details: Select[str | None] = select(found.c.detail).where(found.c.url_id == url_id)
+            for detail in connection.scalars(details):
+                result.append(
+                    UrlIssue(rule_id=rule.id, url_id=url_id, detail=decode_detail(detail))
+                )
+        return result

@@ -7,14 +7,24 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from sqlalchemy import Connection, Engine, event, update
+from sqlalchemy import Connection, Engine, event, select, update
 
+from openlinx.output.diagnostics import OpenLinxError
 from openlinx.rules.model import Rule
 from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
 from openlinx.store.crawls import read_recorded, record_continue, record_state
-from openlinx.store.issues import affected_urls_unit, read_affected_urls, read_issues
+from openlinx.store.issues import (
+    affected_urls_in,
+    affected_urls_unit,
+    evaluate_rule,
+    issues_in,
+    read_affected_urls,
+    read_issues,
+    read_url_issues,
+)
+from openlinx.store.reading import reading
 from openlinx.store.records import AffectedUrl, Issue
-from openlinx.store.schema import pages
+from openlinx.store.schema import pages, rules
 from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
@@ -192,4 +202,116 @@ def test_issue_state_and_result_share_a_snapshot(
     assert query(file, "SELECT state, stop_reason FROM crawl") == [("stopped", "requested")]
     assert query(file, _STORED) == []
     assert _title_missing_issues(file, _RULES) == []
+    assert read_affected_urls(file, "title-missing", _RULES) == []
+
+
+@pytest.mark.parametrize("stored", [False, True], ids=["live", "stored"])
+def test_unknown_rule_suggests_ids_from_the_crawl(
+    stopped_issue: tuple[Path, int], stored: bool
+) -> None:
+    file, _ = stopped_issue
+    if not stored:
+        with CrawlWriter(file, FakeClock()) as writer:
+            writer.run(record_continue(read_recorded(file).config, _AT))
+
+    with pytest.raises(OpenLinxError) as raised:
+        read_affected_urls(file, "h1-missng", ())
+
+    error = raised.value
+    assert (error.code, error.exit_code) == ("rule_not_found", 4)
+    assert error.diagnostic.details["suggestions"][0] == "h1-missing"
+    assert "h1-missng" in error.diagnostic.message
+    assert "linx rules list" in (error.diagnostic.hint or "")
+
+
+def test_a_rule_missing_from_the_live_catalogue_explains_how_to_reproduce_it(
+    stopped_issue: tuple[Path, int],
+) -> None:
+    file, _ = stopped_issue
+    with CrawlWriter(file, FakeClock()) as writer:
+        writer.run(record_continue(read_recorded(file).config, _AT))
+    with pytest.raises(OpenLinxError) as raised:
+        read_affected_urls(file, "title-missing", ())
+
+    diagnostic = raised.value.diagnostic
+    assert (diagnostic.code, raised.value.exit_code) == ("rule_not_found", 4)
+    assert "title-missing" in diagnostic.message
+    assert "live" in diagnostic.message.lower()
+    assert "reproduce_sql" in (diagnostic.hint or "")
+    assert "linx sql" in (diagnostic.hint or "")
+
+
+@pytest.mark.parametrize("reader", ["issues", "rule", "url", "evaluate"])
+def test_live_readers_compile_only_recorded_enabled_rules(
+    stopped_issue: tuple[Path, int],
+    reader: str,
+) -> None:
+    file, url_id = stopped_issue
+    incompatible = replace(
+        TITLE_TOO_LONG, reproduce_sql="SELECT no_such_column AS url_id, NULL AS detail FROM pages"
+    )
+    unrecorded = replace(incompatible, id="later-rule")
+    catalogue = (incompatible, unrecorded, TITLE_MISSING)
+    with CrawlWriter(file, FakeClock()) as writer:
+        writer.run(record_continue(read_recorded(file).config, _AT))
+        writer.run(
+            executing(update(rules).where(rules.c.id == "title-too-long").values(enabled=False))
+        )
+        writer.run(
+            executing(
+                update(rules)
+                .where(rules.c.id == "title-missing")
+                .values(reproduce_sql="SELECT no_such_column FROM pages")
+            )
+        )
+
+    if reader == "evaluate":
+        assert evaluate_rule(file, incompatible) == []
+    elif reader == "issues":
+        assert read_issues(file, catalogue) == [_ISSUE]
+    elif reader == "rule":
+        assert read_affected_urls(file, "title-too-long", catalogue) == []
+        assert read_affected_urls(file, "title-too-long", ()) == []
+        assert read_affected_urls(file, "title-missing", catalogue) == [
+            AffectedUrl(url_id=url_id, detail=None)
+        ]
+    else:
+        assert [(row.rule_id, row.url_id) for row in read_url_issues(file, url_id, catalogue)] == [
+            ("title-missing", url_id)
+        ]
+
+
+@pytest.mark.parametrize("stored", [False, True], ids=["live", "stored"])
+def test_issue_selects_compose_over_one_crawl_snapshot(
+    stopped_issue: tuple[Path, int],
+    stored: bool,
+) -> None:
+    file, url_id = stopped_issue
+    with CrawlWriter(file, FakeClock()) as writer:
+        if not stored:
+            writer.run(record_continue(read_recorded(file).config, _AT))
+            writer.flush()
+        with reading(file) as connection:
+            counts = issues_in(connection, _RULES).subquery()
+            assert tuple(counts.c.keys()) == (
+                "rule_id",
+                "category",
+                "issue_type",
+                "priority",
+                "affected_count",
+            )
+            assert (
+                connection.execute(
+                    select(counts.c.affected_count).where(counts.c.rule_id == "title-missing")
+                ).scalar_one()
+                == 1
+            )
+            _record_title(writer, url_id)
+            writer.run(affected_urls_unit(TITLE_MISSING))
+            writer.flush()
+            found = affected_urls_in(connection, "title-missing", _RULES).subquery()
+            assert tuple(found.c.keys()) == ("url_id", "detail")
+            assert connection.execute(
+                select(found.c.url_id, found.c.detail).where(found.c.url_id == url_id).limit(1)
+            ).all() == [(url_id, None)]
     assert read_affected_urls(file, "title-missing", _RULES) == []

@@ -223,6 +223,15 @@ class AffectedUrl:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class UrlIssue:
+    """One Rule's result for a URL, as stored in affected_urls."""
+
+    rule_id: str
+    url_id: int
+    detail: dict[str, Any] | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Issue:
     rule_id: str
     category: RuleCategory
