@@ -1,19 +1,26 @@
 """Read stored Issue counts and verify per-Rule replacement on Writer replay."""
 
 import json
+import threading
+from dataclasses import replace
 from decimal import Decimal
+from http.client import HTTPConnection
 from operator import itemgetter
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
-from sqlalchemy import Connection
+from sqlalchemy import Connection, Engine, event
 
-from openlinx.rules.titles import TITLE_MISSING
-from openlinx.store.issues import affected_urls_unit
+from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
+from openlinx.store.issues import affected_urls_unit, evaluate_rule, read_issues
+from openlinx.store.records import AffectedUrl
 from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
+from tests.support.cli import await_event, start_cli_process
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawled
 from tests.support.crawls import query
@@ -130,3 +137,159 @@ def test_a_rule_s_query_returns_its_stored_affected_urls(fixture_site: StartSite
             file, "SELECT url_id, detail FROM affected_urls WHERE rule_id = ?", (rule_id,)
         )
         assert _decoded_details(query(file, sql)) == _decoded_details(stored), rule_id
+
+
+def test_live_issues_do_not_mix_rule_counts_across_a_writer_commit(
+    issue_crawl: tuple[Path, str],
+) -> None:
+    file, _ = issue_crawl
+    assert query(file, "PRAGMA journal_mode") == [("wal",)]
+    too_long = replace(
+        TITLE_TOO_LONG,
+        reproduce_sql="""\
+SELECT pages.url_id, NULL AS detail
+FROM pages JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1 AND length(pages.title_1) > 60""",
+    )
+    writer = CrawlWriter(file, FakeClock())
+    reader_thread = threading.get_ident()
+    committed = False
+
+    def after_query(
+        connection: Connection,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: bool,
+    ) -> None:
+        nonlocal committed
+        if (
+            threading.get_ident() == reader_thread
+            and not committed
+            and statement.lstrip().upper().startswith("SELECT")
+        ):
+            committed = True
+
+            def add_long_title(connection: Connection) -> None:
+                connection.exec_driver_sql(
+                    "UPDATE pages SET title_count = 1, title_1 = ? "
+                    "WHERE url_id = (SELECT url_id FROM pages WHERE title_count = 0 LIMIT 1)",
+                    ("x" * 61,),
+                )
+
+            writer.run(add_long_title)
+            writer.flush()
+
+    event.listen(Engine, "after_cursor_execute", after_query)
+    try:
+        with writer:
+            issues = read_issues(file, (TITLE_MISSING, too_long))
+    finally:
+        event.remove(Engine, "after_cursor_execute", after_query)
+
+    assert committed
+    assert query(file, "SELECT COUNT(*) FROM pages WHERE title_count = 0") == [(1,)]
+    assert query(file, "SELECT COUNT(*) FROM pages WHERE length(title_1) > 60") == [(1,)]
+    assert [(issue.rule_id, issue.affected_count) for issue in issues] == [("title-missing", 2)]
+
+
+def test_live_issues_keep_catalogue_order_and_omit_empty_rules(
+    issue_crawl: tuple[Path, str],
+) -> None:
+    file, _ = issue_crawl
+    all_pages = replace(
+        TITLE_TOO_LONG,
+        reproduce_sql="SELECT url_id, NULL AS detail FROM pages",
+    )
+    no_pages = replace(
+        TITLE_TOO_LONG,
+        reproduce_sql="SELECT url_id, NULL AS detail FROM pages WHERE 0",
+    )
+
+    issues = read_issues(file, (all_pages, TITLE_MISSING))
+
+    assert [(issue.rule_id, issue.affected_count) for issue in issues] == [
+        ("title-too-long", 3),
+        ("title-missing", 2),
+    ]
+    assert read_issues(file, (no_pages,)) == []
+
+
+LIVE_ISSUES_SITE = Site(
+    {
+        "/": Page(body='<title>Home</title><h2>Home</h2><a href="/notitle">Next</a>'),
+        "/notitle": Page(body='<h2>Untitled</h2><a href="/slow">Next</a>'),
+        "/slow": Page(body="<title>Slow</title><h2>Slow</h2>", after="/release-slow", delay=5),
+        "/release-slow": Status(code=204),
+    }
+)
+
+
+@pytest.mark.slow
+def test_issue_visible_before_the_crawl_ends(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(LIVE_ISSUES_SITE)
+    process = start_cli_process("crawl", server.url("/"), "--concurrency", "1", "--timeout", "30")
+    held = False
+    try:
+        file = Path(await_event(process, "crawl_started")["crawl_file"])
+        deadline = monotonic() + 8
+        while True:
+            committed = query(
+                file,
+                """SELECT pages.url_id, crawl.state, pages.title_count,
+                          EXISTS(SELECT 1 FROM affected_urls)
+                   FROM pages JOIN urls ON urls.id = pages.url_id CROSS JOIN crawl
+                   WHERE urls.url = ?""",
+                (server.url("/notitle"),),
+            )
+            requested = [request.path for request in server.requests]
+            held = "/slow" in requested
+            if committed and held:
+                break
+            assert process.poll() is None, "Crawl ended before the fixture was ready"
+            assert monotonic() < deadline, f"no committed Page and held request: {requested!r}"
+            sleep(0.02)
+
+        [(url_id, state, title_count, materialised)] = committed
+        assert (state, title_count, materialised, process.poll(), "/release-slow" in requested) == (
+            "running",
+            0,
+            0,
+            None,
+            False,
+        )
+        assert evaluate_rule(file, TITLE_MISSING) == [AffectedUrl(url_id=url_id, detail=None)]
+
+        from openlinx.rules.registry import RULES
+        from openlinx.store.issues import read_affected_urls, read_issues
+
+        issues = [(issue.rule_id, issue.affected_count) for issue in read_issues(file, RULES)]
+        affected = read_affected_urls(file, "title-missing", RULES)
+        urls = [
+            query(file, "SELECT url FROM urls WHERE id = ?", (item.url_id,))[0][0]
+            for item in affected
+        ]
+        assert (issues, urls) == ([("title-missing", 1)], [server.url("/notitle")])
+    finally:
+        try:
+            if held:
+                address = urlsplit(server.base_url)
+                assert address.hostname is not None
+                release = HTTPConnection(address.hostname, address.port, timeout=2)
+                try:
+                    release.request("GET", "/release-slow")
+                    with release.getresponse() as response:
+                        assert response.status == 204
+                finally:
+                    release.close()
+            if process.poll() is None:
+                out, err = process.communicate(timeout=20)
+                assert process.returncode == 0, err
+                assert json.loads(out)["state"] == "completed"
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=10)
