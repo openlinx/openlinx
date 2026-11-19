@@ -63,7 +63,7 @@ MCP-seam tests use an in-process MCP client session. Crawls in tests always targ
 - [ ] 5.2 Drive "Cursor survives a new server" (MCP seam).
 - [ ] 5.3 Drive "Rules page" (MCP seam) for `rules` without `rule_id`.
 - [ ] 5.4 Drive "Segment input" (MCP seam).
-- [ ] 5.5 Drive "Issues of one Rule" (MCP seam).
+- [ ] 5.5 Drive "One Issue" (MCP seam).
 - [ ] 5.6 Drive "One Rule" (MCP seam) for `rules` with `rule_id`.
 - [ ] 5.7 Drive "One Page" (MCP seam).
 - [ ] 5.8 Drive "Page HTML" (MCP seam), with the `html` and `encoding` fields of `050-add-query-and-segments`.
@@ -99,7 +99,7 @@ MCP-seam tests use an in-process MCP client session. Crawls in tests always targ
 
 ## 8. Tool list, annotations and instructions
 
-- [ ] 8.1 Drive "Tool names" (MCP seam) against the exact set of 15 names.
+- [ ] 8.1 Drive "Tool names" (MCP seam) against the exact set of 16 names.
 - [ ] 8.2 Drive "Read-only tools" (MCP seam).
 - [ ] 8.3 Drive "Open-world tools" and "Destructive tools" (MCP seam). This is a trivial pair of annotation flags.
 - [ ] 8.4 Drive "Instructions delivered" (MCP seam).

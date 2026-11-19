@@ -84,7 +84,7 @@ Segment membership SHALL be computed from the current `openlinx.toml` every time
 
 ### Requirement: The --segment flag
 
-`summary`, `pages`, `issues`, `issues <rule-id>` and `export` SHALL accept `--segment <name>`. It restricts the Command to the Pages that belong to that Segment by first-match membership, and it combines with `--where` so that both must hold. An unknown name SHALL be rejected with the error code `unknown_segment` (exit code 2), whose `details.accepted` lists the defined Segment names in evaluation order. When no Segments are defined, the hint SHALL explain how to add a `[segments]` table to `openlinx.toml`. `070-add-html-report` uses the same resolution for `report --segment` and `report brief --segment`.
+`summary`, `pages`, `issues`, `issue <rule-id>` and `export` SHALL accept `--segment <name>`. It restricts the Command to the Pages that belong to that Segment by first-match membership, and it combines with `--where` so that both must hold. An unknown name SHALL be rejected with the error code `unknown_segment` (exit code 2), whose `details.accepted` lists the defined Segment names in evaluation order. When no Segments are defined, the hint SHALL explain how to add a `[segments]` table to `openlinx.toml`. `070-add-html-report` uses the same resolution for `report --segment` and `report brief --segment`.
 
 #### Scenario: Pages of one Segment
 - **WHEN** `openlinx.toml` defines `blog = "address ~ '/blog/'"` and `shop = "address ~ '/shop/'"`, and the Crawl has the Pages `https://example.com/blog/a`, `https://example.com/blog/b`, `https://example.com/shop/c` and `https://example.com/about`
@@ -113,7 +113,7 @@ Segment membership SHALL be computed from the current `openlinx.toml` every time
 
 #### Scenario: Commands list the --segment flag
 - **WHEN** `linx commands --format json` runs
-- **THEN** the entries for `summary`, `pages`, `issues` and `export` each list the flag `--segment`
+- **THEN** the entries for `summary`, `pages`, `issues`, `issue` and `export` each list the flag `--segment`
 
 ### Requirement: The segment field
 
@@ -152,7 +152,7 @@ Under `--segment`, an Issue's `affected_count` SHALL count only the Affected URL
 
 #### Scenario: Affected URLs of one Issue within a Segment
 - **WHEN** the Issue `title-missing` has the Affected URLs `https://example.com/blog/a`, `https://example.com/blog/b` and `https://example.com/shop/c`, and the Segment `blog` holds the first two
-- **AND** `linx issues title-missing --segment blog` runs
+- **AND** `linx issue title-missing --segment blog` runs
 - **THEN** `total` is `2`
 
 ### Requirement: Health Score of a Segment

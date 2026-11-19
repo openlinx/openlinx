@@ -44,7 +44,7 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 023 | `023-fix-code-audit` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | existing Commands | merged and archived |
 | 030 | `030-add-page-data` | `page-data` | none (data only) | foundation in main; local 4b and review fixes complete; whole-change acceptance open |
 | 040 | `040-add-rules` | `rules` | `rules` | partial older branch; integration and remaining v0.1 Rules open |
-| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | partial older branch; review fixes and 040 integration open |
+| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `issue`, `sql` | partial older branch; review fixes and 040 integration open |
 | 026 | `026-add-parse-pool` | `crawl-performance` | none | partial older branch; bounded shutdown and scale proof open |
 | 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop`, `resume` | local ownership frozen at task 0.6 (`5fcf25e2`); Commands not implemented |
 | 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
@@ -59,7 +59,7 @@ A thin end-to-end slice comes first, so the first Issues reach a user early. The
 ```
 slice:   000 ─► 010 ─► 015 ─► 017 ─► 018 ─► 020 ─► 030-min ─► 040-min ─► 050 issues
                                               │    (first      (3–5       (issues,
-                                              │    columns)    Rules)     issues <id>)
+                                              │    columns)    Rules)     issue <id>)
                                               │
 widen:                                        ├─► 022-min ─┐
                                               ├─► 060-min ─┤
@@ -72,7 +72,7 @@ widen:                                        ├─► 022-min ─┐
   - **Local integration:** 030 at `c31c717e` includes group 4b, Max-Age/Content Area fixes and the completed sentence-splitting and cookie Domain review fixes; whole-change acceptance remains open. 022 is archived on the PR #42 branch after Standards and Spec review and the nine-job OS/Python matrix passed at `ee7ee390`. The platform runner fix at `30ca0c46` is integrated locally and checks all three type targets on every host. 060 stays frozen at `5fcf25e2` after task 0.6; its control Commands, remaining ownership scenarios, review and actual cross-OS CI remain open.
   - **Older branches:** 026, 040 and 050 contain partial implementations that still need the package rename and current contracts. Bounded worker shutdown, Rule populations and remaining Rules, query review fixes, and the integrated Crawl → Issues proof remain open. [Development state](docs/development-state.md) links verified checkpoints, tasks and dependencies.
   - **Not started:** 080 (the agent Skill) and 085 (the release).
-- **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
+- **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issue <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` → `issue internal-4xx` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issue <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
 - **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts its synthetic site alongside 020 and the rest once 020's slice is in (its first pull request), and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
 - **HTML parser:** selectolax 1.0.1 or later, parsing with scripting on, as a browser that runs scripts does. A head `<noscript>` therefore keeps the later head elements (canonical, meta description, robots, hreflang) in `<head>`, and a body `<noscript>` gives its Links.
@@ -219,8 +219,8 @@ If a change needs something another change owns, it depends on that change inste
   - `summary` (the data model shared with the Report). **(v0.2)** its per-Segment breakdown.
   - `pages` with the basic `--where` language (comparisons, `contains`, `is [not] null` and `and`), `--fields`, `--sort` and paging. **(v0.2)** the rest of `--where`: `~`/`!~`, `in`, `or`, `not` and parentheses.
   - `page <url>`: JSON, where `--headers` shows redacted headers. **(v0.2)** `--html`, which needs 030's stored HTML.
-  - `issues` and `issues <rule-id>`.
-  - The **end-to-end CI test** on Windows, macOS and Linux: a foreground `crawl` → `issues`. It is the last part of the thin slice. 070's end-to-end test is added in v0.2.
+  - `issues` and `issue <rule-id>`.
+  - The **end-to-end CI test** on Windows, macOS and Linux: a foreground `crawl` → `issues` → `issue internal-4xx`. It is the last part of the thin slice. 070's end-to-end test is added in v0.2.
   - Read-only `sql`: exactly one `SELECT`/`WITH` statement, with a default row limit and a timeout.
   - **(v0.2)** `export <view>`: `jsonl` by default, or `csv`; the `resources` view is defined over `urls` and `links`. With 030's stored HTML, Pages also export as Markdown, as input for AI tools.
   - **(v0.2)** A ready-made what-to-fix-first ranking: Issues ordered by Priority and Affected URL count, later also an MCP tool (090). Each Rule's guidance (`description`, `why_it_matters`, `how_to_fix`) is already printed by 040's `rules show <id>`.
@@ -293,7 +293,7 @@ The first release after v0.1. MCP was moved here on 2026-10-01. It builds on the
 
 - **090-add-mcp-server**:
   - `linx mcp --workspace <path>`.
-  - **Tools:** the foreground and the detached crawl, `status` and `stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues`, `sql` and `rules`, plus `schema` and `doctor`.
+  - **Tools:** the foreground and the detached crawl, `status` and `stop`, and the v0.1 queries `summary`, `pages`, `page`, `issues`, `issue`, `sql` and `rules`, plus `schema` and `doctor`.
   - `resume`. **(v0.2)** the tools of the v0.2 Commands: the dry run, `crawls list`, List and Sitemap modes, and the `report` and `report_brief` tools with inline Report Notes, which come with 070.
   - Errors use 010's full diagnostic shape.
   - The `.mcpb` bundle: `scripts/build_mcpb.py`, added to 085's release workflow, so it is attached to every GitHub release from v0.1.1.

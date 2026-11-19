@@ -6,13 +6,13 @@ Each implementation task below is **one red → green slice** for one scenario, 
 3. Run ruff, the strict type checker and pytest with coverage.
 4. Make one commit whose message names the scenario.
 
-**The thin slice** (ROADMAP, Build order) is group 1: `issues` and `issues <rule-id>` over `040`'s Issues reader, ending with the cross-OS end-to-end test. It needs no `--where`, no `pages` and no `summary`. Groups 2–8 widen the change to the rest of v0.1. Groups 9–13 are v0.2, and their tasks are marked (v0.2).
+**The thin slice** (ROADMAP, Build order) is group 1: `issues` and `issue <rule-id>` over `040`'s Issues reader, ending with the cross-OS end-to-end test. It needs no `--where`, no `pages` and no `summary`. Groups 2–8 widen the change to the rest of v0.1. Groups 9–13 are v0.2, and their tasks are marked (v0.2).
 
 From group 1 on, the tests use the `crawl_store` factory (design.md, Test seams). It writes only tables and columns documented in `docs/schema.md`, through the store API of `015-add-crawl-store`. It grows in the slice that first needs a table. No boundary doubles are used.
 
 Every group ends with a docs task and a review task.
 
-## 1. `issues` and `issues <rule-id>` for the thin slice (slice; seams 2: Services, 1: CLI, 3+6)
+## 1. `issues` and `issue <rule-id>` for the thin slice (slice; seams 2: Services, 1: CLI, 3+6)
 
 - [x] 1.1 Drive `Issue list › Order` (Services), after `040`'s group 3. Start the `crawl_store` factory with the documented `crawl`, `seeds`, `urls`, `pages`, `rules` and `affected_urls` tables, each written by its owner's store code (design, Test seams), and a `completed` Crawl carrying its `affected_urls` rows. The Query Service's `issue_list` in `openlinx.services.query` resolves the Crawl with `015`'s `resolve_crawl` and returns a `Page` in contract order. In one `reading(..., snapshot=True)` scope it reads through `040`'s `issues_in` and joins the Crawl's own `rules` table for `description`. The Issues and descriptions share a snapshot in WAL and rollback-journal mode (design D14). Verify: red → green; one commit.
 - [x] 1.2 Drive `Issue list › Item fields` (Services). Verify: red → green; one commit.
@@ -20,14 +20,14 @@ Every group ends with a docs task and a review task.
 - [x] 1.4 Drive `Issue list › Filters combine` (CLI). Register `linx issues` with `@command_meta(output="list")` and return a `Page` via `paginate()`, binding the cursor to the resolved Crawl ID and normalised filters (design D14). Filter values are comma-separated, repeatable and case-insensitive. Verify: red → green; one commit.
 - [ ] 1.5 Drive `Issue list › Filter by category` (CLI). Verify: red → green; one commit.
 - [ ] 1.6 Drive `Issue list › Unknown Issue Type` (CLI). Verify: red → green; one commit.
-- [ ] 1.7 Drive `Issue detail › A Rule that did not fire` (Services): `issues <rule-id>` returns a `Page` with `header` `{"rule": ...}`, its Affected URLs paged by keyset in `url` order (design D4, D14). Verify: red → green; one commit.
+- [ ] 1.7 Drive `Issue detail › A Rule that did not fire` (Services): the detail Service returns a `Page` with `header` `{"rule": ...}` read from the Crawl's `rules` table. It reads and pages Affected URLs through 040's reader in `url` order in the same snapshot (design D4, D14). Check the next page with URLs recorded out of order and reject reuse of the cursor for a different Rule in the same Crawl. Task 1.12 registers the `issue` Command. Verify: red → green; one commit.
 - [ ] 1.8 Drive `Issue detail › Thresholds recorded for the Crawl` (Services). Verify: red → green; one commit.
 - [ ] 1.9 Drive `Issue detail › Guidance of the Rule` (Services). Verify: red → green; one commit.
 - [ ] 1.10 Drive `Issue detail › The reproducing query of the Rule` (Services): `reproduce_sql` in `rule`. Verify: red → green; one commit.
 - [ ] 1.11 Drive `Issue detail › Detail of an Affected URL` (Services). Verify: red → green; one commit.
-- [ ] 1.12 Drive `Issue detail › Unknown rule id` (CLI): 040's `rule_not_found`, checked against the Crawl's `rules` table, with `details.suggestions` from it (design D14). Verify: red → green; one commit.
-- [ ] 1.13 Drive `Issue list › Issues of a fixture Crawl on every OS` (CLI and 3, real subprocesses on the Windows, macOS and Linux CI jobs, through `run_cli_process`), after `040`'s group 4 (`internal-4xx` and `title-missing` with their queries) and `030`'s group 2 (the title columns): add the `/e2e/` fixture pages, with `/e2e/gone` a `Status(404)` route; `linx crawl` then `linx issues`. This is the thin slice's end-to-end test. Verify: red → green on all three OSes; one commit.
-- [ ] 1.14 Docs: in `docs/querying.md`, document `linx issues` and `linx issues <rule-id>`: the order, the filters, `affected_count`, `detail`, `reproduce_sql`, and that a `running`, `failed` or `interrupted` Crawl's Issues are computed live on every call. Until group 6, Affected URLs come in `url` order. Verify: every flag is documented.
+- [ ] 1.12 Drive `Issue detail › Unknown rule id` (CLI). Register `linx issue <rule-id>` with its own list metadata and `url, detail` fields. With `--fields url`, check that the JSON keeps the Rule header and projects an Affected URL to its `url` field. Drive `Issue Commands publish separate field sets`, `A Rule id is passed to the Issue list` and `A cursor is reused with the other Issue Command` (design D14). An unknown Rule id gives 040's `rule_not_found` with `details.suggestions` from the Crawl's `rules` table. Verify: red → green; one commit.
+- [ ] 1.13 Drive `Issue list › Issues of a fixture Crawl on every OS` (CLI and 3, real subprocesses on the Windows, macOS and Linux CI jobs, through `run_cli_process`), after `040`'s group 4 (`internal-4xx` and `title-missing` with their queries) and `030`'s group 2 (the title columns): add the `/e2e/` fixture pages, with `/e2e/gone` a `Status(404)` route; run `linx crawl`, `linx issues` and `linx issue internal-4xx` as three subprocesses. This is the thin slice's end-to-end test. Verify: red → green on all three OSes; one commit.
+- [ ] 1.14 Docs: in `docs/querying.md`, document `linx issues` and `linx issue <rule-id>`: the order, the filters, `affected_count`, `detail`, `reproduce_sql`, and that a `running`, `failed` or `interrupted` Crawl's Issues are computed live on every call. Until group 6, Affected URLs come in `url` order. Verify: every flag is documented.
 - [ ] 1.15 Review: run the code-review skill on group 1's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 2. The basic `--where` language (seam 4: Pure-logic)
@@ -118,11 +118,11 @@ Every group ends with a docs task and a review task.
 - [ ] 5.26 Docs: write `docs/contracts/summary.md`: every member, its type and meaning, the `summary_version` rule, a full example, the mapping to Screaming Frog's Overview (design D16), the note that `status` is the cheap progress reading of a running Crawl (design D17), and the note that the Report (070) uses this model. Verify: the example decodes into `SummaryModel` in a doc test.
 - [ ] 5.27 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
-## 6. `issues <rule-id>` widening (seams 2: Services)
+## 6. `issue <rule-id>` widening (seams 2: Services)
 
 - [ ] 6.1 Drive `Issue detail › Most-linked Affected URLs first` (Services), once `030`'s inlink columns exist. Verify: red → green; one commit.
-- [ ] 6.2 Drive `Issue detail › Page columns for Affected URLs` (Services), reusing `--where` and `--sort` from groups 1 and 3. Verify: red → green; one commit.
-- [ ] 6.3 Docs: in `docs/querying.md`, document the default order by Unique Inlinks, and the page columns of Affected URLs. Verify: every flag of `issues <rule-id>` is documented.
+- [ ] 6.2 Drive `Issue detail › Page columns for Affected URLs` (Services), reusing `--where` and `--sort` from groups 2 and 3. Verify: red → green; one commit.
+- [ ] 6.3 Docs: in `docs/querying.md`, document the default order by Unique Inlinks, and the page columns of Affected URLs. Verify: every flag of `issue <rule-id>` is documented.
 - [ ] 6.4 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 7. `sql` (seams 6: Store contract, 1: CLI)
