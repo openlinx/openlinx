@@ -1,4 +1,4 @@
-"""Build completed Crawls through Store units for the Query Service."""
+"""Build running or completed Crawls through Store units for the Query Service."""
 
 from collections.abc import Mapping
 from dataclasses import replace
@@ -73,8 +73,10 @@ def _rules() -> tuple[tuple[Rule, ...], tuple[RuleRow, ...]]:
     return rules, snapshots
 
 
-def crawl_store(temp_workspace: TempWorkspace, *, pages: Mapping[str, str] | None = None) -> Path:
-    """Record a completed Crawl with the given linked HTML Pages and the installed Rules.
+def crawl_store(
+    temp_workspace: TempWorkspace, *, pages: Mapping[str, str] | None = None, completed: bool = True
+) -> Path:
+    """Record linked HTML Pages with the installed Rules, completing the Crawl by default.
 
     Without explicit Pages, record non-HTML 404s for the ordering scenario's later Rules.
     """
@@ -158,12 +160,13 @@ def crawl_store(temp_workspace: TempWorkspace, *, pages: Mapping[str, str] | Non
                     )
                 )
             )
-        pages_200 = writer.run(pages_with_status_200)
-        for first, last in writer.run(inlink_ranges):
-            writer.run(inlink_counts(first, last, pages_200))
-        for rule in rules:
-            writer.run(affected_urls_unit(rule))
-        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=len(queued) + 2)))
+        if completed:
+            pages_200 = writer.run(pages_with_status_200)
+            for first, last in writer.run(inlink_ranges):
+                writer.run(inlink_counts(first, last, pages_200))
+            for rule in rules:
+                writer.run(affected_urls_unit(rule))
+            writer.run(record_state("completed", STARTED_AT + timedelta(seconds=len(queued) + 2)))
     return crawl_file.path
 
 
