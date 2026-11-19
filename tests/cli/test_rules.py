@@ -8,14 +8,14 @@ from tempfile import TemporaryFile
 
 import pytest
 
-from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli, run_cli_process
+from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli
 from tests.support.processes import console_process, python_command
 from tests.support.workspace import TempWorkspace
 
 GUIDANCE = ("description", "why_it_matters", "how_to_fix")
 
 
-def test_first_rule_in_the_list() -> None:
+def test_first_rule_in_the_list(temp_workspace: TempWorkspace) -> None:
     result = run_cli("rules", "list", "--limit", "1")
 
     assert result.exit_code == 0, result.stderr
@@ -33,7 +33,7 @@ def test_first_rule_in_the_list() -> None:
     assert following.json()["items"] == [{"id": "internal-5xx", "thresholds": {}}]
 
 
-def test_every_rule_has_its_guidance() -> None:
+def test_every_rule_has_its_guidance(temp_workspace: TempWorkspace) -> None:
     result = run_cli("rules", "list", "--limit", "50")
 
     assert result.exit_code == 0, result.stderr
@@ -64,7 +64,7 @@ def test_show_a_rule_with_thresholds(temp_workspace: TempWorkspace) -> None:
 def test_override_shown_by_the_rules_command(temp_workspace: TempWorkspace) -> None:
     (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
 
-    shown = run_cli_process("rules", "show", "title-too-long")
+    shown = run_cli("rules", "show", "title-too-long")
     listed = run_cli("rules", "list", "--limit", "50")
 
     assert shown.exit_code == 0, shown.stderr
@@ -252,7 +252,7 @@ def test_a_rules_cursor_belongs_to_its_workspace(temp_workspace: TempWorkspace) 
     assert other.stderr_json_lines()[-1]["code"] == "invalid_cursor"
 
 
-def test_rule_without_thresholds() -> None:
+def test_rule_without_thresholds(temp_workspace: TempWorkspace) -> None:
     result = run_cli("rules", "list", "--limit", "50")
 
     assert result.exit_code == 0, result.stderr
@@ -267,7 +267,7 @@ def test_rule_without_thresholds() -> None:
     assert rule["thresholds"] == {}
 
 
-def test_unknown_rule_id() -> None:
+def test_unknown_rule_id(temp_workspace: TempWorkspace) -> None:
     result = run_cli("rules", "show", "nope")
     error = result.stderr_json_lines()[-1]
 
@@ -278,7 +278,7 @@ def test_unknown_rule_id() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires a Windows console")
-def test_windows_console_output() -> None:
+def test_windows_console_output(temp_workspace: TempWorkspace) -> None:
     command = python_command("-m", "openlinx", "rules", "show", "title-too-long")
     # Change the code page in a separate console so it cannot affect the test runner.
     with TemporaryFile() as stdout, TemporaryFile() as stderr:
@@ -305,7 +305,9 @@ def test_windows_console_output() -> None:
 
 
 @pytest.mark.parametrize("rule_id", ["title-missing", "title-too-long"])
-def test_show_matches_the_rule_in_the_catalogue(rule_id: str) -> None:
+def test_show_matches_the_rule_in_the_catalogue(
+    temp_workspace: TempWorkspace, rule_id: str
+) -> None:
     listed = run_cli("rules", "list", "--limit", "50")
     shown = run_cli("rules", "show", rule_id)
 
@@ -315,7 +317,7 @@ def test_show_matches_the_rule_in_the_catalogue(rule_id: str) -> None:
     assert item == shown.json()
 
 
-def test_the_bare_group_lists_the_rules() -> None:
+def test_the_bare_group_lists_the_rules(temp_workspace: TempWorkspace) -> None:
     bare = run_cli("rules")
     explicit = run_cli("rules", "list")
 
