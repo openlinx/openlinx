@@ -5,8 +5,8 @@ means, why it matters and how to fix it. When a Rule fires in a Crawl, it produc
 the URLs it affects. Each of those URLs is an Affected URL. [Glossary](../CONTEXT.md#analysis)
 
 `linx rules list` and `linx rules show` describe the built-in catalogue with the thresholds
-configured in the current Workspace. They work without a Crawl. Reading the catalogue does not
-run the Rules or tell you which URLs are affected.
+and enabled state configured in the current Workspace. They work without a Crawl. Reading the
+catalogue does not run the Rules or tell you which URLs are affected.
 
 ## Issue Type and Priority
 
@@ -37,7 +37,7 @@ linx rules list --limit 1 --fields id,category
 
 ```json
 {
-  "total": 4,
+  "total": 5,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "eyJ2IjoxLCJxIjoiNTAzZmFkY2E1NzU2NzNkOSIsImsiOjF9"
 }
@@ -70,6 +70,7 @@ the same fields in each item by default.
   "issue_type": "opportunity",
   "priority": "medium",
   "applies_to": "internal_pages",
+  "enabled": true,
   "thresholds": {"max_chars": {"value": 60, "default": 60, "unit": "characters"}},
   "description": "A Page's first title is longer than max_chars characters.",
   "why_it_matters": "Search engines cut a long title short in their results, so its end, often the brand or what sets the Page apart, is not shown.",
@@ -80,6 +81,9 @@ the same fields in each item by default.
 `applies_to` names the Rule's intended population, such as `internal_pages` for title Rules or
 `internal_urls` for response-code Rules. The model also allows `resources` for Rules about
 image Resources.
+
+`enabled` is `true` by default. Set `enabled = false` in the Rule's table in the Workspace
+settings to turn it off. Both Commands still show the Rule, with `"enabled": false`.
 
 `thresholds` maps each threshold name to its integer `value`, catalogue `default` and `unit`.
 Here `max_chars` is 60 characters, the default when the Workspace has no override. A Rule without
@@ -111,5 +115,5 @@ linx rules show title-too-long --workspace ./site
 
 The planned evaluation uses a SQL query per Rule over stored Crawl data. The query identifies
 Affected URLs. Per-Crawl Rule records, Issue evaluation and the Health Score are planned.
-The catalogue output will also expose enabled state and the reproducing query.
+The catalogue output will also expose the reproducing query.
 [Planned v0.1 catalogue](../ROADMAP.md#the-v01-rules)

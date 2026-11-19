@@ -291,7 +291,7 @@ def test_a_rule_setting_is_recorded_by_its_rule_id(
 
     config = json.loads(crawl_row(crawled(server.url("/")))["config"])
 
-    assert config["rules"]["title-too-long"] == {"max_chars": 70}
+    assert config["rules"]["title-too-long"] == {"max_chars": 70, "enabled": True}
 
 
 def test_a_flag_overrides_openlinx_toml(

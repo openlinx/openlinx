@@ -12,7 +12,8 @@ with `value`, `default` and `unit`. A Rule without thresholds, such as `title-mi
 `"thresholds": {}`.
 Each threshold's `value` comes from the Workspace settings or falls back to the catalogue
 `default`, which is 60 characters for `title-too-long`'s `max_chars`. Both Commands accept
-`--workspace <dir>`. [Threshold overrides](rules.md#override-a-threshold)
+`--workspace <dir>`. Each Rule has an `enabled` boolean, which defaults to `true`.
+Disabled Rules stay in the list. [Rule settings](rules.md#override-a-threshold)
 An unknown id returns `rule_not_found` and directs you to `linx rules list`.
 
 ## stdout and stderr

@@ -1,4 +1,4 @@
-"""Build the threshold settings with one subtable per registered Rule."""
+"""Build the settings with one subtable per registered Rule."""
 
 from typing import Any
 
@@ -21,6 +21,7 @@ def _rule_table(rule: Rule) -> type[BaseModel]:
         )
         for threshold in rule.thresholds
     }
+    fields["enabled"] = (bool, Field(True, strict=True, description="Set to false to disable."))
     name = "".join(word.title() for word in rule.id.split("-")) + "Settings"
     return create_model(name, __config__=ConfigDict(extra="forbid"), **fields)
 
@@ -40,6 +41,6 @@ RulesSettings: type[BaseModel] = create_model(
     "RulesSettings",
     # Keep the Rule ids in the recorded Crawl config as well as in the settings file.
     __config__=ConfigDict(extra="forbid", serialize_by_alias=True),
-    __doc__="Thresholds by Rule id, for example [rules.title-too-long].",
+    __doc__="Thresholds and enabled state by Rule id, for example [rules.title-too-long].",
     **_tables(),
 )

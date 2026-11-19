@@ -91,6 +91,74 @@ def test_rules_use_the_explicit_workspace(temp_workspace: TempWorkspace) -> None
     assert item["thresholds"] == expected
 
 
+def test_disabled_rule_is_listed(temp_workspace: TempWorkspace) -> None:
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(b"[rules.url-parameters]\nenabled = false\n")
+
+    listed = run_cli("rules", "list", "--limit", "50")
+    shown = run_cli("rules", "show", "url-parameters")
+
+    assert listed.exit_code == 0, listed.stderr
+    assert shown.exit_code == 0, shown.stderr
+    items = listed.json()["items"]
+    (item,) = (item for item in items if item["id"] == "url-parameters")
+    assert item["enabled"] is False
+    assert [item["id"] for item in items if item["enabled"] is not True] == ["url-parameters"]
+    document = shown.json()
+    assert document["enabled"] is False
+    assert document == item
+    assert (item["category"], item["issue_type"], item["priority"], item["applies_to"]) == (
+        "urls",
+        "opportunity",
+        "low",
+        "internal_pages",
+    )
+    assert item["thresholds"] == {}
+
+
+def test_rules_are_enabled_by_default(temp_workspace: TempWorkspace) -> None:
+    listed = run_cli("rules", "list", "--limit", "50")
+    shown = run_cli("rules", "show", "url-parameters")
+
+    assert listed.exit_code == 0, listed.stderr
+    assert shown.exit_code == 0, shown.stderr
+    items = listed.json()["items"]
+    assert "url-parameters" in {item["id"] for item in items}
+    assert [item["id"] for item in items if item["enabled"] is not True] == []
+    assert shown.json()["enabled"] is True
+
+
+def test_explicit_workspace_can_enable_a_rule(temp_workspace: TempWorkspace) -> None:
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(b"[rules.url-parameters]\nenabled = false\n")
+    other = temp_workspace.root / "other"
+    other.mkdir()
+    (other / "openlinx.toml").write_bytes(b"[rules.url-parameters]\nenabled = true\n")
+
+    listed = run_cli("rules", "list", "--workspace", "other", "--fields", "id,enabled")
+    shown = run_cli("rules", "show", "url-parameters", "--workspace", "other")
+
+    assert listed.exit_code == 0, listed.stderr
+    assert shown.exit_code == 0, shown.stderr
+    (item,) = (item for item in listed.json()["items"] if item["id"] == "url-parameters")
+    assert set(item) == {"id", "enabled"}
+    assert item["enabled"] is True
+    assert shown.json()["enabled"] is True
+
+
+def test_a_rule_enabled_setting_requires_a_boolean(temp_workspace: TempWorkspace) -> None:
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(b'[rules.internal-4xx]\nenabled = "false"\n')
+
+    result = run_cli("rules", "show", "internal-4xx")
+
+    assert result.exit_code == 3
+    (error,) = result.stderr_json_lines()
+    assert error["code"] == "settings_invalid"
+    (problem,) = error["details"]["errors"]
+    assert problem["key"] == "rules.internal-4xx.enabled"
+
+
 def test_a_rules_cursor_belongs_to_its_workspace(temp_workspace: TempWorkspace) -> None:
     (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
     (temp_workspace.root / "other").mkdir()

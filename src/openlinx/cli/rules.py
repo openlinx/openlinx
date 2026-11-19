@@ -21,6 +21,7 @@ RULE_FIELDS = (
     "issue_type",
     "priority",
     "applies_to",
+    "enabled",
     "thresholds",
     "description",
     "why_it_matters",
