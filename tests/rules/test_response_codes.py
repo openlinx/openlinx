@@ -182,6 +182,9 @@ def test_no_response(fixture_site: StartSite) -> None:
     )
     [(slow_id, state, reason)] = rows
     assert (state, reason, result.summary.state) == ("error", "timeout", "completed")
+    assert evaluate_rule(result.crawl_file, INTERNAL_NO_RESPONSE) == [
+        AffectedUrl(url_id=slow_id, detail={"error": "timeout"})
+    ]
     affected = query(
         result.crawl_file,
         "SELECT url_id, detail FROM affected_urls WHERE rule_id = 'internal-no-response'",
