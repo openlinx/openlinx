@@ -50,6 +50,11 @@ class Status(RouteOptions):
 
 
 @dataclass(frozen=True)
+class Bytes(RouteOptions):
+    body: bytes
+
+
+@dataclass(frozen=True)
 class Redirect(RouteOptions):
     location: str
     status: int = 301
@@ -77,7 +82,7 @@ class LargeFile(RouteOptions):
     size: int
 
 
-Answer = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
+Answer = Page | Status | Bytes | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
 
 
 @dataclass(frozen=True)
