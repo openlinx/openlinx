@@ -45,7 +45,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Expose the Rule model's `reproduce_sql` in list and show and store it in the Crawl's `rules` table (D15). Keep the no-row query for any Rule whose condition is still pending.
 - [x] 3.4 Drive "Missing title produces an Affected URL" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. Crawl the fixture site so `020` records the URLs and `030` records the Pages. The query reads `pages.title_count` and joins `urls` for `parsed` = 1 (design D2).
 - [x] 3.5 Drive "Empty title counts as missing" at seam 2.
-- [ ] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.
+- [x] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.
 - [ ] 3.7 Drive "Issue row counts its Affected URLs" at seam 3+6. Declare `affected_urls` (`STRICT`, `WITHOUT ROWID`, keyed by `(rule_id, url_id)`) and the `issues` view in `openlinx.store.schema`, and add the post-crawl pass to `020`'s `default_hooks()` in `openlinx.services.hooks`: one unit per enabled Rule that replaces its rows with `INSERT … SELECT` from its query (design D5, D15). Check the units with `017`'s `replay_now(writer)`.
 - [ ] 3.8 Drive "A Rule's query returns its stored Affected URLs" at seam 3+6, over every enabled Rule. From here on it checks every Rule registered later.
 - [ ] 3.9 Drive "Keys of the Rule tables" at seam 6.
