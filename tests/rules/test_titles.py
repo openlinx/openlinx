@@ -1,14 +1,19 @@
 """Verify title Rules over Pages written by a real Crawl."""
 
 import pytest
+from sqlalchemy import update
 
+from openlinx.clock import SystemClock
 from openlinx.rules.titles import TITLE_MISSING
 from openlinx.store.issues import evaluate_rule
 from openlinx.store.records import AffectedUrl
+from openlinx.store.schema import pages
+from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawled
 from tests.support.crawls import query
+from tests.support.writer import executing
 
 
 @pytest.mark.usefixtures("temp_workspace")
@@ -60,11 +65,27 @@ def test_non_analysed_pages_are_skipped_by_page_rules(fixture_site: StartSite) -
     [(analysed_id,)] = query(
         file, "SELECT id FROM urls WHERE url = ? AND parsed = 1", (server.url("/"),)
     )
-    assert query(
+    [(unanalysed_id, status, parsed, title_count, title)] = query(
         file,
-        "SELECT urls.status_code, urls.parsed, pages.title_count, pages.title_1 "
+        "SELECT pages.url_id, urls.status_code, urls.parsed, pages.title_count, pages.title_1 "
         "FROM urls JOIN pages ON pages.url_id = urls.id WHERE urls.url = ?",
         (server.url("/not-found"),),
-    ) == [(404, 0, None, None)]
+    )
+    assert (status, parsed, title_count, title) == (404, 0, None, None)
+    expected = [AffectedUrl(url_id=analysed_id, detail=None)]
+    assert evaluate_rule(file, TITLE_MISSING) == expected
 
-    assert evaluate_rule(file, TITLE_MISSING) == [AffectedUrl(url_id=analysed_id, detail=None)]
+    # The Crawl leaves this measurement NULL. SQLite's constraints allow the fixture to
+    # set a zero count independently of urls.parsed and isolate the population filter.
+    with CrawlWriter(file, SystemClock()) as writer:
+        writer.run(
+            executing(update(pages).where(pages.c.url_id == unanalysed_id).values(title_count=0))
+        )
+
+    assert query(
+        file,
+        "SELECT urls.parsed, pages.title_count FROM urls JOIN pages ON pages.url_id = urls.id "
+        "WHERE urls.id = ?",
+        (unanalysed_id,),
+    ) == [(0, 0)]
+    assert evaluate_rule(file, TITLE_MISSING) == expected

@@ -1,5 +1,6 @@
 """Check how the Issues reader selects a result for the Crawl State."""
 
+import re
 import threading
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -228,6 +229,7 @@ def test_a_rule_missing_from_the_live_catalogue_explains_how_to_reproduce_it(
     stopped_issue: tuple[Path, int],
 ) -> None:
     file, _ = stopped_issue
+    assert query(file, "SELECT enabled FROM rules WHERE id = 'title-missing'") == [(1,)]
     with CrawlWriter(file, FakeClock()) as writer:
         writer.run(record_continue(read_recorded(file).config, _AT))
     with pytest.raises(OpenLinxError) as raised:
@@ -236,7 +238,18 @@ def test_a_rule_missing_from_the_live_catalogue_explains_how_to_reproduce_it(
     diagnostic = raised.value.diagnostic
     assert (diagnostic.code, raised.value.exit_code) == ("rule_not_found", 4)
     assert "title-missing" in diagnostic.message
-    assert "live" in diagnostic.message.lower()
+    message = diagnostic.message.casefold().replace("title-missing", " ")
+    message = message.replace("\N{RIGHT SINGLE QUOTATION MARK}", "'")
+    words = set(re.findall(r"[a-z]+(?:'[a-z]+)?", message))
+    live = "live" in words or {"crawl", "runs"} <= words
+    assert words & {"version", "installed", "current"}, diagnostic.message
+    assert words & {"no", "not", "missing", "absent", "unavailable", "cannot", "can't", "unable"}, (
+        diagnostic.message
+    )
+    assert words & {"catalogue", "catalog"} or (
+        live and words & {"compute", "evaluate", "evaluation", "evaluator"}
+    ), diagnostic.message
+    assert not re.search(r"\b(?:is|was) disabled\b", message), diagnostic.message
     assert "reproduce_sql" in (diagnostic.hint or "")
     assert "linx sql" in (diagnostic.hint or "")
 
