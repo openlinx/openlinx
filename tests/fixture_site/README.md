@@ -35,6 +35,7 @@ SITE = Site(
 | Route | Answers with |
 |---|---|
 | `Page(file=... \| body=..., template=False)` | 200 and the file's exact bytes, or the body as UTF-8. The content type comes from the file extension through a fixed table (never `mimetypes`); a `body` page is `text/html; charset=utf-8`. With `template=True`, every `{{base_url}}` becomes the server's base URL. |
+| `Bytes(body, content_type=...)` | 200 with the supplied bytes unchanged. The default content type is `application/octet-stream`. |
 | `Status(code, body=None)` | That status and an empty body, or the body as UTF-8 with `text/html; charset=utf-8`, as an error page. |
 | `Redirect(location, status=301)` | That status and `Location` exactly as declared, never made absolute. `redirect_chain(prefix, hops, to)` builds `<prefix>1` → … → `<prefix><hops>` → `to`. |
 | `Robots(text)` | 200, `text/plain; charset=utf-8` and the text. |
@@ -101,6 +102,19 @@ Clients in tests:
 - A `urllib` opener needs `urllib.request.build_opener(urllib.request.ProxyHandler({}))`. On Windows urllib otherwise reads proxy settings from the registry.
 
 Timing tests assert only lower bounds, such as "not before 0.5 s", and use generous client timeouts.
+
+## Synthetic benchmark site
+
+[SyntheticSite](synthetic/site.py) computes each Page from its seed and number. Its
+`fanout` builds a spanning tree from `/` to `/p/1` through the last Page. Faults
+are assigned only to leaves, so a failed response cannot hide a subtree. The
+manifest records expected URL counts, fault outcomes and modeled Issues.
+`latency` delays every response, including 404s.
+
+Use [SiteProcess](synthetic/serve.py) as a context manager to serve the site in a
+separate `spawn` process. It exposes `base_url` and returns counts when you call
+`stop()`. The server disables the request journal and uses one saturating byte
+per Page to count which Pages were requested once or more than once.
 
 ## Extending it
 

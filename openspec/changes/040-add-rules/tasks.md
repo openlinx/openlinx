@@ -15,7 +15,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **Release scope.** v0.1 ships the [15 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after release, within the existing ROADMAP milestones. Plan their Rule-specific work in 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9 for v0.2. The pixel threshold for `title-too-long` also waits for v0.2. For shared behaviour, use a v0.1 Rule to exercise snapshots, disabling, empty Issue results and resume. Keep the examples that depend on a deferred Rule, including the image Resource example in 10.4, for the post-release plan. Each group's documentation and review cover the Rules in that release.
 
-**Implemented registration and settings (groups 1–2).** The CLI lists seven Rules. Four are in the v0.1 set: `internal-4xx`, `internal-5xx`, `title-missing` and `title-too-long` (`max_chars`, default 60). Three already registered for the settings scenarios belong to the later set: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each accepts `enabled`, defaulting to true. The registered Rules still use no-row queries. URL evaluation, public reproducing queries and Issues remain open in the tasks below.
+**Implementation through task 4.7.** The CLI lists nine Rules. The thin slice's five Rules have executable evaluation queries. The other four registrations still use no-row queries: `title-too-long` (`max_chars`, default 60), `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
 
 ## 1. Rule model and the rules Command (slice)
 
@@ -59,7 +59,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.17 Drive "Disabled Rule produces no Issue" at seam 3+6.
 - [x] 3.18 Drive "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2).
 - [x] 3.19 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` from the Command output over a crawl file, and when Issues are live or materialised.
-- [ ] 3.20 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [x] 3.20 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. The slice's response code Rules and Missing H1 (slice)
 
@@ -70,8 +70,8 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
 - [x] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
 - [x] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1` (after `030` task 3.4), and register `h1-missing`.
-- [ ] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
-- [ ] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [x] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
+- [x] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Title Rules and the post-crawl pass
 

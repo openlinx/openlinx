@@ -20,6 +20,7 @@ from tests.fixture_site.routes import (
     CONTENT_TYPES,
     DEFAULT_CONTENT_TYPE,
     Answer,
+    Bytes,
     LargeFile,
     Page,
     Redirect,
@@ -146,6 +147,8 @@ def _respond(site: Site, route: Answer, base_url: str) -> web.StreamResponse:
     match route:
         case Page():
             return _page_response(site, route, base_url)
+        case Bytes(body=body):
+            return web.Response(body=body, headers={"Content-Type": DEFAULT_CONTENT_TYPE})
         case Status(code=code, body=None, reason=reason):
             return web.Response(status=code, reason=reason)
         case Status(code=code, body=body, reason=reason):

@@ -7,7 +7,7 @@ from pathlib import Path
 import aiohttp
 
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Bytes, Page, Site
 from tests.fixture_site.server import ServerHandle
 from tests.fixture_site.sites.basic import site as basic
 from tests.fixture_site.sites.exact import site as exact
@@ -33,6 +33,19 @@ async def test_a_file_is_served_byte_for_byte(fixture_site: StartSite) -> None:
         body = await response.read()
 
     assert body == b"a\r\nb\nc"
+
+
+async def test_a_computed_bytes_route_serves_the_exact_bytes(fixture_site: StartSite) -> None:
+    def resolve(path: str) -> Bytes | None:
+        if path == "/computed":
+            return Bytes(b"\xff\x00\r\n", content_type="text/plain; charset=windows-1251")
+        return None
+
+    server = fixture_site(Site(resolve=resolve))
+    async with aiohttp.ClientSession() as session, session.get(server.url("/computed")) as response:
+        served = (response.status, response.headers["Content-Type"], await response.read())
+
+    assert served == (200, "text/plain; charset=windows-1251", b"\xff\x00\r\n")
 
 
 async def test_a_precompressed_file_keeps_its_bytes(fixture_site: StartSite) -> None:

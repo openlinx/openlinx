@@ -8,14 +8,15 @@ from sqlalchemy import Connection, Engine, event, update
 
 from openlinx.clock import SystemClock
 from openlinx.rules.headings import H1_MISSING
+from openlinx.rules.response_codes import INTERNAL_4XX
 from openlinx.rules.titles import TITLE_MISSING
 from openlinx.store.crawls import read_recorded, record_continue
 from openlinx.store.issues import read_url_issues
 from openlinx.store.records import UrlIssue
-from openlinx.store.schema import pages
+from openlinx.store.schema import pages, urls
 from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -169,3 +170,39 @@ def test_live_url_issues_share_one_result_snapshot(
     assert read_url_issues(file, url_id, catalogue) == both
     assert during == ([] if journal_mode == "wal" else both)
     assert result_statements == 1
+
+
+def test_one_url_keeps_the_rule_detail_from_each_source(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/gone">Gone</a><a href="/next">Next</a>'),
+                "/gone": Status(404),
+                "/next": Page(body="<p>Next</p>"),
+            }
+        )
+    )
+    result = crawl_result(server.url("/"), max_urls=2, concurrency=1)
+    assert (result.summary.state, result.summary.stop_reason) == ("stopped", "max_urls")
+    file = result.crawl_file
+    [(url_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/gone"),))
+    catalogue = (INTERNAL_4XX,)
+
+    # Keep the last Pass at 404 so the reader must use the current row only after Continue.
+    with CrawlWriter(file, SystemClock()) as writer:
+        writer.run(executing(update(urls).where(urls.c.id == url_id).values(status_code=410)))
+        writer.flush()
+
+    assert read_url_issues(file, url_id, catalogue) == [
+        UrlIssue(rule_id="internal-4xx", url_id=url_id, detail={"status_code": 404})
+    ]
+
+    with CrawlWriter(file, SystemClock()) as writer:
+        writer.run(record_continue(read_recorded(file).config, _AT))
+        writer.flush()
+
+    assert read_url_issues(file, url_id, catalogue) == [
+        UrlIssue(rule_id="internal-4xx", url_id=url_id, detail={"status_code": 410})
+    ]
