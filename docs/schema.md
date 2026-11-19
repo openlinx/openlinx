@@ -378,6 +378,12 @@ One row per Rule and Affected URL from the last post-crawl pass.
 | `url_id` | INTEGER | no | PK, → `urls.id` | | | The Affected URL. |
 | `detail` | TEXT | yes | | `json` | | Measured values as an object with the keys listed for the Rule, or NULL when the Rule lists none. |
 
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `affected_urls_url_id` | `url_id` | no | | The Issues of one URL and the Health Score's count of affected Pages. |
+
 ## View `issues`
 
 One row per Rule with at least one Affected URL in the last post-crawl pass.

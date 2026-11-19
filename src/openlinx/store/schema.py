@@ -1489,6 +1489,12 @@ affected_urls = public_table(
     without_rowid=True,
 )
 
+Index(
+    "affected_urls_url_id",
+    affected_urls.c.url_id,
+    info={"description": "The Issues of one URL and the Health Score's count of affected Pages."},
+)
+
 issues = public_view(
     "issues",
     Column(

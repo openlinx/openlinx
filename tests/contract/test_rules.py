@@ -21,3 +21,20 @@ def test_keys_of_the_rule_tables() -> None:
         for column in affected_table["columns"]
         if column["primary_key"] is True
     } == {"rule_id": "rules.id", "url_id": "urls.id"}
+
+
+def test_indexes_of_affected_urls() -> None:
+    result = run_cli("schema", "affected_urls", "--fields", "indexes")
+    assert result.exit_code == 0, result.stderr
+    (table,) = result.json()["items"]
+    reduced = [
+        {key: index[key] for key in ("name", "columns", "unique", "where")}
+        for index in table["indexes"]
+    ]
+
+    assert {
+        "name": "affected_urls_url_id",
+        "columns": ["url_id"],
+        "unique": False,
+        "where": None,
+    } in reduced
