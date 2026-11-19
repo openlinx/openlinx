@@ -523,7 +523,7 @@ IMPORT_RULES = (
     ),
     ImportRule("openlinx.crawl.pages", ("openlinx.crawl.robots", "openlinx.crawl.engine")),
     ImportRule("openlinx.crawl.robots", ("openlinx.crawl.pages", "openlinx.crawl.engine")),
-    # The one cycle between the crawl core and the store runs through urls, which imports nothing.
+    # The store can reuse this URL leaf without an import cycle because it has no OpenLinx imports.
     ImportRule("openlinx.store", ("openlinx.crawl",), allowed=("openlinx.crawl.urls",)),
     # The parse pool's workers import pages, so they never load the writer.
     ImportRule("openlinx.crawl.pages", ("openlinx.store",), allowed=("openlinx.store.records",)),
@@ -1162,14 +1162,15 @@ def url_insert_violations(sources: Mapping[str, str]) -> list[str]:
             ):
                 statements.add(node.targets[0].id)
         for call, function in _calls_in_functions(tree):
-            if (
-                _base_name(call.func) == "execute"
-                and call.args
-                and isinstance(call.args[0], ast.Name)
-                and call.args[0].id in statements
-                and function != "insert_urls"
-            ):
-                found.append(f"{path}:{call.lineno} runs {call.args[0].id} outside insert_urls")
+            if _base_name(call.func) != "execute" or not call.args or function == "insert_urls":
+                continue
+            statement = call.args[0]
+            if isinstance(statement, ast.Name) and statement.id in statements:
+                found.append(f"{path}:{call.lineno} runs {statement.id} outside insert_urls")
+            elif _inserts_into_urls(statement):
+                found.append(
+                    f"{path}:{call.lineno} runs an inline insert into urls outside insert_urls"
+                )
     return found
 
 
@@ -1184,14 +1185,18 @@ def test_an_insert_into_urls_outside_insert_urls_is_named() -> None:
             "_INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])\n"
             "def insert_urls(connection, statement, rows):\n"
             "    connection.execute(statement, rows)\n"
+            "    connection.execute(insert(urls).values(origin_id=ORIGIN_ID), rows)\n"
             "def record_seed(connection, row):\n"
             "    connection.execute(_INSERT_URL, row)\n"
+            "    def unit(connection):\n"
+            "        connection.execute(insert(urls).values(origin_id=ORIGIN_ID), [row])\n"
         ),
         "openlinx/store/links.py": "_LINK_TARGET = insert(urls)\n",
     }
 
     assert url_insert_violations(sources) == [
-        "openlinx/store/urls.py:6 runs _INSERT_URL outside insert_urls",
+        "openlinx/store/urls.py:7 runs _INSERT_URL outside insert_urls",
+        "openlinx/store/urls.py:9 runs an inline insert into urls outside insert_urls",
         "openlinx/store/links.py inserts into urls",
     ]
 
@@ -1523,12 +1528,13 @@ def test_only_the_streams_and_click_compat_suppress_tid251() -> None:
 
 def test_no_per_file_ignore_silences_tid251_in_src() -> None:
     lint = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["tool"]["ruff"]["lint"]
-    ignores = {**lint.get("per-file-ignores", {}), **lint.get("extend-per-file-ignores", {})}
 
+    # Ruff keeps both rule lists even when the tables share a glob.
     # A prefix such as TID or ALL selects TID251 too.
     assert [
         pattern
-        for pattern, codes in ignores.items()
+        for table in ("per-file-ignores", "extend-per-file-ignores")
+        for pattern, codes in lint.get(table, {}).items()
         if not pattern.startswith(("tests/", "scripts/"))
         and any("TID251".startswith(code) or code == "ALL" for code in codes)
     ] == [], (
