@@ -95,11 +95,12 @@ async def test_trickle_sends_the_body_byte_by_byte_without_end(fixture_site: Sta
     server = fixture_site(Site(routes={"/trickle": Page(body="never", trickle=True)}))
 
     async with aiohttp.ClientSession() as session, session.get(server.url("/trickle")) as response:
-        first = await asyncio.wait_for(response.content.read(1), timeout=2)
+        # A single byte followed by a stall does not exercise a trickling response.
+        await asyncio.wait_for(response.content.readexactly(2), timeout=2)
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(response.read(), timeout=0.5)
 
-    assert (response.status, len(first)) == (200, 1)
+    assert response.status == 200
 
 
 async def test_after_holds_the_response_until_the_site_receives_the_other_path(

@@ -403,7 +403,8 @@ Register hooks at the composition root; the crawl core takes them as inputs.
    `test_the_units_of_the_inlink_pass_run_again_the_same`. At seam 3+6,
    [test_link_counts.py](tests/extract/test_link_counts.py) checks the registered
    pass's results in `test_counts_for_a_linked_page`;
-   [test_hooks.py](tests/crawl/test_hooks.py) checks pass execution/order in
+   [test_post_crawl_passes.py](tests/crawl/hooks/test_post_crawl_passes.py)
+   checks pass execution/order in
    `test_post_crawl_passes_run_before_a_crawl_is_completed` and
    `test_post_crawl_passes_run_in_the_order_the_hooks_declare`.
    Strict mypy checks the writer boundary in
