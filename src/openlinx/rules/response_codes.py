@@ -17,7 +17,11 @@ INTERNAL_4XX = Rule(
         "Restore the content, redirect the URL with a 301 to the closest equivalent Page, or "
         "change the Links that point to it. Answer 410 only for content that is gone for good."
     ),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql="""\
+SELECT id AS url_id, json_object('status_code', status_code) AS detail
+FROM urls
+WHERE is_internal = 1 AND fetch_state IN ('fetched', 'error')
+  AND status_code BETWEEN 400 AND 499""",
 )
 INTERNAL_5XX = Rule(
     id="internal-5xx",
