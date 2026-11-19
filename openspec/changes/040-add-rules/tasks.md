@@ -48,7 +48,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.
 - [x] 3.7 Drive "Issue row counts its Affected URLs" at seam 3+6. Declare `affected_urls` (`STRICT`, `WITHOUT ROWID`, keyed by `(rule_id, url_id)`) and the `issues` view in `openlinx.store.schema`, and add the post-crawl pass to `020`'s `default_hooks()` in `openlinx.services.hooks`: one unit per enabled Rule that replaces its rows with `INSERT … SELECT` from its query (design D5, D15). Check the units with `017`'s `replay_now(writer)`.
 - [x] 3.8 Drive "A Rule's query returns its stored Affected URLs" at seam 3+6, over every enabled Rule. From here on it checks every Rule registered later.
-- [ ] 3.9 Drive "Keys of the Rule tables" at seam 6.
+- [x] 3.9 Drive "Keys of the Rule tables" at seam 6.
 - [ ] 3.10 Drive "Issues is a view" at seam 6. It is the schema's first view, so extend `018`'s declaration and contract test to views (design D7).
 - [ ] 3.11 Drive "Indexes of affected_urls" at seam 6.
 - [ ] 3.12 Drive "Issue Types are an enumeration" at seam 6 (`values` on `issues.issue_type`).
