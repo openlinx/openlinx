@@ -37,7 +37,7 @@ linx rules list --limit 1 --fields id,category
 
 ```json
 {
-  "total": 6,
+  "total": 7,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "eyJ2IjoxLCJxIjoiNTAzZmFkY2E1NzU2NzNkOSIsImsiOjF9"
 }
@@ -105,6 +105,9 @@ max_chars = 70
 ```
 
 Both Commands show `{"value": 70, "default": 60, "unit": "characters"}` for `max_chars`.
+For `low-word-count`, set `min_words` under `[rules.low-word-count]`. The catalogue default
+is 200 words.
+
 Use [Workspace discovery](workspace.md#finding-the-workspace) or select a Workspace explicitly.
 
 ```sh

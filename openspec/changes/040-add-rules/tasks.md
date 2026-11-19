@@ -30,7 +30,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 2.2 Drive "Disabled Rule is listed" at seam 1 and register `url-parameters`. Add `enabled` to list and show from Workspace Rule settings, defaulting to `true` unless the Rule is disabled.
 - [x] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint.
 - [x] 2.4 Drive "Unknown key" at seam 1, and register `h2-missing`.
-- [ ] 2.5 Drive "Negative threshold" at seam 1. `linx crawl` exits 3, and the fixture site receives 0 requests. Register `low-word-count`.
+- [x] 2.5 Drive "Negative threshold" at seam 1. `linx crawl` exits 3, and the fixture site receives 0 requests. Register `low-word-count`.
 - [ ] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id. Document `enabled` in the Command output.
 - [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 

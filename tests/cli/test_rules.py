@@ -191,6 +191,36 @@ def test_h2_missing_is_listed_as_a_heading_rule(temp_workspace: TempWorkspace) -
     assert item["enabled"] is True
 
 
+@pytest.mark.parametrize(
+    ("settings", "value"),
+    [
+        pytest.param(b"", 200, id="default"),
+        pytest.param(b"[rules.low-word-count]\nmin_words = 0\n", 0, id="zero"),
+        pytest.param(b"[rules.low-word-count]\nmin_words = 300\n", 300, id="override"),
+    ],
+)
+def test_low_word_count_is_listed_as_a_content_rule(
+    temp_workspace: TempWorkspace, settings: bytes, value: int
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(settings)
+
+    result = run_cli("rules", "list", "--limit", "50")
+
+    assert result.exit_code == 0, result.stderr
+    items = result.json()["items"]
+    (item,) = (item for item in items if item["id"] == "low-word-count")
+    ids = [item["id"] for item in items]
+    assert ids.index("h2-missing") < ids.index("low-word-count") < ids.index("url-parameters")
+    assert (item["category"], item["issue_type"], item["priority"], item["applies_to"]) == (
+        "content",
+        "opportunity",
+        "medium",
+        "internal_pages",
+    )
+    assert item["enabled"] is True
+    assert item["thresholds"] == {"min_words": {"value": value, "default": 200, "unit": "words"}}
+
+
 def test_a_rule_enabled_setting_requires_a_boolean(temp_workspace: TempWorkspace) -> None:
     settings_file = temp_workspace.root / "openlinx.toml"
     settings_file.write_bytes(b'[rules.internal-4xx]\nenabled = "false"\n')

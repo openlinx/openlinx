@@ -59,6 +59,20 @@ def test_a_negative_network_wait_in_the_settings_file_is_refused(
     ) == (3, [("settings_invalid", "crawl.network_wait")])
 
 
+def test_negative_threshold(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>A Page.</p>")}))
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(b"[rules.low-word-count]\nmin_words = -5\n")
+
+    result = run_cli("crawl", server.url("/"))
+
+    assert server.requests == ()
+    assert result.exit_code == 3
+    (error,) = result.errors()
+    assert error["code"] == "settings_invalid"
+    assert error["details"]["errors"][0]["key"] == "rules.low-word-count.min_words"
+
+
 def test_a_seed_with_userinfo_is_rejected_with_a_hint_about_auth(
     temp_workspace: TempWorkspace,
 ) -> None:
