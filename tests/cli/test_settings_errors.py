@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from tests.support.app import example_app
 from tests.support.cli import run_cli
 
@@ -221,3 +223,60 @@ def test_error_positions_use_the_spelling_that_supplied_a_root_table(shop: Path)
         "store.journal_mode",
         "crawl.max_urls",
     ]
+
+
+def test_threshold_overflow_is_listed_with_other_settings_errors(shop: Path) -> None:
+    too_large = "1" + "0" * 4300
+    (shop / "openlinx.toml").write_text(
+        "crawl.concurrency = 0\n"
+        f'RULES = {{"title-too-long".max_chars = {too_large}}}\n'
+        "crawl.max_urls = -1\n",
+        encoding="utf-8",
+    )
+
+    result = run_cli("init")
+    (error,) = result.errors()
+
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert [problem["key"] for problem in error["details"]["errors"]] == [
+        "crawl.concurrency",
+        "rules.title-too-long.max_chars",
+        "crawl.max_urls",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "line"),
+    [
+        pytest.param("rules.title-too-long.max_chars = {value}\n[store", 2, id="unfinished-table"),
+        pytest.param(
+            "rules.title-too-long.max_chars = {value}\nrules.title-too-long.max_chars = 70",
+            2,
+            id="duplicate-key",
+        ),
+        pytest.param(
+            "rules.title-too-long.max_chars = {value}\ninvalid = ]", 2, id="invalid-value"
+        ),
+        pytest.param("rules.title-too-long.max_chars = {value}\n= 1", 2, id="missing-key"),
+        pytest.param(
+            "rules = {{title-too-long.max_chars = {value} h2-missing.enabled=false}}",
+            1,
+            id="missing-comma",
+        ),
+        pytest.param("rules.title-too-long.max_chars = {value} junk", 1, id="trailing-token"),
+    ],
+)
+def test_toml_syntax_error_after_an_overflowing_threshold(
+    shop: Path, source: str, line: int
+) -> None:
+    settings_file = shop / "openlinx.toml"
+    for value in ("70", f"{10**4300:#x}", "1" + "0" * 4300):
+        settings_file.write_text(source.format(value=value) + "\n", encoding="utf-8")
+
+        result = run_cli("init")
+        (error,) = result.errors()
+
+        assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+        assert error["details"]["file"] == str(settings_file.resolve())
+        (problem,) = error["details"]["errors"]
+        assert (problem["key"], problem["line"]) == (None, line)

@@ -32,7 +32,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 2.4 Drive "Unknown key" at seam 1, and register `h2-missing`.
 - [x] 2.5 Drive "Negative threshold" at seam 1. `linx crawl` exits 3, and the fixture site receives 0 requests. Register `low-word-count`.
 - [x] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id. Document `enabled` in the Command output.
-- [ ] 2.7 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
+- [x] 2.7 Drive “Largest supported threshold” and “First threshold above the limit” at seam 1 using decimal and hexadecimal TOML integers. Check exact JSON at 4300 digits and the keyed `settings_invalid` diagnostic at 4301 on Workspace load, including zero fixture requests on Crawl. Document the limit in `docs/rules.md`. Review group 2's commits with the code-review skill and run the whole suite on the final composition.
 
 ## 3. Rules as queries, stored Issues and live Issues (slice)
 

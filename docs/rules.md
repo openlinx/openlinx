@@ -104,7 +104,9 @@ code 4 with `rule_not_found` on stderr and a hint to run `linx rules list`.
 ## Override a threshold
 
 In the Workspace's `openlinx.toml`, name the Rule by its id and set its threshold to a
-non-negative integer.
+non-negative integer of at most 4300 decimal digits. The limit applies to the numeric value,
+regardless of TOML notation or digit separators. A larger value raises `settings_invalid`
+(exit code 3) when a Command reads the Workspace, with the settings file and full threshold key.
 
 ```toml
 [rules.title-too-long]

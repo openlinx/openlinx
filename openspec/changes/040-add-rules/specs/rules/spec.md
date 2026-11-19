@@ -12,7 +12,7 @@ Every Rule SHALL have these fields:
 - `issue_type`: `issue`, `warning` or `opportunity`
 - `priority`: `high`, `medium` or `low`
 - `applies_to`: `internal_urls`, `internal_pages` or `resources`
-- `thresholds`: zero or more named, non-negative integer thresholds, each with a default and a unit
+- `thresholds`: zero or more named, non-negative integer thresholds of at most 4300 decimal digits, each with a default and a unit
 - `description`, `why_it_matters` and `how_to_fix`: non-empty English guidance texts
 - `reproduce_sql`: the Rule's reproducing query, which is how the Rule is evaluated (see "Rules are SQL queries")
 
@@ -461,7 +461,7 @@ The `images` category SHALL contain these Rules:
 A table `[rules.<id>]` in the Workspace's `openlinx.toml` SHALL be able to set:
 
 - `enabled = false` to disable that Rule
-- any of the Rule's thresholds, by name, to a non-negative integer that replaces the default
+- any of the Rule's thresholds, by name, to a non-negative integer that replaces the default. Its value SHALL be less than 10^4300, in every supported TOML integer base and with or without digit separators
 
 The table name is the Rule id itself. These settings mirror no flag, so `010-add-workspace-and-cli-contract`'s flag-mirroring rule for keys does not apply to them. A disabled Rule SHALL NOT be evaluated and SHALL produce no Issue.
 
@@ -477,12 +477,16 @@ The table name is the Rule id itself. These settings mirror no flag, so `010-add
 - **WHEN** `openlinx.toml` has `[rules.title-too-long]` with `max_chars = 70` and `linx rules show title-too-long` runs
 - **THEN** its output has `thresholds.max_chars` equal to `{"value": 70, "default": 60, "unit": "characters"}`
 
+#### Scenario: Largest supported threshold
+- **WHEN** `rules.title-too-long.max_chars` in `openlinx.toml` is 10^4300 − 1 (4300 nines), written as a decimal or hexadecimal TOML integer, and `linx rules show title-too-long` runs
+- **THEN** it exits 0 and `thresholds.max_chars.value` is that exact JSON integer
+
 ### Requirement: Invalid Rule configuration is rejected
 Any Command that loads the Workspace's `openlinx.toml` SHALL fail with the settings error of `010-add-workspace-and-cli-contract` (exit code 3, error code `settings_invalid`), which is checked when the settings load. It SHALL do so in any of these cases:
 
 - `[rules]` names an unknown Rule id
 - a Rule table has a key other than `enabled` or one of that Rule's threshold names
-- a threshold is not a non-negative integer
+- a threshold is not a non-negative integer, or its value is at least 10^4300
 - `enabled` is not a boolean
 
 Each problem's `details.errors[].key` SHALL be the dotted key, for example `rules.title-to-long`, and the hint SHALL name the closest known Rule id or key when there is one. `linx crawl` SHALL fail before any URL is requested.
@@ -494,6 +498,11 @@ Each problem's `details.errors[].key` SHALL be the dotted key, for example `rule
 #### Scenario: Negative threshold
 - **WHEN** `openlinx.toml` has `[rules.low-word-count]` with `min_words = -5` and `linx crawl {site}/` runs
 - **THEN** the exit code is 3, `details.errors[0].key` is `"rules.low-word-count.min_words"`, and the fixture site receives 0 requests
+
+#### Scenario: First threshold above the limit
+- **WHEN** `rules.title-too-long.max_chars` in `openlinx.toml` is 10^4300 (1 followed by 4300 zeros), written as a decimal or hexadecimal TOML integer, and a Command reads that Workspace
+- **THEN** it exits 3 with `settings_invalid`, `details.file` is the absolute settings path, and the problem in `details.errors` has key `rules.title-too-long.max_chars` and a message explaining the maximum of 4300 decimal digits
+- **AND** when the Command is `linx crawl {site}/`, the fixture site receives 0 requests
 
 #### Scenario: Unknown key
 - **WHEN** `openlinx.toml` has `[rules.h2-missing]` with `max_chars = 10` and `linx rules list` runs

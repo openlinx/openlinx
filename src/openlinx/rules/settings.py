@@ -1,21 +1,24 @@
 """Build the settings with one subtable per registered Rule."""
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, create_model
 
 from openlinx.rules.model import Rule
 from openlinx.rules.registry import RULES
+from openlinx.workspace.settings import NonNegativeDecimalDigits
+
+ThresholdValue = Annotated[
+    int, Field(strict=True, ge=0), AfterValidator(NonNegativeDecimalDigits(4300))
+]
 
 
 def _rule_table(rule: Rule) -> type[BaseModel]:
     fields: dict[str, Any] = {
         threshold.name: (
-            int,
+            ThresholdValue,
             Field(
                 threshold.default,
-                strict=True,
-                ge=0,
                 description=f"The limit, in {threshold.unit}.",
             ),
         )

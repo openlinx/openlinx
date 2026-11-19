@@ -2,14 +2,16 @@
 
 import difflib
 import re
+import sys
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ValidationError, create_model
+from pydantic import AfterValidator, BaseModel, ValidationError, create_model
 from pydantic.fields import FieldInfo
+from pydantic_core import PydanticCustomError
 from pydantic_settings import (
     BaseSettings,
     InitSettingsSource,
@@ -21,8 +23,29 @@ from openlinx.naming import COMMAND_NAME
 from openlinx.output.codes import INVALID_VALUE, SETTINGS_INVALID
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.workspace.discovery import Workspace
-from openlinx.workspace.tables import SettingsTables, keyed_entry
-from openlinx.workspace.toml_order import Key, file_positions
+from openlinx.workspace.tables import SettingsTables, Table, keyed_entry
+from openlinx.workspace.toml_order import (
+    Key,
+    decimal_digits,
+    declarations,
+    file_positions,
+    oversized_decimals,
+    replace_literals,
+)
+
+
+@dataclass(frozen=True)
+class NonNegativeDecimalDigits:
+    """Cap the decimal digits of a setting already constrained to non-negative integers."""
+
+    maximum: int
+
+    def __call__(self, value: int) -> int:
+        if value >= 10**self.maximum:
+            raise PydanticCustomError(
+                "decimal_digits", f"Must contain at most {self.maximum} decimal digits."
+            )
+        return value
 
 
 @dataclass(frozen=True)
@@ -56,7 +79,7 @@ def load_settings(
     try:
         # Validate and order diagnostics from the same bytes even if the file is replaced.
         source = settings_file.read_bytes().decode("utf-8") if settings_file.is_file() else ""
-        file_values = tomllib.loads(source)
+        file_values, positions = _read_toml(source, fields)
     except UnicodeDecodeError as error:
         problem: dict[str, Any] = {"key": None, "message": "The file is not UTF-8.", "line": None}
         raise _invalid(settings_file, "is not UTF-8", [problem]) from error
@@ -72,7 +95,8 @@ def load_settings(
             raise refused from error
         problems = error.errors()
         if len(problems) > 1:
-            positions = file_positions(source)
+            if positions is None:
+                positions = file_positions(declarations(source))
             # Ask the file's settings source which spelling supplied each canonical root.
             # Distinct TOML tables can have names that differ only in case.
             source_roots = InitSettingsSource(root_model, {key: key for key in file_values})()
@@ -86,6 +110,87 @@ def load_settings(
             ],
             hint=_suggestion(error, root_model),
         ) from error
+
+
+def _read_toml(
+    source: str, fields: Mapping[str, tuple[Table, Any]]
+) -> tuple[dict[str, Any], dict[Key, int] | None]:
+    try:
+        return tomllib.loads(source), None
+    except tomllib.TOMLDecodeError:
+        raise
+    except ValueError:
+        recovered = _recover_decimal_overflow(source, fields)
+        if recovered is None:
+            raise
+        return recovered
+
+
+def _recover_decimal_overflow(
+    source: str, fields: Mapping[str, tuple[Table, Any]]
+) -> tuple[dict[str, Any], dict[Key, int]] | None:
+    # Check syntax with neutral values before walking declarations. The walker assumes valid
+    # TOML, while a conversion error can stop tomllib before it reaches malformed syntax.
+    overflows = {
+        literal.start(): literal
+        for literal in oversized_decimals(source, sys.get_int_max_str_digits())
+    }
+    if not overflows:
+        return None
+    probe = replace_literals(source, ((literal, "0") for literal in overflows.values()))
+    try:
+        tomllib.loads(probe)
+    except tomllib.TOMLDecodeError:
+        raise
+    except ValueError:
+        return None
+
+    # Reparse the original data with replacements only for confirmed bounded fields. The
+    # probe's values must never reach settings, including on files with an unrelated overflow.
+    located = list(declarations(probe))
+    replacements: list[tuple[re.Match[str], str]] = []
+    for key, token in located:
+        if token is None or (literal := overflows.get(token.start())) is None:
+            continue
+        limit = _decimal_limit(key, fields)
+        if limit is None or decimal_digits(literal[0]) <= limit:
+            return None
+        replacement = "-1" if literal[0].startswith("-") else hex(10**limit)
+        replacements.append((literal, replacement))
+    if len(replacements) != len(overflows):
+        return None
+    return tomllib.loads(replace_literals(source, replacements)), file_positions(located)
+
+
+def _decimal_limit(key: Key, fields: Mapping[str, tuple[Table, Any]]) -> int | None:
+    root, *children = key
+    if not isinstance(root, str) or root.lower() not in fields:
+        return None
+    # The settings source normalizes the root name. Subtables use their declared aliases.
+    model: object = fields[root.lower()][0]
+    field: FieldInfo | None = None
+    for name in children:
+        if (
+            not isinstance(name, str)
+            or not isinstance(model, type)
+            or not issubclass(model, BaseModel)
+        ):
+            return None
+        field = _toml_fields(model).get(name)
+        if field is None:
+            return None
+        model = field.annotation
+    if field is None:
+        return None
+    return next(
+        (
+            validator.func.maximum
+            for validator in field.metadata
+            if isinstance(validator, AfterValidator)
+            and isinstance(validator.func, NonNegativeDecimalDigits)
+        ),
+        None,
+    )
 
 
 def refused_given_value(
