@@ -85,6 +85,13 @@ image Resources.
 `enabled` is `true` by default. Set `enabled = false` in the Rule's table in the Workspace
 settings to turn it off. Both Commands still show the Rule, with `"enabled": false`.
 
+For example, to disable `url-parameters`, add this table to the Workspace's `openlinx.toml`.
+
+```toml
+[rules.url-parameters]
+enabled = false
+```
+
 `thresholds` maps each threshold name to its integer `value`, catalogue `default` and `unit`.
 Here `max_chars` is 60 characters, the default when the Workspace has no override. A Rule without
 thresholds, such as `title-missing`, returns `{}`. `description`, `why_it_matters` and
@@ -113,6 +120,13 @@ Use [Workspace discovery](workspace.md#finding-the-workspace) or select a Worksp
 ```sh
 linx rules show title-too-long --workspace ./site
 ```
+
+## Diagnose a misspelt Rule id
+
+If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, running
+`linx rules list` exits with code 3. The `settings_invalid` diagnostic on stderr identifies
+`rules.title-to-long` in `details.errors[0].key`. Its hint reads
+`Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
 
 ## Planned evaluation and configuration
 
