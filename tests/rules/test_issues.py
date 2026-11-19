@@ -139,10 +139,24 @@ def test_a_rule_s_query_returns_its_stored_affected_urls(fixture_site: StartSite
         assert _decoded_details(query(file, sql)) == _decoded_details(stored), rule_id
 
 
-def test_live_issues_do_not_mix_rule_counts_across_a_writer_commit(
-    issue_crawl: tuple[Path, str],
-) -> None:
+@pytest.fixture
+def live_issue_crawl(issue_crawl: tuple[Path, str]) -> Path:
     file, _ = issue_crawl
+
+    def set_running_fixture(connection: Connection) -> None:
+        connection.exec_driver_sql("UPDATE crawl SET state = 'running', completed_at = NULL")
+
+    # These scenarios supply their own queries and need the live reader on a populated file.
+    with CrawlWriter(file, FakeClock()) as writer:
+        writer.run(set_running_fixture)
+    assert query(file, "SELECT state FROM crawl") == [("running",)]
+    return file
+
+
+def test_live_issues_do_not_mix_rule_counts_across_a_writer_commit(
+    live_issue_crawl: Path,
+) -> None:
+    file = live_issue_crawl
     assert query(file, "PRAGMA journal_mode") == [("wal",)]
     too_long = replace(
         TITLE_TOO_LONG,
@@ -195,9 +209,9 @@ WHERE urls.parsed = 1 AND length(pages.title_1) > 60""",
 
 
 def test_live_issues_keep_catalogue_order_and_omit_empty_rules(
-    issue_crawl: tuple[Path, str],
+    live_issue_crawl: Path,
 ) -> None:
-    file, _ = issue_crawl
+    file = live_issue_crawl
     all_pages = replace(
         TITLE_TOO_LONG,
         reproduce_sql="SELECT url_id, NULL AS detail FROM pages",
