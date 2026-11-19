@@ -172,7 +172,7 @@ def test_unknown_key(temp_workspace: TempWorkspace) -> None:
     assert error["details"]["errors"][0]["key"] == "rules.h2-missing.max_chars"
 
 
-def test_h2_missing_is_listed_as_a_heading_rule() -> None:
+def test_h2_missing_is_listed_as_a_heading_rule(temp_workspace: TempWorkspace) -> None:
     result = run_cli("rules", "list", "--limit", "50")
 
     assert result.exit_code == 0, result.stderr
