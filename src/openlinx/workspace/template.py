@@ -21,7 +21,7 @@ def settings_template(tables: SettingsTables) -> str:
         if subtables is not None:
             lines = [f"# {table.__doc__}"]
             for key, model in subtables.items():
-                lines.extend(["", f"# [{name}.{key}]", *_settings(model)])
+                lines.extend(["", f"[{name}.{key}]", *_settings(model)])
         elif entry is None:
             lines = [f"[{name}]", *_settings(table)]
         else:
