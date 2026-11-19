@@ -100,7 +100,7 @@ def _group_app(group: CommandGroup) -> typer.Typer:
                         "given after a Command name.",
                         hint=f"Put {flag} before the Command name: {COMMAND_NAME} {flag}",
                     )
-                command = next((arg for arg in args if arg in names.values()), default)
+                command = _placement_command(self, args, default)
                 if any(
                     flag in param.opts or flag in param.secondary_opts
                     for param in self.commands[command].params
@@ -113,6 +113,25 @@ def _group_app(group: CommandGroup) -> typer.Typer:
     for command, name in names.items():
         app.command(name=name)(command)
     return app
+
+
+def _placement_command(group: TyperGroup, args: list[str], default: str) -> str:
+    """Skip leaf option values so a Workspace named like a Command stays a value."""
+    arities = {
+        name: 0 if param.is_flag else param.nargs
+        for command in group.commands.values()
+        for param in command.params
+        if isinstance(param, TyperOption)
+        for name in (*param.opts, *param.secondary_opts)
+    }
+    remaining = iter(args)
+    for arg in remaining:
+        if arg in group.commands:
+            return arg
+        flag, equals, _ = arg.partition("=")
+        for _index in range(arities.get(flag, 0) - bool(equals)):
+            next(remaining, None)
+    return default
 
 
 def _root_options(ctx: Context) -> set[str]:

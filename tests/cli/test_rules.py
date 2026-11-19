@@ -350,6 +350,26 @@ def test_the_group_is_visible_in_help() -> None:
             "Put --format after the Command name: linx rules show --format ...",
             id="before-show",
         ),
+        pytest.param(
+            ("--workspace", "list", "show", "title-too-long"),
+            "Put --workspace after the Command name: linx rules show --workspace ...",
+            id="workspace-named-list",
+        ),
+        pytest.param(
+            ("--workspace=list", "show", "title-too-long"),
+            "Put --workspace after the Command name: linx rules show --workspace ...",
+            id="attached-workspace-named-list",
+        ),
+        pytest.param(
+            ("--workspace", "show"),
+            "Put --workspace after the Command name: linx rules list --workspace ...",
+            id="workspace-named-show-without-command",
+        ),
+        pytest.param(
+            ("--format=json", "--workspace", "show", "list"),
+            "Put --format after the Command name: linx rules list --format ...",
+            id="second-option-value-named-show",
+        ),
     ],
 )
 def test_options_follow_the_full_command_name(args: tuple[str, ...], hint: str) -> None:
@@ -366,6 +386,9 @@ def test_options_follow_the_full_command_name(args: tuple[str, ...], hint: str) 
         pytest.param(("--bogus",), "--bogus", id="unknown-for-bare-group"),
         pytest.param(("--bogus", "list"), "--bogus", id="unknown-for-list"),
         pytest.param(("--limit", "1", "show", "title-too-long"), "--limit", id="list-only"),
+        pytest.param(
+            ("--fields", "list", "show", "title-too-long"), "--fields", id="fields-on-show"
+        ),
     ],
 )
 def test_an_unaccepted_group_option_has_no_placement_hint(
