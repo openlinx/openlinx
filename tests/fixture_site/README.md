@@ -24,7 +24,11 @@ SITE = Site(
 - **A reusable site** is a folder `sites/<name>/` with an empty `__init__.py`, a `site.py` that defines `SITE`, and its page files. Everything under `sites/` is `-text` in `.gitattributes`, so the files keep their exact bytes, line endings included.
 - **A one-off site** is built inline in the test: `Site(routes={...})`.
 - A site is checked when it is declared: a `Page` takes exactly one of `file=` and `body=`, and a site with `Page(file=...)` routes needs `root=`.
-- A path that no route declares answers 404.
+- A site can compute routes with `resolve=`, a synchronous function from the request path
+  (without the query string) to a route or `None`. The server calls it on each request
+  for a path absent from `routes`. Returned routes use the same rules as declared routes,
+  including `root=` for file-backed pages and a per-path request count for `Responses`.
+- A path without a route from either source answers 404.
 
 ## Route kinds
 
@@ -78,6 +82,18 @@ When the server stops, it cancels every handler still running (hanging, delayed,
   - `url(path)`
   - `most_simultaneous`, the most requests the site has handled at once, from a request's arrival until its handler returned
   - `requests`, a snapshot of the request log. Each entry has method, path including query, headers, monotonic receipt time, an HTTP version tuple and the selected ALPN protocol (None without selection).
+
+For a large computed site, start `RunningServer(site, keep_log=False)` and call
+`stop()` in a `finally` block. Its handle still measures `most_simultaneous`,
+and `requests` is empty. The server keeps one event per distinct declared
+`after` target, including targets in any answer of a declared `Responses` route.
+If the resolver introduces other targets, pass their paths at startup, for example
+`after_paths=("/ready",)`, so even an earlier request for that path releases the waiter.
+An undeclared target from the resolver returns 500 and fails the test at teardown.
+
+For computed Pages with no dependencies, ordinary requests leave no per-path
+history in the fixture. A `Responses` route still needs a counter per requested
+path, and failed dependencies retain their diagnostics until teardown.
 
 Clients in tests:
 - aiohttp needs nothing special.

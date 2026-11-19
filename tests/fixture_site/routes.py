@@ -1,6 +1,6 @@
 """Declare fixture sites as data mapping paths to routes."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -104,6 +104,7 @@ def redirect_chain(prefix: str, hops: int, to: str) -> dict[str, Route]:
 class Site:
     routes: dict[str, Route] = field(default_factory=dict)
     root: Path | None = None
+    resolve: Callable[[str], Route | None] | None = None
 
     def __post_init__(self) -> None:
         reads_files = any(isinstance(r, Page) and r.file is not None for r in self.routes.values())
