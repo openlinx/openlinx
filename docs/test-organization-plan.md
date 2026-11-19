@@ -50,10 +50,10 @@ historical failure to follow red/green.
   FakeFetcher factory takes precedence over `fetcher=None`. With a FakeClock,
   the guard now rejects
   that real-I/O path while preserving permitted FakeFetcher cases.
-- [ ] In `tests/crawl/test_network_pause.py`, the 1800-second case of
-  `test_probes_back_off_to_once_a_minute` builds expectations with `range`, as the
-  implementation does. Replace the expected schedule with independent literals,
-  retaining the full case and proving it catches a changed probe interval.
+- [x] In `tests/crawl/test_network_pause.py`, the 1800-second case of
+  `test_probes_back_off_to_once_a_minute` now asserts all 33 literal probe times,
+  from 5 to 1780 seconds. Changing the probe interval from 60 to 61 seconds
+  made `1800-times7` fail when the fifth probe moved from 100 to 101 seconds.
 
 The comment sample found no actionable defect; preserve the explanations of
 handler type checking and writer savepoint cost. Complete the wider review before
