@@ -5,9 +5,10 @@ import pytest
 from openlinx.rules.response_codes import INTERNAL_4XX
 from openlinx.store.issues import evaluate_rule
 from openlinx.store.records import AffectedUrl
+from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 
 
@@ -56,3 +57,33 @@ def test_client_error(fixture_site: StartSite) -> None:
         ],
         key=lambda row: row.url_id,
     )
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_external_urls_are_not_internal_urls(fixture_hosts: StartHosts) -> None:
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/": Page(
+                    body='<a href="/gone">Internal</a><a href="http://other.test/gone">External</a>'
+                ),
+                "/gone": Status(404),
+            }
+        ),
+        Site({"/gone": Status(404)}),
+    )
+    file = crawl_result("http://site.test/", resolver=hosts.resolver).crawl_file
+    urls = query(
+        file,
+        "SELECT id, url, is_internal, fetch_state, status_code FROM urls "
+        "WHERE status_code = 404 ORDER BY url",
+    )
+    assert [row[1:] for row in urls] == [
+        ("http://other.test/gone", 0, "fetched", 404),
+        ("http://site.test/gone", 1, "fetched", 404),
+    ]
+    internal_id = urls[1][0]
+
+    assert evaluate_rule(file, INTERNAL_4XX) == [
+        AffectedUrl(url_id=internal_id, detail={"status_code": 404})
+    ]
