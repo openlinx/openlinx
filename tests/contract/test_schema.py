@@ -18,7 +18,7 @@ from openlinx.store.schema import metadata
 from openlinx.workspace.discovery import resolve_workspace
 from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli
 from tests.support.clock import FakeClock
-from tests.support.crawls import create_any_crawl, new_crawl
+from tests.support.crawls import create_any_crawl, new_crawl, query
 from tests.support.processes import python_command
 from tests.support.schema import indexed_rows_declared
 from tests.support.workspace import TempWorkspace
@@ -168,6 +168,12 @@ def test_every_table_is_strict(temp_workspace: TempWorkspace) -> None:
     assert {name: table["strict"] for name, table in tables.items()} == {
         table["name"]: True for table in describe_schema().tables
     }, "a table is not STRICT: declare it with public_table(...), which makes it STRICT"
+
+
+def test_a_new_rules_table_is_a_strict_rowid_table(temp_workspace: TempWorkspace) -> None:
+    file = create_any_crawl(temp_workspace).path
+
+    assert query(file, "SELECT wr, strict FROM pragma_table_list('rules')") == [(0, 1)]
 
 
 INDEXED_SECTION = """## Table `urls`

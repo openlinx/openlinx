@@ -1,4 +1,4 @@
-"""Project catalogue metadata for the Rules Command."""
+"""Resolve catalogue metadata and settings for the Rules Command and new Crawls."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from openlinx.naming import COMMAND_NAME
 from openlinx.output.codes import RULE_NOT_FOUND
 from openlinx.output.diagnostics import OpenLinxError
+from openlinx.store.records import RuleRow
 from openlinx.workspace.discovery import resolve_workspace
 from openlinx.workspace.tables import SettingsTables
 
@@ -74,3 +75,26 @@ def _item(rule: "Rule", configured: Mapping[str, Any]) -> dict[str, Any]:
         "why_it_matters": rule.why_it_matters,
         "how_to_fix": rule.how_to_fix,
     }
+
+
+def rule_rows(configured: Mapping[str, Mapping[str, Any]]) -> tuple[RuleRow, ...]:
+    """Build the snapshot from validated settings keyed by Rule id."""
+    from openlinx.rules.registry import RULES
+
+    return tuple(
+        RuleRow(
+            id=rule.id,
+            category=rule.category,
+            issue_type=rule.issue_type,
+            priority=rule.priority,
+            applies_to=rule.applies_to,
+            enabled=configured[rule.id]["enabled"],
+            thresholds={
+                threshold.name: configured[rule.id][threshold.name] for threshold in rule.thresholds
+            },
+            description=rule.description,
+            why_it_matters=rule.why_it_matters,
+            how_to_fix=rule.how_to_fix,
+        )
+        for rule in RULES
+    )

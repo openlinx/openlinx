@@ -197,6 +197,22 @@ class SecretNames:
     settings: SecretSettings = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RuleRow:
+    """The catalogue metadata and effective settings recorded when a Crawl starts."""
+
+    id: str
+    category: RuleCategory
+    issue_type: IssueType
+    priority: Priority
+    applies_to: AppliesTo
+    enabled: bool
+    thresholds: dict[str, int]
+    description: str
+    why_it_matters: str
+    how_to_fix: str
+
+
 @dataclass(frozen=True, kw_only=True)
 class NewCrawl:
     workspace: Workspace
@@ -210,6 +226,7 @@ class NewCrawl:
     # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames
     journal_setting: JournalSetting
+    rules: Sequence[RuleRow]
     section_crawl: bool
     settings_file: Path | None = None
 

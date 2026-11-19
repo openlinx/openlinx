@@ -19,6 +19,7 @@ from sqlalchemy import (
     or_,
 )
 
+from openlinx.naming import COMMAND_NAME, SETTINGS_FILE_NAME
 from openlinx.store.page_records import (
     HtmlSource,
     Indexability,
@@ -29,6 +30,7 @@ from openlinx.store.page_records import (
     SameSite,
 )
 from openlinx.store.records import (
+    AppliesTo,
     CrawlMode,
     CrawlState,
     DeclaredIn,
@@ -36,12 +38,15 @@ from openlinx.store.records import (
     FetchError,
     FetchState,
     HttpVersion,
+    IssueType,
     JournalMode,
     LinkAttribute,
     LinkElement,
     LinkType,
     ParseError,
+    Priority,
     RobotsState,
+    RuleCategory,
     SkipReason,
     StopReason,
 )
@@ -1365,4 +1370,60 @@ page_sources = public_table(
     comment="Filled from v0.2. The HTML of each Page of a Crawl started with HTML storage on; "
     "empty otherwise.",
     change=30,
+)
+
+rules = public_table(
+    "rules",
+    Column(
+        "id",
+        Text,
+        primary_key=True,
+        comment=f"The Rule id, as typed in {COMMAND_NAME} rules show and {SETTINGS_FILE_NAME}.",
+    ),
+    Column(
+        "category",
+        Text,
+        nullable=False,
+        comment="The Rule's category.",
+        info={"values": literal_values(RuleCategory)},
+    ),
+    Column(
+        "issue_type",
+        Text,
+        nullable=False,
+        comment="The Issue Type of the Rule's Issues.",
+        info={"values": literal_values(IssueType)},
+    ),
+    Column(
+        "priority",
+        Text,
+        nullable=False,
+        comment="The Priority of the Rule's Issues.",
+        info={"values": literal_values(Priority)},
+    ),
+    Column(
+        "applies_to",
+        Text,
+        nullable=False,
+        comment="The population the Rule is evaluated over.",
+        info={"values": literal_values(AppliesTo)},
+    ),
+    Column(
+        "enabled",
+        Flag,
+        nullable=False,
+        comment="1 when the Rule is enabled in the configuration recorded at Crawl creation.",
+    ),
+    Column(
+        "thresholds",
+        Json(wide_integers=True),
+        nullable=False,
+        comment="The effective thresholds as integer values. An empty object for a Rule "
+        "without thresholds.",
+    ),
+    Column("description", Text, nullable=False, comment="What the Rule checks."),
+    Column("why_it_matters", Text, nullable=False, comment="Why its Issues matter."),
+    Column("how_to_fix", Text, nullable=False, comment="How to fix its Issues."),
+    comment="One row for each Rule in the catalogue, with its configuration at Crawl creation.",
+    change=40,
 )
