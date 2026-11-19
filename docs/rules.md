@@ -29,6 +29,26 @@ successful responses over plain HTTP so maintainers can prioritise moving them t
 redirect from HTTP to HTTPS does not trigger this Rule. The Warning leaves the Health Score
 unchanged.
 
+## Rules evaluated by a Crawl
+
+| Rule id | Issue Type | Priority | Fires when | `detail` |
+|---|---|---|---|---|
+| `internal-4xx` | `issue` | `high` | An Internal URL has a recorded HTTP status from 400 through 499. | JSON object with `status_code` |
+| `internal-5xx` | `issue` | `high` | An Internal URL has a recorded HTTP status from 500 through 599. | JSON object with `status_code` |
+| `internal-no-response` | `issue` | `high` | An Internal URL has `fetch_state = 'error'` and a recorded `fetch_error` other than `record_failed`. | JSON object with `error`, the recorded `fetch_error` |
+| `title-missing` | `issue` | `high` | An analysed Page has no `<title>` or its first `<title>` is empty. | SQL `NULL` |
+| `h1-missing` | `warning` | `medium` | An analysed Page has no `<h1>` or its first `<h1>` is empty. | SQL `NULL` |
+
+The response-code Rules use the recorded outcome for each Internal URL, including those
+outside a Section Crawl's Scope and URLs without a Page. A robots.txt timeout can record
+a fetch error for an Internal URL before the Crawl requests that URL. When the
+Crawl receives a response but cannot record it, the `record_failed` warning reports the
+write failure. The `internal-no-response` Rule excludes that case.
+
+The title and heading Rules apply to analysed Pages (`urls.parsed = 1`). Missing measurements
+from a failed extractor do not trigger either Rule on their own. Read a Rule's guidance
+and reproducing SQL with [`linx rules show`](#read-one-rule).
+
 ## Browse the catalogue
 
 `linx rules` is shorthand for `linx rules list`. Use the full Command name before any options.
@@ -137,10 +157,6 @@ If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, runnin
 `linx rules list` exits with code 3. The `settings_invalid` diagnostic on stderr identifies
 `rules.title-to-long` in `details.errors[0].key`. Its hint reads
 `Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
-
-The response-code Rules report Internal HTTP client errors (400–499), server errors
-(500–599) and requests that received no response. Their Affected URLs record the
-status code or fetch error in `detail`.
 
 ## Read Issues from a crawl file
 
