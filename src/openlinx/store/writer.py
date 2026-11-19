@@ -68,7 +68,7 @@ class _Job:
 
 @dataclass(frozen=True)
 class _Ran:
-    """A unit in the open transaction, with its first run's result and the rows it changed."""
+    """A unit in the open transaction, with its first result and row-change count."""
 
     unit: Unit[Any]
     result: Any
@@ -97,7 +97,7 @@ class CrawlWriter:
         self._room = threading.Condition(self._lock)
         self._unresolved = 0
         self._closed = False
-        # Set once the writer thread drains its queue on the way out.
+        # Set before the final queue drain, so a racing submit can help fail queued jobs.
         self._ended = False
         self._failure: BaseException | None = None
         # Owned by the writer thread: the units in the open transaction, which a failing unit makes
@@ -146,16 +146,15 @@ class CrawlWriter:
     async def submit_async[T](self, unit: Unit[T]) -> asyncio.Future[T]:
         done: Future[T] = _uncancellable()
         await self._submit_without_blocking(_Job(unit, done, submitted=True))
-        # Bound to this loop, so its callbacks run here and never on the writer thread. Not
-        # held: the unit commits at the loop's commit deadline, which waits for clock time.
+        # Bind callbacks to this loop. An off_loop hold here could freeze the virtual clock
+        # while a submitted unit waits for the loop's commit deadline.
         return asyncio.wrap_future(done)
 
     @asynccontextmanager
     async def loop_deadline(self) -> AsyncIterator[None]:
-        """The commit deadline on the loop's Clock, for a writer that an event loop drives, so a
-        test's virtual clock sees it (020-add-crawl-core D7). The caller chooses it; from then
-        on the thread commits on its own only after BATCH_SIZE units, a flush or the close, and
-        the sync calls are refused, until the block ends."""
+        """Use the event loop's Clock for timed commits so a virtual clock can drive them
+        (020-add-crawl-core D7). Within the block, sync run and submit are refused. The writer
+        still commits on a full batch, replay, flush or close."""
         self._unflushed = asyncio.Event()
         self._loop_deadline = True
         deadline = asyncio.create_task(self._flush_at_deadlines(self._unflushed))
@@ -172,7 +171,7 @@ class CrawlWriter:
         while True:
             await unflushed.wait()
             await self._clock.sleep(COMMIT_AFTER_SECONDS)
-            # A unit submitted from here on waits for the next deadline.
+            # Clear before flushing so new submissions can arm the next deadline.
             unflushed.clear()
             try:
                 await self.flush_async()
@@ -241,7 +240,7 @@ class CrawlWriter:
             raise
         with self._lock:
             ended = self._ended
-        # Queued after the writer drained its queue on the way out, so it would never complete.
+        # Shutdown can start between the closed check and the enqueue.
         if ended:
             _fail_queued(self._queue, self._failure)
 
@@ -273,7 +272,7 @@ class CrawlWriter:
                 self._check_alive(done)
 
     def _check_alive(self, done: Future[Any]) -> None:
-        # A job queued after the thread drained the queue on its way out would wait forever.
+        # This also covers close, which queues its control job directly and can miss the drain.
         if not self._thread.is_alive() and not done.done():
             raise CrawlWriterClosedError(CLOSED) from self._failure
 
@@ -295,7 +294,7 @@ class CrawlWriter:
                 started.set_result(None)
                 self._work(connection)
         except BaseException as error:
-            # Never raised on this thread, whose traceback would reach stderr as raw text.
+            # Capture worker errors here to keep raw tracebacks out of stderr.
             if started.done():
                 self._failure = error
             else:
@@ -329,8 +328,7 @@ class CrawlWriter:
         # Closed first, so a submit after anyone learns of the failure fails at once.
         with self._lock:
             self._failure, self._closed = failure, True
-        # A failed commit ends the writer: the caller of the job in hand and every submitted
-        # unit of the open transaction learn why.
+        # The terminal error reaches the current job and submitted units still awaiting commit.
         waiting = [ran.future for ran in self._batch if ran.future is not None]
         if job is not None:
             waiting.append(job.done)
@@ -342,8 +340,8 @@ class CrawlWriter:
         if isinstance(job.work, _Control):
             self._commit(connection)
             if job.work is _Control.CLOSE:
-                # Readers that stay open would otherwise keep the WAL from shrinking. Run on the
-                # driver's connection: through SQLAlchemy it would begin a transaction first.
+                # Try to truncate the WAL even with reader connections open between reads.
+                # Use the driver directly to avoid SQLAlchemy starting a transaction first.
                 _driver(connection).execute("PRAGMA wal_checkpoint(TRUNCATE)")
             job.done.set_result(None)
             return job.work is _Control.FLUSH
@@ -373,7 +371,7 @@ class CrawlWriter:
         self._batch.append(_Ran(job.work, result, changes, job.done if job.submitted else None))
         self._commit_if_due(connection)
         if not job.submitted:
-            # Only now: a caller that reads after its unit returns sees the commit.
+            # A run can return while its batch is still open.
             job.done.set_result(result)
         return True
 
@@ -429,9 +427,9 @@ class CrawlWriter:
         return True
 
     def _committed(self, unit: Unit[Any], connection: Connection, *, durable: bool) -> RuntimeError:
-        """A unit committed: its changes after the commit go, and the batch before it, which a
-        commit that succeeded made permanent, resolves; the writer then ends, since a replay
-        could no longer undo the batch (017-speed-up-crawl-writer D6)."""
+        """Roll back any remaining transaction after a unit tries to commit the batch.
+        Resolve the batch only if that commit succeeded, because replay cannot undo it.
+        The writer ends either way (023-fix-code-audit D6)."""
         connection.rollback()
         if durable:
             self._settle(self._batch)
@@ -566,9 +564,9 @@ def _run_again(ran: _Ran, connection: Connection) -> None:
 
 
 def _compared_by_identity(result: object) -> str | None:
-    """The name of a type in the result that compares by identity, which a replay's != could not
-    check; per type, not per element, so a tuple of 500 records costs one check
-    (017-speed-up-crawl-writer D6)."""
+    """Name a type using object.__eq__, which gives replay no value comparison.
+    Inspect the result and one level of contents. A tuple of 500 records of one type
+    takes one equality check for that type (023-fix-code-audit D6)."""
     kinds = {type(result)}
     if isinstance(result, tuple | list | set | frozenset):
         kinds.update(type(element) for element in result)
