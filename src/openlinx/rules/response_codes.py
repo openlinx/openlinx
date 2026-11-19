@@ -63,7 +63,10 @@ INTERNAL_NO_RESPONSE = Rule(
     reproduce_sql="""\
 SELECT id AS url_id, json_object('error', fetch_error) AS detail
 FROM urls
-WHERE is_internal = 1 AND fetch_state = 'error'""",
+WHERE is_internal = 1 AND fetch_state = 'error'
+  -- With record_failed the Crawl received a response but could not write it.
+  -- The record_failed warning reports that failure.
+  AND fetch_error <> 'record_failed'""",
 )
 
 RULES = (INTERNAL_4XX, INTERNAL_5XX, INTERNAL_NO_RESPONSE)

@@ -4,14 +4,19 @@ import json
 
 import pytest
 
-from openlinx.rules.response_codes import INTERNAL_4XX, INTERNAL_5XX
+from openlinx.crawl.urls import NormalizedUrl
+from openlinx.rules.response_codes import INTERNAL_4XX, INTERNAL_5XX, INTERNAL_NO_RESPONSE
 from openlinx.store.issues import evaluate_rule
-from openlinx.store.records import AffectedUrl
+from openlinx.store.records import AffectedUrl, Provenance
+from openlinx.store.urls import record_seed, record_unwritten
+from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
+from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result, crawled
-from tests.support.crawls import query
+from tests.support.crawls import create_any_crawl, query
+from tests.support.workspace import TempWorkspace
 
 
 @pytest.mark.usefixtures("temp_workspace")
@@ -184,3 +189,25 @@ def test_no_response(fixture_site: StartSite) -> None:
     assert [(url_id, json.loads(detail)) for url_id, detail in affected] == [
         (slow_id, {"error": "timeout"})
     ]
+
+
+def test_a_url_that_failed_to_be_recorded_is_no_issue(temp_workspace: TempWorkspace) -> None:
+    file = create_any_crawl(temp_workspace).path
+    with CrawlWriter(file, FakeClock()) as writer:
+        url_id = writer.run(
+            record_seed(NormalizedUrl("https://example.com/"), is_internal=True, in_scope=True)
+        )
+        writer.run(
+            record_unwritten(
+                url_id,
+                "A response row could not be written.",
+                blocked_by_robots_txt=False,
+                attempt_count=1,
+                provenance=Provenance(crawl_depth=0, discovered_via="seed", found_on_url_id=None),
+            )
+        )
+
+    assert query(file, "SELECT fetch_state, fetch_error FROM urls WHERE id = ?", (url_id,)) == [
+        ("error", "record_failed")
+    ]
+    assert evaluate_rule(file, INTERNAL_NO_RESPONSE) == []
