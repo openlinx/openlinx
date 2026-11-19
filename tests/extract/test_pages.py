@@ -185,19 +185,22 @@ def test_repeated_values_equal_the_urls_row(
 
     crawl_file = crawl_result(about).crawl_file
 
-    assert query(
+    (page,) = query(
         crawl_file,
         "SELECT content_type, status_code, response_time_ms, size_bytes, transferred_bytes, "
         "content_encoding, crawl_depth, crawl_timestamp "
         "FROM pages WHERE address = ?",
         [about],
-    ) == query(
+    )
+    (url,) = query(
         crawl_file,
         "SELECT content_type, status_code, response_time_ms, size_bytes, transferred_bytes, "
         "content_encoding, crawl_depth, fetched_at "
         "FROM urls WHERE url = ?",
         [about],
     )
+
+    assert page == url
 
 
 def test_compressed_page_sizes(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
@@ -315,7 +318,7 @@ def test_cookie_values_are_not_stored_in_page_data(
 
     crawl_file = crawl_result(server.url("/cookie")).crawl_file
 
-    # Every table of this change, so the tables of later groups are searched too.
+    # Search all Page data text columns. This release leaves the compressed HTML table empty.
     tables = [table for table in public_tables() if table.info["change"] == 30]
     holding_the_value = [
         table.name
@@ -325,9 +328,14 @@ def test_cookie_values_are_not_stored_in_page_data(
             isinstance(value, str) and "9c7f3b2e1d4a8f6e0b5c3a7d9e1f2b4c" in value for value in row
         )
     ]
-    assert (query(crawl_file, "SELECT name FROM cookies"), holding_the_value) == (
+    assert (
+        query(crawl_file, "SELECT name FROM cookies"),
+        holding_the_value,
+        query(crawl_file, "SELECT count(*) FROM page_sources"),
+    ) == (
         [("PHPSESSID",)],
         [],
+        [(0,)],
     )
 
 
