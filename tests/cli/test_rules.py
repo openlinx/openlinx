@@ -1,6 +1,7 @@
 """Verify the Rules catalogue through the CLI."""
 
 import json
+import re
 import subprocess
 import sys
 from tempfile import TemporaryFile
@@ -144,6 +145,19 @@ def test_explicit_workspace_can_enable_a_rule(temp_workspace: TempWorkspace) -> 
     assert set(item) == {"id", "enabled"}
     assert item["enabled"] is True
     assert shown.json()["enabled"] is True
+
+
+def test_misspelt_rule_id(temp_workspace: TempWorkspace) -> None:
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-to-long]\n")
+
+    result = run_cli("rules", "list")
+
+    assert result.exit_code == 3
+    assert result.stdout == b""
+    (error,) = result.stderr_json_lines()
+    assert error["code"] == "settings_invalid"
+    assert error["details"]["errors"][0]["key"] == "rules.title-to-long"
+    assert "title-too-long" in re.findall(r"[\w-]+", error.get("hint") or "")
 
 
 def test_a_rule_enabled_setting_requires_a_boolean(temp_workspace: TempWorkspace) -> None:
