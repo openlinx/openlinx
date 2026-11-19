@@ -135,6 +135,21 @@ def test_state_values_are_documented() -> None:
     ]
 
 
+def test_categories_are_an_enumeration() -> None:
+    assert columns_of("rules")["category"]["values"] == [
+        "response_codes",
+        "security",
+        "titles",
+        "meta_descriptions",
+        "headings",
+        "canonicals",
+        "directives",
+        "content",
+        "urls",
+        "images",
+    ]
+
+
 def test_the_next_page() -> None:
     first = run_cli("schema", "--fields", "name", "--limit", "1").json()
 
