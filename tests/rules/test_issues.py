@@ -286,7 +286,10 @@ def test_issue_visible_before_the_crawl_ends(
             query(file, "SELECT url FROM urls WHERE id = ?", (item.url_id,))[0][0]
             for item in affected
         ]
-        assert (issues, urls) == ([("title-missing", 1)], [server.url("/notitle")])
+        assert (issues, urls) == (
+            [("title-missing", 1), ("h1-missing", 2)],
+            [server.url("/notitle")],
+        )
     finally:
         try:
             if held:

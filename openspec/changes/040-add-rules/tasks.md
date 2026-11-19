@@ -69,7 +69,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 4.4 Drive "Server error" at seam 2 by replacing the no-row query of `internal-5xx`, registered in 1.1.
 - [ ] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
 - [ ] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
-- [ ] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1` (after `030` task 3.4), and register `h1-missing`.
+- [x] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1` (after `030` task 3.4), and register `h1-missing`.
 - [ ] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
 - [ ] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 

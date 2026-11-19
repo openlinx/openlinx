@@ -9,6 +9,7 @@ from typing import Literal
 import pytest
 from sqlalchemy import Connection, Engine, event, update
 
+from openlinx.rules.model import Rule
 from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
 from openlinx.store.crawls import read_recorded, record_continue, record_state
 from openlinx.store.issues import affected_urls_unit, read_affected_urls, read_issues
@@ -33,6 +34,10 @@ _ISSUE = Issue(
     affected_count=1,
 )
 _STORED = "SELECT url_id, detail FROM affected_urls WHERE rule_id = 'title-missing'"
+
+
+def _title_missing_issues(file: Path, catalogue: tuple[Rule, ...]) -> list[Issue]:
+    return [issue for issue in read_issues(file, catalogue) if issue.rule_id == "title-missing"]
 
 
 @pytest.fixture
@@ -70,7 +75,7 @@ def test_a_crawl_without_a_final_pass_is_read_live(stopped_issue: tuple[Path, in
         # Keep the Page and the previous pass different, so either fixed choice fails.
         _record_title(writer, url_id)
         writer.flush()
-        assert read_issues(file, _RULES) == [_ISSUE]
+        assert _title_missing_issues(file, _RULES) == [_ISSUE]
         assert read_affected_urls(file, "title-missing", _RULES) == [
             AffectedUrl(url_id=url_id, detail=None)
         ]
@@ -82,7 +87,7 @@ def test_a_crawl_without_a_final_pass_is_read_live(stopped_issue: tuple[Path, in
     assert query(file, "SELECT state, stop_reason FROM crawl") == [("failed", "site_unreachable")]
     assert query(file, "SELECT title_1 FROM pages WHERE url_id = ?", (url_id,)) == [("Shoes",)]
     assert query(file, _STORED) == [(url_id, None)]
-    assert read_issues(file, _RULES) == []
+    assert _title_missing_issues(file, _RULES) == []
     assert read_affected_urls(file, "title-missing", _RULES) == []
 
 
@@ -118,7 +123,7 @@ def test_completed_crawl_reads_its_own_issues(
     catalogue = (current,) if installed_version == "needs_new_column" else (TITLE_TOO_LONG,)
 
     if result == "issues":
-        assert read_issues(file, catalogue) == [
+        assert _title_missing_issues(file, catalogue) == [
             Issue(
                 rule_id="title-missing",
                 category="titles",
@@ -175,7 +180,7 @@ def test_issue_state_and_result_share_a_snapshot(
         event.listen(Engine, "after_cursor_execute", finish_after_select)
         try:
             if result == "issues":
-                assert read_issues(file, _RULES) == [_ISSUE]
+                assert _title_missing_issues(file, _RULES) == [_ISSUE]
             else:
                 assert read_affected_urls(file, "title-missing", _RULES) == [
                     AffectedUrl(url_id=url_id, detail=None)
@@ -186,5 +191,5 @@ def test_issue_state_and_result_share_a_snapshot(
     assert committed
     assert query(file, "SELECT state, stop_reason FROM crawl") == [("stopped", "requested")]
     assert query(file, _STORED) == []
-    assert read_issues(file, _RULES) == []
+    assert _title_missing_issues(file, _RULES) == []
     assert read_affected_urls(file, "title-missing", _RULES) == []
