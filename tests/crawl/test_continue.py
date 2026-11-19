@@ -20,7 +20,7 @@ from tests.fixture_site.hosts import FixtureResolver, on_http_port
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import continued, crawl_result
-from tests.support.crawls import query, sha256_of
+from tests.support.crawls import crawl_row, query, sha256_of
 from tests.support.network import closed_port
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
@@ -55,6 +55,27 @@ def test_a_continue_records_the_settings_it_runs_with(
     (config,) = query(result.crawl_file, "SELECT config FROM crawl")
     recorded = json.loads(config[0])["crawl"]
     assert (recorded["max_urls"], recorded["rate"], recorded["concurrency"]) == (None, 50.0, 2)
+
+
+def test_a_continue_keeps_the_exact_recorded_rule_threshold(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(b"[rules.title-too-long]\nmax_chars = 18446744073709551617\n")
+    server = fixture_site(NINE_PAGES)
+
+    stopped = crawl_result(server.url("/"), max_urls=3)
+
+    assert stopped.summary.state == "stopped"
+    config = json.loads(crawl_row(stopped.crawl_file)["config"])
+    assert config["rules"]["title-too-long"]["max_chars"] == 18446744073709551617
+
+    settings_file.write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+    result = continued(stopped, CrawlOverrides(max_urls=None))
+
+    assert result.summary.state == "completed"
+    config = json.loads(crawl_row(result.crawl_file)["config"])
+    assert config["rules"]["title-too-long"]["max_chars"] == 18446744073709551617
 
 
 def test_the_url_limit_counts_over_the_crawl_s_whole_life(

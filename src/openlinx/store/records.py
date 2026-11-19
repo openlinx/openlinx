@@ -10,7 +10,7 @@ from typing import Any, Literal, TypedDict
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.store.rows import HandlerRows
 from openlinx.workspace.discovery import Workspace
-from openlinx.workspace.tables import SecretPolicy
+from openlinx.workspace.tables import SecretPolicy, SecretSettings
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
 
@@ -91,6 +91,21 @@ type LinkElement = Literal[
     "script",
 ]
 type LinkAttribute = Literal["href", "src", "srcset", "poster", "data", "content"]
+type RuleCategory = Literal[
+    "response_codes",
+    "security",
+    "titles",
+    "meta_descriptions",
+    "headings",
+    "canonicals",
+    "directives",
+    "content",
+    "urls",
+    "images",
+]
+type IssueType = Literal["issue", "warning", "opportunity"]
+type Priority = Literal["high", "medium", "low"]
+type AppliesTo = Literal["internal_urls", "internal_pages", "resources"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -176,10 +191,53 @@ LATEST = "latest"
 
 @dataclass(frozen=True)
 class SecretNames:
-    """The recording policy for each secret flag and dotted settings key."""
+    """Policies by flag or settings path; flat settings also take a dotted key."""
 
     flags: Mapping[str, SecretPolicy] = field(default_factory=dict)
-    settings: Mapping[str, SecretPolicy] = field(default_factory=dict)
+    settings: SecretSettings = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RuleRow:
+    """The catalogue metadata and effective settings recorded when a Crawl starts."""
+
+    id: str
+    category: RuleCategory
+    issue_type: IssueType
+    priority: Priority
+    applies_to: AppliesTo
+    enabled: bool
+    thresholds: dict[str, int]
+    description: str
+    why_it_matters: str
+    how_to_fix: str
+    reproduce_sql: str
+
+
+@dataclass(frozen=True, slots=True)
+class AffectedUrl:
+    """A URL matched by a Rule, with its measured values when the Rule reports them."""
+
+    url_id: int
+    detail: dict[str, Any] | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UrlIssue:
+    """One Rule's result for a URL, as stored in affected_urls."""
+
+    rule_id: str
+    url_id: int
+    detail: dict[str, Any] | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Issue:
+    rule_id: str
+    category: RuleCategory
+    issue_type: IssueType
+    priority: Priority
+    affected_count: int
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -195,6 +253,7 @@ class NewCrawl:
     # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames
     journal_setting: JournalSetting
+    rules: Sequence[RuleRow]
     section_crawl: bool
     settings_file: Path | None = None
 

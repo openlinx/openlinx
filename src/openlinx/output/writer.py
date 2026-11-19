@@ -9,6 +9,7 @@ from typing import Any, BinaryIO, Literal
 
 import orjson
 
+from openlinx.json_numbers import encode_json
 from openlinx.output.diagnostics import Diagnostic, OpenLinxError
 from openlinx.output.table import render_items_table, render_table
 
@@ -50,7 +51,7 @@ class Output:
     def document(self, document: Document) -> None:
         if document.format is Format.JSONL:
             for item in document.value["items"]:
-                self._stdout.write(_json_line(item))
+                self._stdout.write(encode_json(item) + b"\n")
         elif document.format is Format.TABLE:
             width = shutil.get_terminal_size().columns if self._stdout.isatty() else TABLE_WIDTH
             if document.kind == "list":
@@ -59,7 +60,7 @@ class Output:
                 text = render_table(document.value, width)
             self._stdout.write(text.encode())
         else:
-            self._stdout.write(_json_line(document.value))
+            self._stdout.write(encode_json(document.value) + b"\n")
 
     def rows(self, rows: Rows) -> None:
         for row in rows.rows:

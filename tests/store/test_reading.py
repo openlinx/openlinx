@@ -7,7 +7,7 @@ import sys
 from contextlib import closing
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError
 
 from openlinx.output.diagnostics import OpenLinxError
@@ -16,7 +16,7 @@ from openlinx.services.crawls import create_crawl
 from openlinx.store.connections import connect
 from openlinx.store.crawls import set_state
 from openlinx.store.reading import read_metadata, reading
-from openlinx.store.records import CrawlFile
+from openlinx.store.records import CrawlFile, JournalSetting
 from openlinx.store.schema import seeds
 from openlinx.store.writer import CrawlWriter
 from openlinx.workspace.discovery import resolve_workspace
@@ -52,6 +52,25 @@ def test_a_reader_waits_5_seconds_for_a_lock_and_checks_references(
         )
 
     assert pragmas == (1, 5_000)
+
+
+@pytest.mark.parametrize(("mode", "seen"), [("wal", 1), ("delete", 2)])
+def test_read_visibility_across_a_real_writer_commit(
+    temp_workspace: TempWorkspace, mode: JournalSetting, seen: int
+) -> None:
+    crawl = create_any_crawl(temp_workspace, journal_setting=mode)
+    count = select(func.count()).select_from(seeds)
+
+    with reading(crawl.path) as reader:
+        journal_mode: str = reader.exec_driver_sql("PRAGMA journal_mode").scalar_one()
+        assert journal_mode == mode
+        assert reader.scalar(count) == 1
+        with closing(sqlite3.connect(crawl.path, timeout=0.5)) as writer:
+            writer.execute("INSERT INTO seeds (position, url) VALUES (2, 'https://example.com/2')")
+            writer.commit()
+        assert reader.scalar(count) == seen
+    with reading(crawl.path) as reader:
+        assert reader.scalar(count) == 2
 
 
 def completed_crawl(temp_workspace: TempWorkspace) -> CrawlFile:

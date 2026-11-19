@@ -73,7 +73,9 @@ Anything that can be intentional, or that the maintainer does not want to lower 
 - *Alternative: copy Screaming Frog's Issue Types everywhere.* Rejected. They are not fully documented, and several are Opportunities that would hide definite defects from the Health Score.
 - *Consequence:* changing a Rule's Issue Type later changes Health Scores. It is treated as a contract change and noted in the changelog.
 
-### D4. 42 Rules
+### D4. The 42 Rules span two releases
+v0.1 evaluates the 15 Rules in [the ROADMAP](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after v0.1. The ROADMAP retains its v0.1.1 and v0.2 milestones.
+
 The maintainer approved keeping all 42 Rules on 2026-09-27. Noindex and nofollow each combine meta robots and X-Robots-Tag: the problem is the same, and `detail.sources` tells the agent where to fix it. Every Rule has a distinct fix. The low-value Rules (`title-same-as-h1`, `h1-too-long`, `url-underscores`, `url-parameters`, `meta-description-too-short`) are `opportunity`/`low`, so they do not touch the Health Score and sort last in Reports. Each one can be disabled with `enabled = false`.
 
 ### D5. When Rules run
@@ -95,7 +97,7 @@ No count of Affected URLs is stored: a count that only repeats the rows of anoth
 - It holds the last pass's result. For a Crawl without a final pass the Issues reader computes the same shape live instead (D16).
 - It keeps the name and columns that `050`'s `issues` Command and export and `070`'s Report read, `affected_count` included.
 - *Cost:* each read of `issues` counts the rows of `affected_urls`, a scan of its primary key.
-- **The first view of the schema.** `018`'s `linx schema` already lists a `kind` of `table` or `view`. This change declares the view in `openlinx.store.issues`, next to its description, column descriptions and `values`, and extends `018`'s contract test to views: the file must have the view, with its column names in order. SQLite reports no `NOT NULL` and its own type names for a view's computed columns (`INT` for a `CAST(… AS INTEGER)`), so a view's types and nullability come from the declaration only, and `STRICT` is checked for tables only.
+- **The first view of the schema.** `018`'s `linx schema` already lists a `kind` of `table` or `view`. This change declares the view in `openlinx.store.schema`, next to its description, column descriptions and `values`, and extends `018`'s contract test to views: the file must have the view, with its column names in order. SQLite reports no `NOT NULL` and its own type names for a view's computed columns (`INT` for a `CAST(… AS INTEGER)`), so a view's types and nullability come from the declaration only, and `STRICT` is checked for tables only.
 - *Alternative: a real table, updated with `affected_urls`,* as the draft had. It stores a count of other rows, and every write and every pass must keep it right. Rejected by ADR-0005.
 - *Alternative: no `issues` object in the file,* only `050`'s query. Agents writing SQL would have to know the join. Rejected.
 
@@ -111,6 +113,8 @@ No count of Affected URLs is stored: a count that only repeats the rows of anoth
 
 ### D9. Strict configuration through `010`'s settings validation
 `[rules.<id>]` tables are part of the settings model, which `010` validates eagerly whenever settings load. Unknown ids, unknown keys and bad values become `settings_invalid` problems with dotted keys, such as `rules.title-to-long`, and a hint naming the closest known id or key. A silent typo would quietly change audit results. The cost is that an `openlinx.toml` written for a newer version, with new Rule ids, fails on an older tool; the message names the unknown id, so the fix is obvious.
+
+Rule threshold overrides are bounded when the Workspace loads so that every accepted integer can be printed in decimal JSON and recorded exactly in the Crawl configuration. The maximum is 10^4300 − 1. It applies to the numeric value across TOML bases and digit separators. An oversized threshold follows the existing keyed settings diagnostic before any Crawl request. The limit belongs to Rule thresholds and requires no process-wide change to Python's integer conversion policy.
 
 The table names are Rule ids. They mirror no flag, so `010`'s flag-mirroring key rule does not apply to them.
 
@@ -135,7 +139,7 @@ A 2xx non-HTML target, such as a PDF, therefore counts as indexable, as it would
 
 ### D14. The tables under ADR-0005
 The schema blueprint of 2026-10-11 and its rulings decide these tables before they are built. Each goes through `018`'s `public_table()`, so it is `STRICT`, and its enumerations and flags get CHECKs from the declared values.
-- **`rules`:** keyed by `id`, the Rule id, as TEXT: a public identifier that a user types (ADR-0005 rule 2). It is `WITHOUT ROWID`, because the Rule id is its natural key and it holds about 42 rows.
+- **`rules`:** keyed by `id`, the Rule id, as TEXT: a public identifier that a user types (ADR-0005 rule 2). It is an ordinary `STRICT` rowid table. Each registered Rule has a single TEXT key and a wide row holding the guidance and query (ADR-0005 rule 15).
   - `category`, `issue_type`, `priority` and `applies_to` are enumerations whose values are `Literal`s in `openlinx.store.records`, as `020`'s are, so the code, the CHECK and `values` cannot disagree.
   - `reproduce_sql` holds the Rule's query (ruling Q11, D15).
   - **When it is written:** in the transaction that creates the `crawl` row. This change adds a `rules` field to `015`'s `NewCrawl`, as `020` added `scope`, and `create_crawl` writes its rows. A Crawl that dies before its first unit still records its configuration, which the live path reads.
@@ -150,6 +154,7 @@ Every Rule is one SQL query over the public schema that reproduces its Affected 
 - **Shape:** a read-only `SELECT` that returns `url_id` and `detail`. It reads the effective thresholds from the Crawl's `rules` row, for example `json_extract((SELECT thresholds FROM rules WHERE id = 'low-word-count'), '$.min_words')`. Its text is then a constant of the Rule: the same in every Workspace and Crawl, and still right under overrides.
 - **Only stored columns:** a condition that needs a value the file does not hold needs a column first, which is a schema change (ADR-0005). Every v0.1 Rule finds its data in `urls`, `pages` and `links`.
 - **The pass's unit** runs `INSERT INTO affected_urls (rule_id, url_id, detail) SELECT :rule_id, url_id, detail FROM (<query>)`. Each statement is built once, at import (`017` D9). The unit reads only the file, so it is deterministic when it runs again (`017` D7).
+- **Executable query:** the reader and the pass run the tool's registered SQL for the Rules enabled in the Crawl. Thresholds come from the recorded configuration. A shared crawl file can contain arbitrary text in `rules.reproduce_sql`, so that text is available for inspection and manual reproduction.
 - **Where it is read:** `rules.reproduce_sql` in the file, and `linx rules list` and `show`.
 - **Exclusions are explained in the query:** an agent reads the query, not this design, so a condition that leaves a value out carries an SQL comment with the reason. `internal-no-response` and `image-broken` leave out `fetch_error = 'record_failed'`: the Crawl got a response and failed to record it, which is the tool's failure, reported by `020`'s `record_failed` warning, not the site's.
 
@@ -161,6 +166,8 @@ The Issues reader in `openlinx.store.issues` is the one way `050`'s `issues`, `i
   - `failed` gets no pass from `020`, and is read live.
   - *Alternative: a `Derived: ` column such as `issues_materialised_at`.* A resume would have to clear it in the unit that sets `running`, and it could disagree with the Crawl State. Rejected: the state already says it.
 - **The live path** runs each enabled Rule's query on a read-only connection, as one read, and returns the shape of the `issues` view, or of `affected_urls` for one Rule or one URL. `affected_urls` is ignored, because after a resume it holds the previous pass's rows.
+- **Queries for 050.** `issues_in(connection, catalogue)` returns the columns of the `issues` view. `affected_urls_in(connection, rule_id, catalogue)` returns `url_id` and the stored JSON text of `detail` for the requested Rule. A Command opens one `reading()` context and joins, orders and pages those selects in the Store. WAL pins the read snapshot for the invocation. With a rollback journal, each statement releases its read lock so the writer can commit while a Command is open.
+- **Different tool versions.** A completed or stopped Crawl keeps every stored Issue. In a live Crawl the reader evaluates registered Rules that the file marks enabled. Requesting an unknown Rule returns `rule_not_found` with suggestions drawn from the Crawl. Requesting a recorded, enabled Rule that this tool cannot evaluate live gives the same code with a reason and a hint for reproducing it. The per-URL reader returns known Rules in catalogue order, followed by other stored Rules in Rule id order.
 - **Cost:** live Issues cost one evaluation of every Rule per read, on rows that are still growing. `026`'s run of about 500k URLs measures the latency of a full live list during a Crawl and its effect on WAL checkpoints, because a long read holds the WAL from being reset. If the full list takes more than 30 seconds at 500k URLs, the design is revisited: per-Rule reads, or materialising at intervals. The same run measures `page <url>`, which runs every Rule's query for one URL: over 1 second at 500k URLs, the reader gets per-URL forms of the queries.
 - **Interface points:** `050`'s Commands call the reader and never query `affected_urls` themselves, so both paths give them one shape. `080`'s documentation tells agents that Issues of a running Crawl are computed on each read and cost more than those of a finished Crawl, and that `affected_urls` and `issues` in the file hold the last pass's result, valid when `crawl.state` is `completed` or `stopped`.
 
@@ -169,6 +176,11 @@ Declared as `DiagnosticCode` constants in `openlinx.output.codes`, as `020` D17 
 - error, exit 4: `rule_not_found` (`linx rules show` with an unknown id), under `010`'s rule that a code ending in `_not_found` maps to 4
 
 `settings_invalid` (exit 3) comes from `010`, and the `record_failed` warning that the Rule queries leave out is `020`'s.
+
+### D18. Command groups
+**In short:** Use full paths for grouped Commands, with the bare group as a shortcut to its default Command.
+
+Each member has its own metadata under its full path. For example, `linx commands` lists `rules list` and `rules show`, and group help shows both. Keeping Command options after the full path makes it clear which Command they configure. Root options stay at the root. The same group mechanism supports `060`'s `crawls` Commands.
 
 ## Test seams
 

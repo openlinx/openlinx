@@ -53,6 +53,7 @@ from openlinx.output.codes import (
 from openlinx.output.diagnostics import Diagnostic, OpenLinxError
 from openlinx.output.events import timestamp_text
 from openlinx.output.reporter import Reporter
+from openlinx.rules.settings import RulesSettings
 from openlinx.services.crawl_failures import NETWORK_FAILURES, interrupted, write_failed
 from openlinx.services.crawl_secrets import (
     check_fresh_proxy,
@@ -62,6 +63,7 @@ from openlinx.services.crawl_secrets import (
 from openlinx.services.crawls import create_crawl
 from openlinx.services.hooks import default_page_executor
 from openlinx.services.interrupts import interrupts_stop
+from openlinx.services.rules import rule_rows
 from openlinx.services.settings import default_tables
 from openlinx.store.crawls import (
     crawl_summary,
@@ -255,6 +257,7 @@ def plan_crawl(request: CrawlRequest, tables: SettingsTables | None = None) -> C
             request.secret_flags, {**tables.secret_settings(), **_PROXY_SECRETS}
         ),
         journal_setting=settings.table(StoreSettings).journal_mode,
+        rules=rule_rows(settings.table(RulesSettings).model_dump()),
         settings_file=settings_file,
         section_crawl=scope.section_crawl,
     )

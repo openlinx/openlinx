@@ -8,6 +8,8 @@ from openlinx.extract.page_data import page_data_extractor
 from openlinx.extract.page_handler import cookie_rows, page_rows
 from openlinx.extract.page_links import PAGE_LINKS
 from openlinx.extract.settings import ContentAreaSettings
+from openlinx.rules.registry import RULES
+from openlinx.store.issues import affected_urls_unit, materialise_issues
 from openlinx.store.links import (
     inlink_counts,
     inlink_ranges,
@@ -18,6 +20,9 @@ from openlinx.store.pages import write_cookies, write_pages
 from openlinx.store.records import ResponseHeaders
 from openlinx.store.response_headers import write_response_headers
 from openlinx.workspace.settings import Settings
+
+# The installed catalogue supplies the SQL. Each Crawl records which Rule ids to run.
+_RULE_UNITS = {rule.id: affected_urls_unit(rule) for rule in RULES}
 
 
 def default_hooks(settings: Settings | None = None) -> Hooks:
@@ -32,7 +37,10 @@ def default_hooks(settings: Settings | None = None) -> Hooks:
             handler("links", link_rows, write_links),
             handler("response_headers", _response_headers, write_response_headers),
         ),
-        passes=(Pass("inlinks", count_inlinks),),
+        passes=(
+            Pass("inlinks", count_inlinks),
+            Pass("issues", lambda context: materialise_issues(context.writer, _RULE_UNITS)),
+        ),
     )
 
 

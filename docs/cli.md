@@ -4,6 +4,19 @@ How every `linx` Command talks to agents and people. The spec is [openspec/specs
 
 `linx commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page. It gives each option's bounds as `min` and `max`, null where there is none, and leaves out hidden options, which the tool passes to itself.
 
+Grouped Commands appear by their full path in `linx commands`. Use `linx rules list` to browse the Rule catalogue without opening a Crawl. Bare `linx rules` runs the same list. Put options after the full Command name, for example `linx rules list --limit 1`. [Rules guide](rules.md)
+
+`linx rules show <id>` prints one Rule as a JSON object with the same fields as a list item.
+Use `--format table` for a table. In both Commands, `thresholds` maps each name to an object
+with `value`, `default` and `unit`. A Rule without thresholds, such as `title-missing`, has
+`"thresholds": {}`.
+Each threshold's `value` comes from the Workspace settings or falls back to the catalogue
+`default`, which is 60 characters for `title-too-long`'s `max_chars`. Both Commands accept
+`--workspace <dir>`. Each Rule has an `enabled` boolean, which defaults to `true`.
+Disabled Rules stay in the list. [Rule settings](rules.md#override-a-threshold)
+Both Commands include the Rule's read-only query as `reproduce_sql`. [Reproducing queries](rules.md#reproducing-queries)
+An unknown id returns `rule_not_found` and directs you to `linx rules list`.
+
 ## stdout and stderr
 
 | Stream | Carries |
@@ -210,6 +223,7 @@ Every code is declared once, with its level, its exit code and a description, an
 | `invalid_cursor` | error | 2 | a `--cursor` made by a different request, or altered |
 | `settings_invalid` | error | 3 | `openlinx.toml` cannot be read or breaks the settings rules |
 | `workspace_not_found` | error | 4 | the `--workspace` folder does not exist |
+| `rule_not_found` | error | 4 | no Rule has the requested id. Use `linx rules list` to find Rule ids |
 | `workspace_not_writable` | error | 7 | the Workspace folder or its data folder cannot be created or written |
 | `internal_error` | error | 70 | an unexpected failure, which is a bug |
 | `interrupted` | error | 130 | stopped by an interrupt: Ctrl+C, Ctrl+Break or a termination signal |

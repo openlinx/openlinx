@@ -5,15 +5,20 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 import typer
+from typer.core import TyperGroup, TyperOption
 
 from openlinx import __version__
+from openlinx.cli.click_compat import Context
 from openlinx.cli.commands import commands
 from openlinx.cli.crawl import crawl
 from openlinx.cli.init import init
-from openlinx.cli.meta import check_command
-from openlinx.cli.runner import Invocation, OpenLinxGroup
+from openlinx.cli.meta import CommandGroup, check_command, check_group
+from openlinx.cli.rules import RULES_GROUP
+from openlinx.cli.runner import Invocation, OpenLinxGroup, option_before_the_command
 from openlinx.cli.schema import schema
 from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
+from openlinx.output.codes import USAGE_ERROR
+from openlinx.output.diagnostics import OpenLinxError
 from openlinx.services.settings import default_tables
 
 
@@ -39,7 +44,7 @@ def root(
 class AppExtra:
     # Table name to its "module:Class" reference.
     settings_tables: Mapping[str, str] = field(default_factory=dict)
-    commands: Sequence[Callable[..., Any]] = ()
+    commands: Sequence[Callable[..., Any] | CommandGroup] = ()
 
 
 def build_app(extra: AppExtra | None = None) -> typer.Typer:
@@ -60,10 +65,83 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered: list[Callable[..., Any]] = [commands, crawl, init, schema, *extra.commands]
-    for command in registered:
-        app.command(name=check_command(command).name)(command)
+    registered = [commands, crawl, init, RULES_GROUP, schema, *extra.commands]
+    # Typer would silently keep the last registration of a name.
+    taken: set[str] = set()
+    for entry in registered:
+        name = entry.name if isinstance(entry, CommandGroup) else check_command(entry).name
+        if name in taken:
+            raise TypeError(f"Two Commands or groups are named {name}.")
+        if " " in name:
+            raise TypeError(f"{name} has a space in its name, which only a grouped Command has.")
+        taken.add(name)
+        if isinstance(entry, CommandGroup):
+            app.add_typer(_group_app(entry), name=name)
+        else:
+            app.command(name=name)(entry)
     return app
+
+
+def _group_app(group: CommandGroup) -> typer.Typer:
+    names = check_group(group)
+    default = names[group.default]
+
+    class Group(TyperGroup):
+        def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
+            if not args:
+                return super().parse_args(ctx, [default])
+            # Only the bare group dispatches to its default. Leaf options belong after its name.
+            if args[0].startswith("-") and args[0] not in ctx.help_option_names:
+                flag = args[0].partition("=")[0]
+                if flag in _root_options(ctx):
+                    raise OpenLinxError(
+                        USAGE_ERROR,
+                        f"{flag} is an option of {COMMAND_NAME} itself, "
+                        "given after a Command name.",
+                        hint=f"Put {flag} before the Command name: {COMMAND_NAME} {flag}",
+                    )
+                command = _placement_command(self, args, default)
+                if any(
+                    flag in param.opts or flag in param.secondary_opts
+                    for param in self.commands[command].params
+                    if isinstance(param, TyperOption)
+                ):
+                    raise option_before_the_command(flag, f"{group.name} {command}")
+            return super().parse_args(ctx, args)
+
+    app = typer.Typer(cls=Group, help=group.summary, rich_markup_mode=None)
+    for command, name in names.items():
+        app.command(name=name)(command)
+    return app
+
+
+def _placement_command(group: TyperGroup, args: list[str], default: str) -> str:
+    """Skip leaf option values so a Workspace named like a Command stays a value."""
+    arities = {
+        name: 0 if param.is_flag else param.nargs
+        for command in group.commands.values()
+        for param in command.params
+        if isinstance(param, TyperOption)
+        for name in (*param.opts, *param.secondary_opts)
+    }
+    remaining = iter(args)
+    for arg in remaining:
+        if arg in group.commands:
+            return arg
+        flag, equals, _ = arg.partition("=")
+        for _index in range(arities.get(flag, 0) - bool(equals)):
+            next(remaining, None)
+    return default
+
+
+def _root_options(ctx: Context) -> set[str]:
+    root_context = ctx.find_root()
+    return {
+        opt
+        for param in root_context.command.params
+        for opt in param.opts
+        if opt not in root_context.help_option_names
+    }
 
 
 def main() -> None:

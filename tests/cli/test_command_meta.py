@@ -8,7 +8,7 @@ import pytest
 import typer
 
 from openlinx.cli.app import AppExtra, build_app
-from openlinx.cli.meta import command_meta
+from openlinx.cli.meta import CommandGroup, command_meta
 from openlinx.cli.options import FormatOpt, OptionMeta
 from openlinx.output.paging import Fields
 from openlinx.output.writer import Format
@@ -142,3 +142,23 @@ def short_secret(
 def test_a_secret_option_with_a_short_name_is_refused() -> None:
     with pytest.raises(TypeError, match="api_key"):
         build_app(extra=AppExtra(commands=[short_secret]))
+
+
+def test_an_ambiguous_grouped_command_path_is_refused() -> None:
+    @command_meta(name="example list", output="document", formats=[Format.JSON])
+    def first(output_format: FormatOpt = Format.JSON) -> dict[str, str]:
+        return {"source": "first"}
+
+    @command_meta(name="example list", output="document", formats=[Format.JSON])
+    def second(output_format: FormatOpt = Format.JSON) -> dict[str, str]:
+        return {"source": "second"}
+
+    group = CommandGroup(
+        name="example",
+        summary="Group with an ambiguous Command path.",
+        commands=(first, second),
+        default=first,
+    )
+
+    with pytest.raises(TypeError, match=r"Two Commands are named example list\."):
+        build_app(extra=AppExtra(commands=[group]))

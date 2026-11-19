@@ -12,7 +12,9 @@ from typing import Any
 from sqlalchemy import Connection, delete, insert
 
 from openlinx.output.reporter import Collected
+from openlinx.rules.settings import RulesSettings
 from openlinx.services.crawls import create_crawl
+from openlinx.services.rules import rule_rows
 from openlinx.store.connections import connect
 from openlinx.store.records import CrawlFile, NewCrawl, SecretNames
 from openlinx.store.schema import seeds
@@ -49,6 +51,7 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
         },
         secret_names=SecretNames(),
         journal_setting="auto",
+        rules=rule_rows(RulesSettings().model_dump()),
         section_crawl=False,
     )
 

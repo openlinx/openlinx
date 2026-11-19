@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from openlinx.naming import PRODUCT_NAME, SETTINGS_FILE_NAME
-from openlinx.workspace.tables import SettingsTables, keyed_entry
+from openlinx.workspace.tables import SettingsTables, keyed_entry, named_tables
 
 HEADER = (
     f"# {PRODUCT_NAME} settings. Each setting takes the first value it finds:\n"
@@ -17,7 +17,12 @@ def settings_template(tables: SettingsTables) -> str:
     parts = [HEADER]
     for name, table in tables.items():
         entry = keyed_entry(table)
-        if entry is None:
+        subtables = named_tables(table)
+        if subtables is not None:
+            lines = [f"# {table.__doc__}"]
+            for key, model in subtables.items():
+                lines.extend(["", f"[{name}.{key}]", *_settings(model)])
+        elif entry is None:
             lines = [f"[{name}]", *_settings(table)]
         else:
             # No entry exists until the user names one, so even the header stays a comment.

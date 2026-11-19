@@ -18,6 +18,8 @@ Each table has a section headed ``## Table `<name>` ``, with a description and o
 | Values | the allowed values of an enumeration, otherwise empty |
 | Description | what the column holds |
 
+A view has a `## View` section in the same format. Its declaration supplies column types, nullability and references for the schema Command.
+
 A table with secondary indexes has a ``### Indexes`` table after its columns, with one row per index, in name order. The indexes SQLite makes for primary keys are not listed.
 
 | Heading | Meaning |
@@ -347,3 +349,49 @@ Filled from v0.2. The HTML of each Page of a Crawl started with HTML storage on;
 | `url_id` | INTEGER | no | PK, → `urls.id` | | | The Page whose HTML this is. |
 | `encoding` | TEXT | no | | | | The character encoding the Page was decoded with, as the lower-case Encoding Standard name that a browser's TextDecoder reports, such as windows-1251. |
 | `html` | BLOB | no | | | | The response body after content decoding, as one zstd frame. |
+
+## Table `rules`
+
+One row for each Rule in the catalogue, with its configuration at Crawl creation.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | TEXT | no | PK | | | The Rule id, as typed in linx rules show and openlinx.toml. |
+| `category` | TEXT | no | | | `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls`, `images` | The Rule's category. |
+| `issue_type` | TEXT | no | | | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues. |
+| `priority` | TEXT | no | | | `high`, `medium`, `low` | The Priority of the Rule's Issues. |
+| `applies_to` | TEXT | no | | | `internal_urls`, `internal_pages`, `resources` | The population the Rule is evaluated over. |
+| `enabled` | INTEGER | no | | `boolean` | | 1 when the Rule is enabled in the configuration recorded at Crawl creation. |
+| `thresholds` | TEXT | no | | `json` | | The effective thresholds as integer values. An empty object for a Rule without thresholds. |
+| `description` | TEXT | no | | | | What the Rule checks. |
+| `why_it_matters` | TEXT | no | | | | Why its Issues matter. |
+| `how_to_fix` | TEXT | no | | | | How to fix its Issues. |
+| `reproduce_sql` | TEXT | no | | | | The Rule's read-only SELECT over this Crawl, returning its Affected URLs as url_id and detail. |
+
+## Table `affected_urls`
+
+One row per Rule and Affected URL from the last post-crawl pass.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `rule_id` | TEXT | no | PK, → `rules.id` | | | The Rule that fired. |
+| `url_id` | INTEGER | no | PK, → `urls.id` | | | The Affected URL. |
+| `detail` | TEXT | yes | | `json` | | Measured values as an object with the keys listed for the Rule, or NULL when the Rule lists none. |
+
+### Indexes
+
+| Name | Columns | Unique | Where | Description |
+|---|---|---|---|---|
+| `affected_urls_url_id` | `url_id` | no | | The Issues of one URL and the Health Score's count of affected Pages. |
+
+## View `issues`
+
+One row per Rule with at least one Affected URL in the last post-crawl pass.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `rule_id` | TEXT | no | → `rules.id` | | | The Rule that fired. |
+| `category` | TEXT | no | | | `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls`, `images` | The Rule's category. |
+| `issue_type` | TEXT | no | | | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues. |
+| `priority` | TEXT | no | | | `high`, `medium`, `low` | The Priority of the Rule's Issues. |
+| `affected_count` | INTEGER | no | | | | The number of the Rule's rows in affected_urls. |

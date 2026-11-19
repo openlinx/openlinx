@@ -64,6 +64,7 @@ does not add it to the direct test seams.
 | `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API (including Writer [connection](../tests/store/writer/test_connections.py) and [unit result](../tests/store/writer/test_unit_results.py) tests); 4, the store's pure logic, such as crawl ids |
 | `tests/output/` | 4, the output layer's pure logic |
 | `tests/crawl/` | 4, the crawler's pure logic, such as URL normalisation; 3 and 3+6, Crawls of the fixture site; 2, the Crawl Service, and its reporter, the warning log (`test_warning_log.py`) |
+| `tests/rules/` | 2, Rule evaluation on a real Crawl of the fixture site; 3+6, Crawls of the fixture site read through the Rule tables |
 | `tests/extract/` | 4, the Page extractor and the Page handler; 3+6, Crawls of the fixture site read through the Page data tables |
 | `tests/contract/` | 6, the store contract (`test_schema.py`, which reads `docs/schema.md` with `openlinx.services.schema_doc.parse_tables`), and the hand-written expected JSON of the CLI contract tests (`commands/`) |
 | `tests/js/` | 9, the Report script |
@@ -99,6 +100,7 @@ Never replace our own modules or our own CLI with a double. Installer tests use 
 ## Rules
 
 - **Test behaviour through public interfaces.** A test must survive a refactor that doesn't change behaviour.
+- Where the contract specifies a message's meaning, verify that the test accepts equivalent wording and rejects the opposite claim, and check exact wording only when the contract promises it.
 - **Use expected values from the spec** as literals. Never recompute them the way the code does. Contract tests compare against hand-written expected JSON; never auto-accept a snapshot.
 - **Mock only system boundaries:** the network outside the fixture site, the clock, randomness and, occasionally, the file system. Never mock our own modules. The Fetcher interface and an injectable clock exist so that scheduler and politeness tests can be deterministic.
 - **One logical assertion per test,** with a name that says *what* happens, not *how*.

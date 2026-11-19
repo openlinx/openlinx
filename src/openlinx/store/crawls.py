@@ -4,10 +4,12 @@ import platform
 import sqlite3
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import msgspec
 import orjson
 from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import DBAPIError
@@ -28,7 +30,7 @@ from openlinx.store.records import (
     RecordedScope,
     StopReason,
 )
-from openlinx.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
+from openlinx.store.schema import SCHEMA_VERSION, crawl, metadata, rules, seeds
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import requeue_for_a_continue
 from openlinx.workspace.creation import as_workspace_not_writable, create_data_folder
@@ -113,8 +115,8 @@ def read_recorded(path: Path) -> RecordedCrawl:
         return RecordedCrawl(
             state=row.state,
             crawl_mode=row.crawl_mode,
-            # The Json type writes JSON text and reads it back as written.
-            config=orjson.loads(row.config),
+            # JSON integers outside 64 bits must survive replay as integers.
+            config=msgspec.json.decode(row.config, type=dict[str, Any]),
             scope=orjson.loads(row.scope),
             seeds=tuple(urls),
             warnings=tuple(orjson.loads(row.warnings)),
@@ -220,6 +222,8 @@ def _write_new_file(
                 for position, url in enumerate(request.seeds, start=1)
             ],
         )
+        if request.rules:
+            connection.execute(insert(rules), [asdict(rule) for rule in request.rules])
 
 
 @contextmanager

@@ -12,7 +12,7 @@ Every Rule SHALL have these fields:
 - `issue_type`: `issue`, `warning` or `opportunity`
 - `priority`: `high`, `medium` or `low`
 - `applies_to`: `internal_urls`, `internal_pages` or `resources`
-- `thresholds`: zero or more named, non-negative integer thresholds, each with a default and a unit
+- `thresholds`: zero or more named, non-negative integer thresholds of at most 4300 decimal digits, each with a default and a unit
 - `description`, `why_it_matters` and `how_to_fix`: non-empty English guidance texts
 - `reproduce_sql`: the Rule's reproducing query, which is how the Rule is evaluated (see "Rules are SQL queries")
 
@@ -22,7 +22,7 @@ In the scenarios, `{site}` is the origin of the local fixture site.
 
 #### Scenario: Rule ids are unique kebab-case
 - **WHEN** `linx rules list --limit 50` runs
-- **THEN** all 42 `id` values match `^[a-z0-9]+(-[a-z0-9]+)*$` and no value appears twice
+- **THEN** all returned `id` values match `^[a-z0-9]+(-[a-z0-9]+)*$` and no value appears twice
 
 #### Scenario: Every Rule has its guidance
 - **WHEN** `linx rules list --limit 50` runs
@@ -50,10 +50,14 @@ A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). 
 - **THEN** `title-missing` and `h1-missing` have no Affected URL for it
 
 ### Requirement: The v0.1 catalogue
-The Rule catalogue SHALL contain exactly the 42 Rules defined in the category requirements below, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
+In v0.1 exactly the 15 Rules listed in [The v0.1 Rules](../../../../../ROADMAP.md#the-v01-rules) SHALL have runnable evaluation queries. The category requirements below define all 42 planned Rules. Each Rule SHALL have the Issue Type, Priority, population, default thresholds, condition and `detail` keys specified there for its release. Evaluation scenarios for a deferred Rule apply when it ships. Work on the remaining 27 is the first Rules priority after v0.1, within the existing ROADMAP milestones. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
 
 #### Scenario: Catalogue size
 - **WHEN** `linx rules list --limit 50` runs in a Workspace without `[rules]` settings
+- **THEN** every one of the 15 v0.1 Rule ids in the ROADMAP appears in the catalogue, and every listed Rule has `enabled` true
+
+#### Scenario: Full catalogue size after v0.1
+- **WHEN** the remaining 27 Rules have shipped and `linx rules list --limit 50` runs in a Workspace without `[rules]` settings
 - **THEN** `total` is 42 and every item has `enabled` true
 
 ### Requirement: Response code Rules
@@ -142,7 +146,7 @@ The `titles` category SHALL contain these Rules, all over `internal_pages`:
 
 In v0.1, `title-too-long` checks characters only. `030-add-page-data` fills `title_1_width_px` from v0.2, and the Rule's `max_pixels` threshold and its `width_px` detail key arrive with it, so v0.1 shows no threshold that cannot fire.
 
-#### Scenario: Missing title
+#### Scenario: Missing title produces an Affected URL
 - **WHEN** an analysed Page has `title_count` 0
 - **THEN** `title-missing` fires for it
 
@@ -461,7 +465,7 @@ The `images` category SHALL contain these Rules:
 A table `[rules.<id>]` in the Workspace's `openlinx.toml` SHALL be able to set:
 
 - `enabled = false` to disable that Rule
-- any of the Rule's thresholds, by name, to a non-negative integer that replaces the default
+- any of the Rule's thresholds, by name, to a non-negative integer that replaces the default. Its value SHALL be less than 10^4300, in every supported TOML integer base and with or without digit separators
 
 The table name is the Rule id itself. These settings mirror no flag, so `010-add-workspace-and-cli-contract`'s flag-mirroring rule for keys does not apply to them. A disabled Rule SHALL NOT be evaluated and SHALL produce no Issue.
 
@@ -470,19 +474,25 @@ The table name is the Rule id itself. These settings mirror no flag, so `010-add
 - **THEN** `title-too-long` has no Affected URL for it
 
 #### Scenario: Disabled Rule produces no Issue
-- **WHEN** `openlinx.toml` has `[rules.h2-missing]` with `enabled = false`, and a Crawl of the fixture site with Pages without `<h2>` ends as `completed`
-- **THEN** `issues` holds no row for `h2-missing`
+- **WHEN** `openlinx.toml` has `[rules.title-missing]` with `enabled = false`, and a Crawl of the fixture site with Pages without `<title>` ends as `completed`
+- **THEN** `issues` holds no row for `title-missing`
+
+The post-release counterpart disables `h2-missing` in a Crawl with Pages without `<h2>`.
 
 #### Scenario: Override shown by the rules Command
 - **WHEN** `openlinx.toml` has `[rules.title-too-long]` with `max_chars = 70` and `linx rules show title-too-long` runs
 - **THEN** its output has `thresholds.max_chars` equal to `{"value": 70, "default": 60, "unit": "characters"}`
+
+#### Scenario: Largest supported threshold
+- **WHEN** `rules.title-too-long.max_chars` in `openlinx.toml` is 10^4300 − 1 (4300 nines), written as a decimal or hexadecimal TOML integer, and `linx rules show title-too-long` runs
+- **THEN** it exits 0 and `thresholds.max_chars.value` is that exact JSON integer
 
 ### Requirement: Invalid Rule configuration is rejected
 Any Command that loads the Workspace's `openlinx.toml` SHALL fail with the settings error of `010-add-workspace-and-cli-contract` (exit code 3, error code `settings_invalid`), which is checked when the settings load. It SHALL do so in any of these cases:
 
 - `[rules]` names an unknown Rule id
 - a Rule table has a key other than `enabled` or one of that Rule's threshold names
-- a threshold is not a non-negative integer
+- a threshold is not a non-negative integer, or its value is at least 10^4300
 - `enabled` is not a boolean
 
 Each problem's `details.errors[].key` SHALL be the dotted key, for example `rules.title-to-long`, and the hint SHALL name the closest known Rule id or key when there is one. `linx crawl` SHALL fail before any URL is requested.
@@ -495,12 +505,17 @@ Each problem's `details.errors[].key` SHALL be the dotted key, for example `rule
 - **WHEN** `openlinx.toml` has `[rules.low-word-count]` with `min_words = -5` and `linx crawl {site}/` runs
 - **THEN** the exit code is 3, `details.errors[0].key` is `"rules.low-word-count.min_words"`, and the fixture site receives 0 requests
 
+#### Scenario: First threshold above the limit
+- **WHEN** `rules.title-too-long.max_chars` in `openlinx.toml` is 10^4300 (1 followed by 4300 zeros), written as a decimal or hexadecimal TOML integer, and a Command reads that Workspace
+- **THEN** it exits 3 with `settings_invalid`, `details.file` is the absolute settings path, and the problem in `details.errors` has key `rules.title-too-long.max_chars` and a message explaining the maximum of 4300 decimal digits
+- **AND** when the Command is `linx crawl {site}/`, the fixture site receives 0 requests
+
 #### Scenario: Unknown key
 - **WHEN** `openlinx.toml` has `[rules.h2-missing]` with `max_chars = 10` and `linx rules list` runs
 - **THEN** the exit code is 3 and `details.errors[0].key` is `"rules.h2-missing.max_chars"`
 
 ### Requirement: Rule configuration is fixed per Crawl
-When a Crawl starts, it SHALL resolve every Rule's enabled state and effective thresholds and write them to its `rules` table, in the same transaction that creates the `crawl` row. The table follows the conventions of `018-add-schema-conventions` (ADR-0005): it is `STRICT` and `WITHOUT ROWID`, keyed by the Rule id. It holds one row per catalogue Rule, with these columns:
+When a Crawl starts, it SHALL resolve every Rule's enabled state and effective thresholds and write them to its `rules` table, in the same transaction that creates the `crawl` row. The table follows the conventions of `018-add-schema-conventions` (ADR-0005): it is an ordinary `STRICT` rowid table with the TEXT Rule id as its primary key. It holds one row per catalogue Rule, with these columns:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
@@ -509,7 +524,7 @@ When a Crawl starts, it SHALL resolve every Rule's enabled state and effective t
 | `issue_type` | TEXT | no | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues |
 | `priority` | TEXT | no | `high`, `medium`, `low` | The Priority of the Rule's Issues |
 | `applies_to` | TEXT | no | `internal_urls`, `internal_pages`, `resources` | The population the Rule is evaluated over |
-| `enabled` | INTEGER | no | boolean | 1 when the Rule was evaluated in this Crawl |
+| `enabled` | INTEGER | no | boolean | 1 when the Rule is enabled in the configuration recorded at Crawl creation |
 | `thresholds` | TEXT | no | json | The effective thresholds, as an object of names to integers; `{}` for a Rule without thresholds |
 | `description` | TEXT | no | | What the Rule checks |
 | `why_it_matters` | TEXT | no | | Why its Issues matter |
@@ -523,16 +538,22 @@ The Crawl SHALL use this configuration throughout, including after `resume`. Edi
 - **THEN** the columns with `primary_key` true are `id` of `rules`, with the type `TEXT`, and `rule_id` and `url_id` of `affected_urls`, whose `references` are `rules.id` and `urls.id`
 
 #### Scenario: Crawl records the thresholds it used
-- **WHEN** a Crawl runs with `[rules.low-word-count]` `min_words = 300`
-- **THEN** its `rules` row for `low-word-count` has `thresholds` `{"min_words": 300}`
+- **WHEN** a Crawl starts with `[rules.title-too-long]` `max_chars = 70`
+- **THEN** its `rules` row for `title-too-long` has `thresholds` `{"max_chars": 70}`
+
+The post-release counterpart records `{"min_words": 300}` for `low-word-count`.
 
 #### Scenario: Later edits do not change a completed Crawl
-- **WHEN** a Crawl ended as `completed` with the default `min_words` and `openlinx.toml` then sets `min_words = 5000`
-- **THEN** that Crawl's `issues` and `affected_urls` rows for `low-word-count` are unchanged
+- **WHEN** a Crawl completed with an 80-character title and the default `title-too-long.max_chars` of 60, and the Workspace then sets `max_chars = 100` for that Rule
+- **THEN** that Crawl's `issues` and `affected_urls` rows for `title-too-long` are unchanged, including the Affected URL with the 80-character title
+
+The post-release counterpart changes `low-word-count.min_words` from its default to 5000 after completion and retains the recorded results.
 
 #### Scenario: Resumed Crawl keeps the recorded configuration
-- **WHEN** a Crawl started with `min_words = 300` stops at its `--max-urls` limit, `openlinx.toml` is changed to `min_words = 50`, and the Crawl is resumed through the Crawl Service with a higher limit
-- **THEN** an Indexable Page with `word_count` 120 written after the resume is an Affected URL of `low-word-count`
+- **WHEN** a Crawl started with `title-too-long.max_chars` set to 70 stops at its `--max-urls` limit, the Workspace raises the threshold to 100, and the Crawl is resumed through the Crawl Service with a higher URL limit
+- **THEN** a Page with an 80-character title written after the resume is an Affected URL of `title-too-long`
+
+The post-release counterpart starts with `low-word-count.min_words` set to 300, changes it to 50, and still flags an Indexable Page with `word_count` 120 after resume.
 
 ### Requirement: Rules are SQL queries
 Every Rule SHALL have a reproducing query and SHALL be evaluated only by it. The query is one read-only SQL `SELECT` over the public schema that returns the Rule's Affected URLs in a crawl file, as the columns `url_id` and `detail`.
@@ -614,8 +635,10 @@ The Issues SHALL be a view `issues` over `rules` and `affected_urls`, with one r
 - **THEN** its `affected_urls` row for `title-too-long` has `detail` `{"length": 61}`
 
 #### Scenario: Rule that did not fire has no Issue
-- **WHEN** a Crawl ends as `completed` and no Page has more than one `<title>`
-- **THEN** `issues` holds no row for `title-multiple`
+- **WHEN** a Crawl ends as `completed` and every analysed Page has a non-empty first title (`title_1`)
+- **THEN** `issues` holds no row for `title-missing`
+
+The post-release counterpart has no `title-multiple` Issue when no Page has more than one `<title>`.
 
 #### Scenario: Issues is a view
 - **WHEN** `linx schema issues --fields name,kind` runs
@@ -685,7 +708,13 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** `health_score` is 75
 
 ### Requirement: List Rules
-`linx rules` and `linx rules list` SHALL print the Rules as configured in the current Workspace, without reading any Crawl. The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
+**In short:** `linx rules list` pages through the Workspace's Rule catalogue. Bare `linx rules` runs the same Command.
+
+`linx rules list` SHALL print the Rules as configured in the current Workspace without reading any Crawl. `linx rules` with no arguments SHALL run `linx rules list`, and `linx rules --help` SHALL show group help.
+
+Any other option given after `linx rules` and before the Command name SHALL fail with `usage_error` (exit code 2). The hint SHALL place a Command option after the full Command name, defaulting to `linx rules list` when no Command is named. The hint for a root option SHALL place it before the group name, as in `linx --version`.
+
+The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
 
 - `id`, `category`, `issue_type`, `priority`, `applies_to` and `enabled`
 - `thresholds`: an object that maps each threshold name to `{value, default, unit}`, where the unit is `characters`, `pixels`, `words`, `kilobytes` or `hops`

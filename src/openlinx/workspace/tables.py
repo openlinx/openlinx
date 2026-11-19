@@ -2,14 +2,16 @@
 
 import importlib
 import math
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, Any, Literal, cast, get_args, get_origin
 
 if TYPE_CHECKING:
     # Only for typing: pydantic must stay off the CLI's startup path.
     from pydantic import BaseModel
+    from pydantic.fields import FieldInfo
 
 type SecretPolicy = bool | Literal["whole", "header", "url", "proxy"]
+type SecretSettings = Mapping[str, SecretPolicy | SecretSettings]
 
 
 # A table model, or a keyed table: dict[str, V] whose V is a table model.
@@ -35,23 +37,44 @@ class SettingsTables:
     def secret_policy(self, setting: str) -> SecretPolicy:
         name, _, key = setting.partition(".")
         model: Any = _resolve(self._references[name])
-        extra = model.model_fields[key].json_schema_extra
-        policy = extra.get("secret", False) if isinstance(extra, dict) else False
-        if isinstance(policy, bool) or policy in ("whole", "header", "url", "proxy"):
-            return cast(SecretPolicy, policy)
-        raise TypeError(f"Setting {setting} has an invalid secret policy.")
+        return _secret_policy(model.model_fields[key], setting)
 
     def is_secret(self, setting: str) -> bool:
         return bool(self.secret_policy(setting))
 
-    def secret_settings(self) -> dict[str, SecretPolicy]:
+    def secret_settings(self) -> dict[str, SecretSettings]:
+        """Policies at the paths emitted by the settings model's default JSON dump."""
         return {
-            f"{name}.{key}": policy
+            name: policies
             for name, table in self.items()
             if keyed_entry(table) is None
-            for key in cast(Any, table).model_fields
-            if (policy := self.secret_policy(f"{name}.{key}"))
+            if (policies := _recording_policies(name, cast("type[BaseModel]", table)))
         }
+
+
+def _secret_policy(field: "FieldInfo", setting: str) -> SecretPolicy:
+    extra = field.json_schema_extra
+    policy = extra.get("secret", False) if isinstance(extra, dict) else False
+    if isinstance(policy, bool) or policy in ("whole", "header", "url", "proxy"):
+        return cast(SecretPolicy, policy)
+    raise TypeError(f"Setting {setting} has an invalid secret policy.")
+
+
+def _recording_policies(prefix: str, model: "type[BaseModel]") -> SecretSettings:
+    by_alias = model.model_config.get("serialize_by_alias", False)
+    fixed = named_tables(model) is not None
+    policies: dict[str, SecretPolicy | SecretSettings] = {}
+    for key, field in model.model_fields.items():
+        alias = field.serialization_alias
+        name = alias if by_alias and alias is not None else key
+        path = f"{prefix}.{name}"
+        if policy := _secret_policy(field, path):
+            policies[name] = policy
+        elif fixed:
+            children = _recording_policies(path, cast("type[BaseModel]", field.annotation))
+            if children:
+                policies[name] = children
+    return policies
 
 
 def _resolve(reference: str) -> Table:
@@ -70,11 +93,28 @@ def keyed_entry(table: Any) -> Any:
     return entry
 
 
+def named_tables(table: Table) -> dict[str, Any] | None:
+    """The subtable models by TOML name when the settings model consists of named tables."""
+    fields = getattr(table, "model_fields", None)
+    if not fields or not all(
+        isinstance(field.annotation, type) and hasattr(field.annotation, "model_fields")
+        for field in fields.values()
+    ):
+        return None
+    return {field.alias or key: field.annotation for key, field in fields.items()}
+
+
 def check_table(name: str, table: Table) -> None:
-    """Require flat, described settings with TOML defaults so templates and error hints can
-    use every table; keyed tables also need an entry docstring."""
+    """Require described settings with TOML defaults and a description for nested tables."""
     entry = keyed_entry(table)
-    if entry is None:
+    subtables = named_tables(table)
+    if subtables is not None:
+        _check_extra(name, table)
+        if not table.__doc__ or "\n" in table.__doc__:
+            raise TypeError(f"Settings table [{name}] needs a one-line docstring.")
+        for key, model in subtables.items():
+            _check_model(f"{name}.{key}", model)
+    elif entry is None:
         _check_model(name, table)
     else:
         # Literal entries (`<name> = <value>`) have no docstring to describe the table in the
@@ -91,13 +131,17 @@ def check_table(name: str, table: Table) -> None:
 def _check_model(name: str, model: Any) -> None:
     # The template and the error hints rely on flat tables whose keys all have a
     # one-line description and a default that is a TOML literal, or None for unset.
-    if getattr(model, "model_config", {}).get("extra") != "forbid":
-        raise TypeError(f'Settings table [{name}] must set extra="forbid".')
+    _check_extra(name, model)
     for key, field in model.model_fields.items():
         if not field.description or "\n" in field.description:
             raise TypeError(f"Setting {name}.{key} needs a one-line description.")
         if field.default is not None and not _is_toml_literal(field.default):
             raise TypeError(f"Setting {name}.{key} needs a default TOML can write.")
+
+
+def _check_extra(name: str, model: Any) -> None:
+    if getattr(model, "model_config", {}).get("extra") != "forbid":
+        raise TypeError(f'Settings table [{name}] must set extra="forbid".')
 
 
 def _is_toml_literal(value: Any) -> bool:

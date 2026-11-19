@@ -19,7 +19,7 @@
   - its reproducing SQL query, which is how it is evaluated
   - thresholds with defaults
   - three guidance texts: `description`, `why_it_matters` and `how_to_fix`
-- **The v0.1 catalogue of 42 Rules** in 10 categories: `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls` and `images`.
+- **The full catalogue of 42 Rules** spans v0.1 (15 evaluated Rules) and v0.2 (the remaining 27), in 10 categories: `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls` and `images`.
   - The maintainer approved keeping all 42 Rules on 2026-09-27.
   - `http-url` is a Warning with High Priority, so it never lowers the Health Score.
   - Categories are snake_case enumeration values; Rule ids stay kebab-case.
@@ -75,5 +75,5 @@ _None._ No specs exist yet. This change builds on requirements of `010`, `015`, 
   - `070`: the Health Score, Issues, how-to-fix text, and the mapping from categories to Report Sections
   - `080`: the Skill's Rules reference, generated from `linx rules list`, and the cost of live Issues during a Crawl against materialised ones
   - `090`: the `rules` MCP tool
-- **Code:** `src/openlinx/rules/` (registry, Rule modules with their queries, thresholds, Health Score), `src/openlinx/cli/rules.py`, `openlinx.store.issues` (the tables, the view, the Issues reader and the post-crawl pass), `docs/schema.md`, `docs/rules.md`, and the pass's entry in `020`'s `default_hooks()`.
+- **Code:** `src/openlinx/rules/` (registry, Rule modules with their queries, thresholds, Health Score), `src/openlinx/cli/rules.py`, `openlinx.store.schema` (the tables and view), `openlinx.store.issues` (the Issues reader and post-crawl pass), `docs/schema.md`, `docs/rules.md`, and the pass's entry in `020`'s `default_hooks()`.
 - **Dependencies:** none new.

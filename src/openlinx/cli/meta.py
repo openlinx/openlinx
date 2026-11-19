@@ -34,6 +34,16 @@ class CommandMeta:
     examples: tuple[Example, ...]
 
 
+@dataclass(frozen=True, kw_only=True)
+class CommandGroup:
+    """A group of Commands whose metadata names include the group name."""
+
+    name: str
+    summary: str
+    commands: tuple[Callable[..., Any], ...]
+    default: Callable[..., Any]
+
+
 @runtime_checkable
 class CommandWithMeta[**P](Protocol):
     command_meta: CommandMeta
@@ -133,6 +143,24 @@ def check_command(command: Callable[..., Any]) -> CommandMeta:
     if problems:
         raise TypeError(f"Command {command.__name__}: {'; '.join(problems)}.")
     return meta
+
+
+def check_group(group: CommandGroup) -> dict[Callable[..., Any], str]:
+    """Validate the group and return each Command's name below it."""
+    names = {}
+    taken: set[str] = set()
+    for command in group.commands:
+        path = check_command(command).name
+        parent, _, name = path.rpartition(" ")
+        if parent != group.name or not name:
+            raise TypeError(f"Command {command.__name__} is not named under {group.name}.")
+        if path in taken:
+            raise TypeError(f"Two Commands are named {path}.")
+        taken.add(path)
+        names[command] = name
+    if group.default not in names:
+        raise TypeError(f"The default of group {group.name} is not one of its Commands.")
+    return names
 
 
 def _secret_problems(command: Callable[..., Any], names: Iterable[str]) -> list[str]:
