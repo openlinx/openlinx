@@ -1,7 +1,7 @@
 """Verify requests identify the tool over HTTP."""
 
 import json
-import re
+from importlib.metadata import version
 
 import pytest
 
@@ -29,17 +29,15 @@ def test_the_default_user_agent_identifies_the_tool(
 
     crawled(server.url("/"))
 
-    agents = {request.path: request.headers.get("User-Agent", "") for request in server.requests}
-    assert sorted(agents) == ["/", "/robots.txt", "/shoes"]
-    assert [
-        path
-        for path, agent in agents.items()
-        if not re.fullmatch(
-            r"OpenLinx/\d+\.\d+\.\d+\S* "
-            r"\(\+https://github\.com/openlinx/openlinx/blob/main/docs/crawler\.md\)",
-            agent,
-        )
-    ] == []
+    expected = (
+        f"OpenLinx/{version('openlinx')} "
+        "(+https://github.com/openlinx/openlinx/blob/main/docs/crawler.md)"
+    )
+    assert sorted((r.path, r.headers.get("User-Agent")) for r in server.requests) == [
+        ("/", expected),
+        ("/robots.txt", expected),
+        ("/shoes", expected),
+    ]
 
 
 def test_a_custom_user_agent_is_used_on_every_request(

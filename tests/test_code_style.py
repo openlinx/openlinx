@@ -1162,14 +1162,15 @@ def url_insert_violations(sources: Mapping[str, str]) -> list[str]:
             ):
                 statements.add(node.targets[0].id)
         for call, function in _calls_in_functions(tree):
-            if (
-                _base_name(call.func) == "execute"
-                and call.args
-                and isinstance(call.args[0], ast.Name)
-                and call.args[0].id in statements
-                and function != "insert_urls"
-            ):
-                found.append(f"{path}:{call.lineno} runs {call.args[0].id} outside insert_urls")
+            if _base_name(call.func) != "execute" or not call.args or function == "insert_urls":
+                continue
+            statement = call.args[0]
+            if isinstance(statement, ast.Name) and statement.id in statements:
+                found.append(f"{path}:{call.lineno} runs {statement.id} outside insert_urls")
+            elif _inserts_into_urls(statement):
+                found.append(
+                    f"{path}:{call.lineno} runs an inline insert into urls outside insert_urls"
+                )
     return found
 
 
@@ -1184,14 +1185,18 @@ def test_an_insert_into_urls_outside_insert_urls_is_named() -> None:
             "_INSERT_URL = _INSERT.on_conflict_do_nothing(index_elements=[urls.c.url])\n"
             "def insert_urls(connection, statement, rows):\n"
             "    connection.execute(statement, rows)\n"
+            "    connection.execute(insert(urls).values(origin_id=ORIGIN_ID), rows)\n"
             "def record_seed(connection, row):\n"
             "    connection.execute(_INSERT_URL, row)\n"
+            "    def unit(connection):\n"
+            "        connection.execute(insert(urls).values(origin_id=ORIGIN_ID), [row])\n"
         ),
         "openlinx/store/links.py": "_LINK_TARGET = insert(urls)\n",
     }
 
     assert url_insert_violations(sources) == [
-        "openlinx/store/urls.py:6 runs _INSERT_URL outside insert_urls",
+        "openlinx/store/urls.py:7 runs _INSERT_URL outside insert_urls",
+        "openlinx/store/urls.py:9 runs an inline insert into urls outside insert_urls",
         "openlinx/store/links.py inserts into urls",
     ]
 
@@ -1381,7 +1386,12 @@ def fake_clock_with_real_io(sources: Mapping[str, str]) -> list[str]:
             unfaked_crawl = any(
                 _called(call) in CRAWLS
                 and not any(
-                    keyword.arg == "fetcher"
+                    (
+                        keyword.arg == "fetcher"
+                        and not (
+                            isinstance(keyword.value, ast.Constant) and keyword.value.value is None
+                        )
+                    )
                     or (keyword.arg == "fetchers" and _is_fake_fetcher_factory(keyword.value))
                     for keyword in call.keywords
                 )
@@ -1414,6 +1424,8 @@ def test_no_test_pairs_the_virtual_clock_with_real_io() -> None:
     [
         "start_crawl(plan, clock, reporter, hooks",
         "continue_crawl(file, overrides, clock, reporter, hooks",
+        pytest.param("crawl_result(seed, clock=clock, fetcher=None", id="start-with-none"),
+        pytest.param("continued(result, clock=clock, fetcher=None", id="continue-with-none"),
     ],
 )
 def test_a_virtual_clock_with_an_explicit_fake_fetcher_factory_is_allowed(crawl: str) -> None:
@@ -1447,6 +1459,22 @@ def test_a_virtual_clock_with_an_unproven_fetcher_factory_is_named(factory: str)
 
     assert fake_clock_with_real_io(sources) == [
         "tests/crawl/test_timing.py:1 test_factory pairs FakeClock with real I/O"
+    ]
+
+
+@pytest.mark.parametrize(
+    "crawl",
+    ["crawl_result(seed", "continued(result"],
+    ids=["start", "continue"],
+)
+def test_a_virtual_clock_with_an_explicit_default_fetcher_is_named(crawl: str) -> None:
+    sources = {
+        "tests/crawl/test_timing.py": "def test_default_fetcher():\n"
+        f"    {crawl}, clock=FakeClock(), fetcher=None)\n",
+    }
+
+    assert fake_clock_with_real_io(sources) == [
+        "tests/crawl/test_timing.py:1 test_default_fetcher pairs FakeClock with real I/O"
     ]
 
 
