@@ -15,7 +15,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 1. Rule model and the rules Command (slice)
 
-- [ ] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts and a query that returns no rows until task 4.1, and `linx rules list` on `010`'s output contract.
+- [x] 1.1 Drive "First Rule in the list" and "Every Rule has its guidance" at seam 1. This is a trivial pair: both fail until the registry and the Command exist. Add the Rule model, the registry, `internal-4xx` with its guidance texts and a query that returns no rows until task 4.1, and `linx rules list` on `010`'s output contract.
 - [ ] 1.2 Drive "Show a Rule with thresholds" at seam 1. Register `title-too-long` with its thresholds and texts, and add `linx rules show <id>`.
 - [ ] 1.3 Drive "Rule without thresholds" at seam 1, and register `title-missing`.
 - [ ] 1.4 Drive "Unknown Rule id" at seam 1: `rule_not_found`, exit code 4, and a hint naming `linx rules list`.

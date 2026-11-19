@@ -91,6 +91,21 @@ type LinkElement = Literal[
     "script",
 ]
 type LinkAttribute = Literal["href", "src", "srcset", "poster", "data", "content"]
+type RuleCategory = Literal[
+    "response_codes",
+    "security",
+    "titles",
+    "meta_descriptions",
+    "headings",
+    "canonicals",
+    "directives",
+    "content",
+    "urls",
+    "images",
+]
+type IssueType = Literal["issue", "warning", "opportunity"]
+type Priority = Literal["high", "medium", "low"]
+type AppliesTo = Literal["internal_urls", "internal_pages", "resources"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
