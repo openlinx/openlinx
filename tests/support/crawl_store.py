@@ -15,7 +15,15 @@ from openlinx.store.issues import affected_urls_unit
 from openlinx.store.links import inlink_counts, inlink_ranges, pages_with_status_200, write_links
 from openlinx.store.page_records import PageRow
 from openlinx.store.pages import write_pages
-from openlinx.store.records import FetchedUrl, IssueType, NewUrl, Priority, Provenance, RuleRow
+from openlinx.store.records import (
+    FetchedUrl,
+    IssueType,
+    JournalSetting,
+    NewUrl,
+    Priority,
+    Provenance,
+    RuleRow,
+)
 from openlinx.store.rows import HandlerRows
 from openlinx.store.urls import queued_batch, record_fetched, record_seed
 from openlinx.store.writer import CrawlWriter
@@ -81,6 +89,7 @@ def crawl_store(
     *,
     pages: Mapping[str, str] | None = None,
     completed: bool = True,
+    journal_setting: JournalSetting = "wal",
     example_issues: tuple[IssueExample, ...] = _ORDERED_ISSUES,
 ) -> Path:
     """Record linked HTML Pages with the installed Rules, completing the Crawl by default.
@@ -90,7 +99,9 @@ def crawl_store(
     responses: Mapping[str, str | None]
     if pages is None:
         rules, snapshots = _rules(example_issues)
-        crawl_file = create_any_crawl(temp_workspace, rules=snapshots, journal_setting="wal")
+        crawl_file = create_any_crawl(
+            temp_workspace, rules=snapshots, journal_setting=journal_setting
+        )
         responses = {
             f"https://example.com/{rule_id}/{index}": None
             for rule_id, _, _, count in example_issues
@@ -98,7 +109,7 @@ def crawl_store(
         }
     else:
         rules = RULES
-        crawl_file = create_any_crawl(temp_workspace, journal_setting="wal")
+        crawl_file = create_any_crawl(temp_workspace, journal_setting=journal_setting)
         responses = pages
 
     root = NormalizedUrl("https://example.com/")
