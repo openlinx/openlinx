@@ -27,6 +27,13 @@ PriorityOpt = Annotated[
         help="Only these Priorities: high, medium or low. Comma-separated or repeated.",
     ),
 ]
+CategoryOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--category",
+        help="Only these Rule categories. Comma-separated or repeated.",
+    ),
+]
 
 
 @command_meta(
@@ -44,6 +51,7 @@ PriorityOpt = Annotated[
 def issues(
     issue_types: TypeOpt = None,
     priorities: PriorityOpt = None,
+    categories: CategoryOpt = None,
     workspace_dir: WorkspaceOpt = None,
     crawl: CrawlOpt = LATEST,
     output_format: FormatOpt = Format.JSON,
@@ -56,6 +64,7 @@ def issues(
         QueryRequest(cwd=Path.cwd(), home=Path.home(), workspace=workspace_dir, crawl=crawl),
         issue_types=issue_types or (),
         priorities=priorities or (),
+        categories=categories or (),
         limit=limit,
         cursor=cursor,
         fields=fields,

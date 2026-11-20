@@ -8,7 +8,7 @@ from typing import get_args
 from openlinx.output.codes import INVALID_VALUE
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.paging import Fields, Page, decode_cursor, fingerprint, paginate, select_fields
-from openlinx.store.records import LATEST, IssueType, Priority
+from openlinx.store.records import LATEST, IssueType, Priority, RuleCategory
 from openlinx.workspace.discovery import resolve_workspace
 
 ISSUES = "issues"
@@ -29,6 +29,7 @@ def issue_list(
     *,
     issue_types: Sequence[str] = (),
     priorities: Sequence[str] = (),
+    categories: Sequence[str] = (),
     limit: int = 50,
     cursor: str | None = None,
     fields: str | None = None,
@@ -42,14 +43,21 @@ def issue_list(
     chosen = select_fields(fields, ISSUE_FIELDS)
     types = _filter_values(issue_types, "--type", get_args(IssueType.__value__))
     priority = _filter_values(priorities, "--priority", get_args(Priority.__value__))
+    category = _filter_values(categories, "--category", get_args(RuleCategory.__value__))
     workspace = resolve_workspace(cwd=request.cwd, flag=request.workspace, home=request.home)
     crawl_file = resolve_crawl(request.crawl, workspace=workspace, cwd=request.cwd)
-    bound = fingerprint(ISSUES, {"crawl": crawl_file.id, "type": types, "priority": priority})
+    selection = {"crawl": crawl_file.id, "type": types, "priority": priority}
+    # Keep cursors issued before the category option for the same unfiltered category selection.
+    if category:
+        selection["category"] = category
+    bound = fingerprint(ISSUES, selection)
     # Check the cursor before a live read runs the enabled Rules.
     if cursor is not None:
         decode_cursor(cursor, bound)
     with reading(crawl_file.path, snapshot=True) as connection:
-        items = ordered_issues_in(connection, RULES, issue_types=types, priorities=priority)
+        items = ordered_issues_in(
+            connection, RULES, issue_types=types, priorities=priority, categories=category
+        )
     return paginate(items, limit=limit, cursor=cursor, fingerprint=bound, fields=chosen)
 
 
