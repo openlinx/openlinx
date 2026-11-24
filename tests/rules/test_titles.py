@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import update
 
 from openlinx.clock import SystemClock
+from openlinx.rules.headings import H1_MISSING
 from openlinx.rules.titles import TITLE_MISSING
 from openlinx.store.issues import evaluate_rule
 from openlinx.store.records import AffectedUrl
@@ -75,17 +76,23 @@ def test_non_analysed_pages_are_skipped_by_page_rules(fixture_site: StartSite) -
     expected = [AffectedUrl(url_id=analysed_id, detail=None)]
     assert evaluate_rule(file, TITLE_MISSING) == expected
 
-    # The Crawl leaves this measurement NULL. SQLite's constraints allow the fixture to
-    # set a zero count independently of urls.parsed and isolate the population filter.
+    # Unanalysed Pages normally have NULL counts. Setting both to zero exercises the
+    # parsed population filter independently of the missing-element predicate of each Rule.
     with CrawlWriter(file, SystemClock()) as writer:
         writer.run(
-            executing(update(pages).where(pages.c.url_id == unanalysed_id).values(title_count=0))
+            executing(
+                update(pages)
+                .where(pages.c.url_id == unanalysed_id)
+                .values(title_count=0, h1_count=0)
+            )
         )
 
     assert query(
         file,
-        "SELECT urls.parsed, pages.title_count FROM urls JOIN pages ON pages.url_id = urls.id "
+        "SELECT urls.parsed, pages.title_count, pages.h1_count FROM urls "
+        "JOIN pages ON pages.url_id = urls.id "
         "WHERE urls.id = ?",
         (unanalysed_id,),
-    ) == [(0, 0)]
+    ) == [(0, 0, 0)]
     assert evaluate_rule(file, TITLE_MISSING) == expected
+    assert evaluate_rule(file, H1_MISSING) == expected
