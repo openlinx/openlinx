@@ -394,7 +394,7 @@ def machine() -> dict[str, Any]:
 
 def measure(folder: Path, page_count: int) -> dict[str, Any]:
     workspace = resolve_workspace(cwd=folder, flag=folder, home=folder)
-    crawl = create_crawl(
+    with create_crawl(
         NewCrawl(
             workspace=workspace,
             crawl_mode="spider",
@@ -410,74 +410,74 @@ def measure(folder: Path, page_count: int) -> dict[str, Any]:
         ),
         SystemClock(),
         Collected(),
-    )
-    site = build_site(page_count)
-    pages = prepare_pages(page_count)
-    resolved_at = [0.0] * page_count
-    failed: set[int] = set()
+    ) as crawl:
+        site = build_site(page_count)
+        pages = prepare_pages(page_count)
+        resolved_at = [0.0] * page_count
+        failed: set[int] = set()
 
-    def resolved(page: Page, future: Future[None]) -> None:
-        resolved_at[page.url_id - 1] = time.perf_counter()
-        if future.exception() is not None:
-            failed.add(page.url_id)
+        def resolved(page: Page, future: Future[None]) -> None:
+            resolved_at[page.url_id - 1] = time.perf_counter()
+            if future.exception() is not None:
+                failed.add(page.url_id)
 
-    spawn = multiprocessing.get_context("spawn")
-    stop = spawn.Event()
-    reader_result = folder / "reader.json"
-    reader = spawn.Process(
-        target=read_while_written, args=(crawl.path, page_count, stop, reader_result)
-    )
-    try:
-        with CrawlWriter(crawl.path, SystemClock()) as writer:
-            writer.run(partial(seed_pages, site, page_count))
-            writer.flush()
-            reader.start()
-            with Peaks(crawl.path.with_name(crawl.path.name + "-wal")) as peaks:
-                started = time.perf_counter()
-                for page in pages:
-                    future: Future[None] = writer.submit(partial(write_page, site, page))
-                    future.add_done_callback(partial(resolved, page))
+        spawn = multiprocessing.get_context("spawn")
+        stop = spawn.Event()
+        reader_result = folder / "reader.json"
+        reader = spawn.Process(
+            target=read_while_written, args=(crawl.path, page_count, stop, reader_result)
+        )
+        try:
+            with CrawlWriter(crawl.path, SystemClock()) as writer:
+                writer.run(partial(seed_pages, site, page_count))
                 writer.flush()
-                elapsed = time.perf_counter() - started
-    # A writer that ends is a failure the check exists to report: a later call raises that the
-    # writer is closed, and a flush raises the failure itself.
-    except Exception as error:
-        cause = error.__cause__ if isinstance(error, CrawlWriterClosedError) else error
-        failure = f"{type(cause).__name__}: {cause}"
+                reader.start()
+                with Peaks(crawl.path.with_name(crawl.path.name + "-wal")) as peaks:
+                    started = time.perf_counter()
+                    for page in pages:
+                        future: Future[None] = writer.submit(partial(write_page, site, page))
+                        future.add_done_callback(partial(resolved, page))
+                    writer.flush()
+                    elapsed = time.perf_counter() - started
+        # A writer that ends is a failure the check exists to report: a later call raises that the
+        # writer is closed, and a flush raises the failure itself.
+        except Exception as error:
+            cause = error.__cause__ if isinstance(error, CrawlWriterClosedError) else error
+            failure = f"{type(cause).__name__}: {cause}"
+            return {
+                "machine": machine(),
+                "pages": page_count,
+                "run_failed": failure,
+                "below_floor": [f"the run failed: {failure}"],
+            }
+        finally:
+            stop.set()
+            if reader.pid is not None:
+                reader.join()
+        atomicity = check_atomicity(crawl.path, pages, failed)
+        reader_counts = (
+            json.loads(reader_result.read_text(encoding="utf-8")) if reader_result.exists() else {}
+        )
         return {
             "machine": machine(),
             "pages": page_count,
-            "run_failed": failure,
-            "below_floor": [f"the run failed: {failure}"],
+            "link_rows_per_page": LINK_ROWS_PER_PAGE,
+            "seconds": round(elapsed, 1),
+            "pages_per_s": round(page_count / elapsed, 1),
+            "pages_per_s_per_5k_window": window_rates(started, resolved_at),
+            "link_rows_per_s": round(atomicity["link_rows"] / elapsed),
+            "wal_peak_mib": round(peaks.wal_bytes / MIB, 1),
+            "rss_peak_mib": round(peaks.rss_bytes / MIB, 1),
+            "reader": {**reader_counts, "exit_code": reader.exitcode},
+            "atomicity": atomicity,
+            "below_floor": below_floor(
+                page_count / elapsed,
+                peaks,
+                # A reader that crashed leaves no counts, only its exit code.
+                reader.exitcode == 0 and reader_counts.get("reads", 0) > 0,
+                atomicity["ok"],
+            ),
         }
-    finally:
-        stop.set()
-        if reader.pid is not None:
-            reader.join()
-    atomicity = check_atomicity(crawl.path, pages, failed)
-    reader_counts = (
-        json.loads(reader_result.read_text(encoding="utf-8")) if reader_result.exists() else {}
-    )
-    return {
-        "machine": machine(),
-        "pages": page_count,
-        "link_rows_per_page": LINK_ROWS_PER_PAGE,
-        "seconds": round(elapsed, 1),
-        "pages_per_s": round(page_count / elapsed, 1),
-        "pages_per_s_per_5k_window": window_rates(started, resolved_at),
-        "link_rows_per_s": round(atomicity["link_rows"] / elapsed),
-        "wal_peak_mib": round(peaks.wal_bytes / MIB, 1),
-        "rss_peak_mib": round(peaks.rss_bytes / MIB, 1),
-        "reader": {**reader_counts, "exit_code": reader.exitcode},
-        "atomicity": atomicity,
-        "below_floor": below_floor(
-            page_count / elapsed,
-            peaks,
-            # A reader that crashed leaves no counts, only its exit code.
-            reader.exitcode == 0 and reader_counts.get("reads", 0) > 0,
-            atomicity["ok"],
-        ),
-    }
 
 
 def below_floor(pages_per_s: float, peaks: Peaks, reader_read: bool, atomic: bool) -> list[str]:

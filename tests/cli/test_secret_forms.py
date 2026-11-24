@@ -86,7 +86,8 @@ def test_declared_forms_reach_crawl_recording_from_option_and_setting_metadata(
         secret_flags=secret_flags(group.commands["forms"], group.settings_tables),
     )
     plan = plan_crawl(request, group.settings_tables)
-    crawl = create_crawl(plan.new_crawl, FakeClock(), Collected())
+    with create_crawl(plan.new_crawl, FakeClock(), Collected()) as crawl:
+        pass
     row = crawl_row(crawl.path)
 
     assert json.loads(row["config"])["forms"] == {
