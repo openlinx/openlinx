@@ -33,6 +33,23 @@ def test_a_rule_that_did_not_fire(temp_workspace: TempWorkspace) -> None:
     assert json.loads(encode_json(found.header))["rule"]["rule_id"] == "h1-missing"
 
 
+def test_thresholds_recorded_for_the_crawl(temp_workspace: TempWorkspace) -> None:
+    settings = RulesSettings.model_validate({"title-too-long": {"max_chars": 70}})
+    file = crawl_store(
+        temp_workspace,
+        pages={"https://example.com/a": "<title>Welcome</title>"},
+        rule_settings=settings.model_dump(),
+    )
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    request = QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home)
+
+    result = issue_detail(request, "title-too-long")
+
+    thresholds = result.header["rule"]["thresholds"]
+    assert thresholds == {"max_chars": 70}
+    assert type(thresholds["max_chars"]) is int
+
+
 def test_detail_pages_stored_urls_in_url_order(temp_workspace: TempWorkspace) -> None:
     file = crawl_store(
         temp_workspace,
