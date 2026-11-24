@@ -3,6 +3,7 @@
 import json
 import sqlite3
 from contextlib import closing
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -14,6 +15,7 @@ from openlinx.output.diagnostics import OpenLinxError
 from openlinx.rules.settings import RulesSettings
 from openlinx.services.query import QueryRequest, issue_detail
 from openlinx.services.rules import rule_rows
+from openlinx.store.crawls import record_state
 from openlinx.store.records import FetchedUrl, JournalSetting, Provenance
 from openlinx.store.urls import record_fetched, record_seed
 from openlinx.store.writer import CrawlWriter
@@ -48,6 +50,33 @@ def test_thresholds_recorded_for_the_crawl(temp_workspace: TempWorkspace) -> Non
     thresholds = result.header["rule"]["thresholds"]
     assert thresholds == {"max_chars": 70}
     assert type(thresholds["max_chars"]) is int
+
+
+def test_guidance_of_the_rule(temp_workspace: TempWorkspace) -> None:
+    installed = next(
+        row for row in rule_rows(RulesSettings().model_dump()) if row.id == "title-too-long"
+    )
+    historical = replace(
+        installed,
+        description="The first title exceeds this Crawl's character limit.",
+        why_it_matters="Search results can truncate a long title.",
+        how_to_fix="Keep the topic in the first 70 characters of the title.",
+        thresholds={"max_chars": 70},
+    )
+    assert historical.how_to_fix != installed.how_to_fix
+    file = create_any_crawl(temp_workspace, rules=(historical,)).path
+    with CrawlWriter(file, FakeClock()) as writer:
+        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=1)))
+    request = QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file))
+
+    result = issue_detail(request, "title-too-long")
+
+    header = result.header["rule"]
+    assert (header["description"], header["why_it_matters"], header["how_to_fix"]) == (
+        "The first title exceeds this Crawl's character limit.",
+        "Search results can truncate a long title.",
+        "Keep the topic in the first 70 characters of the title.",
+    )
 
 
 def test_detail_pages_stored_urls_in_url_order(temp_workspace: TempWorkspace) -> None:
