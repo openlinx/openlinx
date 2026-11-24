@@ -55,6 +55,19 @@ with open(sys.argv[1], "a+b") as file:
 """
 
 
+def _probe_claim(lock_file: Path) -> int:
+    command = python_command("-c", _PROBE, str(lock_file))
+    probe = subprocess.run(
+        command.argv,
+        env=command.env,
+        capture_output=True,
+        timeout=PROCESS_TIMEOUT,
+        check=False,
+    )
+    assert probe.returncode in (0, 10), probe.stderr
+    return probe.returncode
+
+
 @pytest.mark.slow
 def test_a_running_crawl_keeps_its_writer_claim(
     temp_workspace: TempWorkspace, fixture_site: StartSite
@@ -228,6 +241,42 @@ def test_a_failed_creation_releases_its_writer_claim(temp_workspace: TempWorkspa
     )
 
     assert probe.returncode == 0, probe.stderr
+
+
+@pytest.mark.slow
+def test_creation_holds_its_writer_claim_before_writing_the_schema(
+    temp_workspace: TempWorkspace,
+) -> None:
+    workspace = current_workspace(temp_workspace)
+    crawl_file = workspace.crawls_dir / "20260927-140312-k3f9.sqlite"
+    lock_file = crawl_file.with_suffix(".lock")
+    before_schema: list[tuple[bool, list[tuple[object, ...]], int]] = []
+
+    def before_create_table(
+        _connection: object, _cursor: object, statement: str, *_: object
+    ) -> None:
+        if before_schema or not statement.lstrip().upper().startswith("CREATE TABLE "):
+            return
+        tables = query(crawl_file, "SELECT name FROM sqlite_schema WHERE type = 'table'")
+        lock_exists = lock_file.is_file()
+        # The first DDL cannot run until the other process has tried to take the claim.
+        before_schema.append((lock_exists, tables, _probe_claim(lock_file)))
+
+    event.listen(Engine, "before_cursor_execute", before_create_table)
+    try:
+        with create_crawl(
+            new_crawl(workspace),
+            FakeClock(start=STARTED_AT),
+            Collected(),
+            scripted_choice("k3f9"),
+        ) as created:
+            assert created.path == crawl_file
+    finally:
+        event.remove(Engine, "before_cursor_execute", before_create_table)
+
+    assert before_schema == [(True, [], 10)]
+    assert query(crawl_file, "SELECT id, state FROM crawl") == [("20260927-140312-k3f9", "running")]
+    assert query(crawl_file, "SELECT position, url FROM seeds") == [(1, "https://example.com/")]
 
 
 @pytest.mark.slow
