@@ -1,5 +1,6 @@
-"""Verify the fetch outcome and Page data recorded for every URL on the synthetic site."""
+"""Account for the URLs and disk space of a synthetic Crawl."""
 
+from contextlib import suppress
 from pathlib import Path
 
 from openlinx.store.reading import reading
@@ -79,3 +80,28 @@ def accounted_urls(
     if shared:
         raise ValueError(f"Missing {len(shared)} shared URLs, including {next(iter(shared))}")
     return {**counts, "total": sum(counts.values())}, page_rows
+
+
+def wal_bytes(crawls_dir: Path) -> int:
+    # The benchmark owns one fresh Workspace. SQLite can unlink its WAL at final close.
+    for wal in crawls_dir.glob("*.sqlite-wal"):
+        with suppress(FileNotFoundError):
+            return wal.stat().st_size
+    return 0
+
+
+def table_bytes(crawl_file: Path) -> dict[str, int] | None:
+    with reading(crawl_file) as connection:
+        if (
+            connection.exec_driver_sql(
+                "SELECT 1 FROM pragma_module_list WHERE name = 'dbstat'"
+            ).first()
+            is None
+        ):
+            return None
+        # Attribute secondary indexes to their table. Free pages have no table owner.
+        sizes = connection.exec_driver_sql(
+            "SELECT coalesce(s.tbl_name, d.name), sum(d.pgsize) FROM dbstat AS d "
+            "LEFT JOIN sqlite_schema AS s ON s.name = d.name GROUP BY 1 ORDER BY 1"
+        )
+        return dict(sizes.all())

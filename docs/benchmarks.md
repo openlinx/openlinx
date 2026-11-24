@@ -9,10 +9,14 @@ uses the one-off throwaway workflow required by 022 task 6.4.
 Run `uv run --locked python -m scripts.crawl_500k --pages 3 --keep /path/to/new-workspace`
 from the repository root for a smoke check. The driver starts a seeded HTTP site on
 loopback, runs the installed Crawl Command in a separate process, and samples the RSS
-of that process every 200 ms. It checks each URL against the seeded site, including
+of that process and the size of its live SQLite write-ahead log every 200 ms.
+`wal_peak_bytes` reports the largest observed WAL size before SQLite closes it. It checks each URL against the seeded site, including
 its fetch and parse outcomes and whether the response should have a stored HTML Page.
 It rejects missing and unexpected URLs. The report gives counts by kind, alongside
-the independent server count of requested Pages.
+the independent server count of requested Pages. `urls_per_second` divides all
+verified URLs by wall time from starting the Crawl Command until it exits.
+`file_bytes` measures the closed crawl file. `table_bytes` attributes every
+secondary index to its table and is null when SQLite lacks the dbstat module.
 
 `--seed` selects the same graph and faults for a repeat run. The default size is
 500,000 Pages. Without `--keep`, the temporary Workspace is removed after verification.

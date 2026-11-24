@@ -8,10 +8,12 @@ import tempfile
 from contextlib import suppress
 from dataclasses import asdict
 from pathlib import Path
+from time import perf_counter
 
 import psutil
 
-from tests.fixture_site.synthetic.accounting import accounted_urls
+from openlinx.workspace.discovery import resolve_workspace
+from tests.fixture_site.synthetic.accounting import accounted_urls, table_bytes, wal_bytes
 from tests.fixture_site.synthetic.serve import SiteProcess
 from tests.fixture_site.synthetic.site import (
     DEFAULT_SHARES,
@@ -21,10 +23,11 @@ from tests.fixture_site.synthetic.site import (
 from tests.support.processes import python_command
 
 
-def _crawl(workspace: Path, seed: str) -> tuple[Path, int]:
+def _crawl(workspace: Path, seed: str) -> tuple[Path, int, int]:
     command = python_command("-m", "openlinx", "crawl", seed, "--workspace", str(workspace))
     env = {**(command.env or os.environ), "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}
-    peak = 0
+    crawls_dir = resolve_workspace(cwd=workspace, flag=workspace, home=Path.home()).crawls_dir
+    peak = wal_peak = 0
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         with subprocess.Popen(command.argv, stdout=out, stderr=err, env=env) as process:
             try:
@@ -32,6 +35,7 @@ def _crawl(workspace: Path, seed: str) -> tuple[Path, int]:
                 while process.poll() is None:
                     with suppress(psutil.NoSuchProcess):
                         peak = max(peak, identity.memory_info().rss)
+                    wal_peak = max(wal_peak, wal_bytes(crawls_dir))
                     with suppress(subprocess.TimeoutExpired):
                         process.wait(timeout=0.2)
             finally:
@@ -43,7 +47,7 @@ def _crawl(workspace: Path, seed: str) -> tuple[Path, int]:
                     f"Crawl exited {process.returncode}: {err.read().decode(errors='replace')}"
                 )
         out.seek(0)
-        return Path(json.load(out)["crawl_file"]), peak
+        return Path(json.load(out)["crawl_file"]), peak, wal_peak
 
 
 def _run(site: SyntheticSite, workspace: Path) -> dict[str, object]:
@@ -51,7 +55,9 @@ def _run(site: SyntheticSite, workspace: Path) -> dict[str, object]:
     subprocess.run(command.argv, env=command.env, stdout=subprocess.DEVNULL, check=True)
     with SiteProcess(site) as fixture:
         origin = fixture.base_url.rstrip("/")
-        crawl_file, peak = _crawl(workspace, origin + "/")
+        started = perf_counter()
+        crawl_file, peak, wal_peak = _crawl(workspace, origin + "/")
+        elapsed = perf_counter() - started
         tally = fixture.stop()
     stored, page_rows = accounted_urls(crawl_file, site, origin)
     if tally.pages_requested != site.pages:
@@ -64,6 +70,11 @@ def _run(site: SyntheticSite, workspace: Path) -> dict[str, object]:
         "pages_stored": page_rows,
         "stored_urls": stored,
         "crawl_peak_rss_bytes": peak,
+        "crawl_seconds": elapsed,
+        "urls_per_second": stored["total"] / elapsed,
+        "wal_peak_bytes": wal_peak,
+        "file_bytes": crawl_file.stat().st_size,
+        "table_bytes": table_bytes(crawl_file),
         "site": asdict(tally),
         "crawl_file": str(crawl_file),
     }

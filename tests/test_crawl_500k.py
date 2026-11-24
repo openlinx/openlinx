@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.fixture_site.synthetic.accounting import accounted_urls
+from tests.fixture_site.synthetic.accounting import accounted_urls, wal_bytes
 from tests.fixture_site.synthetic.site import SyntheticSite
 from tests.support.cli import CRAWL_PROCESS_TIMEOUT
 from tests.support.crawls import query
@@ -55,6 +55,25 @@ def test_benchmark_verifies_the_requested_urls_in_the_crawl_file(tmp_path: Path)
     assert report["crawl_peak_rss_bytes"] > 0
     file = Path(report["crawl_file"])
     assert file.is_relative_to(tmp_path / "crawl")
+    assert report["crawl_seconds"] > 0
+    assert report["urls_per_second"] == pytest.approx(96 / report["crawl_seconds"])
+    assert report["file_bytes"] == file.stat().st_size
+    assert report["wal_peak_bytes"] > 0
+    with closing(sqlite3.connect(file)) as db:
+        (page_size,) = db.execute("PRAGMA page_size").fetchone()
+        if db.execute("SELECT sqlite_compileoption_used('ENABLE_DBSTAT_VTAB')").fetchone()[0]:
+            table_bytes = report["table_bytes"]
+            assert 0 < table_bytes["pages"] < report["file_bytes"]
+            assert table_bytes["pages"] % page_size == 0
+            assert (
+                table_bytes["urls"]
+                == db.execute(
+                    "SELECT sum(pgsize) FROM dbstat WHERE name IN ("
+                    "SELECT name FROM sqlite_schema WHERE tbl_name = 'urls')"
+                ).fetchone()[0]
+            )
+        else:
+            assert report["table_bytes"] is None
     assert query(file, "SELECT state FROM crawl") == [("completed",)]
     assert query(
         file,
@@ -74,3 +93,17 @@ def test_benchmark_verifies_the_requested_urls_in_the_crawl_file(tmp_path: Path)
         )
     with pytest.raises(ValueError, match=r"Unexpected URL in the crawl file: .*/r/a/99\.mp3"):
         accounted_urls(file, SyntheticSite(seed=2408, pages=3), seed.rstrip("/"))
+
+
+def test_benchmark_samples_the_live_sqlite_wal(tmp_path: Path) -> None:
+    database = tmp_path / "fixture.sqlite"
+    assert wal_bytes(tmp_path) == 0
+    with closing(sqlite3.connect(database)) as connection, connection:
+        assert connection.execute("PRAGMA journal_mode=WAL").fetchone() == ("wal",)
+        connection.execute("CREATE TABLE samples (id INTEGER PRIMARY KEY)")
+        connection.executemany("INSERT INTO samples VALUES (?)", [(n,) for n in range(2000)])
+        connection.commit()
+        expected = database.with_suffix(".sqlite-wal").stat().st_size
+        assert expected > 0
+        assert wal_bytes(tmp_path) == expected
+    assert wal_bytes(tmp_path) == 0
