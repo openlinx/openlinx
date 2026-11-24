@@ -1,5 +1,7 @@
 > **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
 
+**Release scope.** Apply the [proposal](proposal.md#what-changes) and [ROADMAP](../../../ROADMAP.md#what-each-change-owns) to each group. In v0.1 generate examples only for shipped Commands, install with `uv tool install`, and exercise a detached Crawl with `status`, `issues`, `sql`, `stop` and `resume`. The install scripts, Full audit, dry run, Hand-off, Segments, plugin marketplace and doctor’s explicit `--proxy` option belong to v0.2. Documentation and reviews cover the scenarios for that release.
+
 Every task is one red → green slice and one commit whose message names its scenario:
 1. Write the failing test at the named seam (docs/testing.md) and watch it fail for the right reason.
 2. Write only enough code to make it pass.
@@ -12,7 +14,7 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 1.1 Drive "Installed Skill folder" (CLI seam). Add:
   - the `skill` Command group with `install --target claude`
   - the generator module
-  - the constants module: placeholder names, `OWNER/REPO`, the Hand-off threshold of 5,000, and the install one-liners
+  - the install one-liner (`uv tool install --python 3.14 openlinx` for v0.1)
   - six minimal templates
 - [ ] 1.2 Drive "Default installs for both targets" (CLI seam).
 - [ ] 1.3 Drive "Fresh install result" (CLI seam).
@@ -42,23 +44,23 @@ Every task is one red → green slice and one commit whose message names its sce
 ## 3. SKILL.md: frontmatter, install and workflows
 
 - [ ] 3.1 Drive "Frontmatter fields" and "Description names the trigger topics" (CLI seam). This is a trivial pair: both parse the same frontmatter. Keep the description at 1024 characters or fewer.
-- [ ] 3.2 Drive "One-liners for every OS" (CLI seam).
+- [ ] 3.2 Drive "One-liners for every OS" (CLI seam). Verify the uv command on each OS in v0.1 and the install scripts in v0.2.
 - [ ] 3.3 Drive "Ask before installing" (CLI seam).
 - [ ] 3.4 Drive "Quick check order" (CLI seam).
-- [ ] 3.5 Drive "Full audit order" (CLI seam).
-- [ ] 3.6 Drive "Recap is the last step" (CLI seam).
-- [ ] 3.7 Drive "One subagent per Report Section" (CLI seam), with the subagent prompt template.
-- [ ] 3.8 Drive "Notes file names come from the brief" (CLI seam), using `summary.md` and `section.notes_file` from `070-add-html-report`.
-- [ ] 3.9 Drive "Report Section ids are listed" (CLI seam), from the accepted values of `report brief --section` in the command metadata.
-- [ ] 3.10 Drive "Section Crawl flags" and "Segment guidance" (CLI seam). This is a trivial pair of text checks on neighbouring sections.
-- [ ] 3.11 Docs: describe the install section and the three workflows in `docs/skill.md`.
+- [ ] 3.5 (v0.2) Drive "Full audit order" (CLI seam).
+- [ ] 3.6 (v0.2) Drive "Recap is the last step" (CLI seam).
+- [ ] 3.7 (v0.2) Drive "One subagent per Report Section" (CLI seam), with the subagent prompt template.
+- [ ] 3.8 (v0.2) Drive "Notes file names come from the brief" (CLI seam), using `summary.md` and `section.notes_file` from `070-add-html-report`.
+- [ ] 3.9 (v0.2) Drive "Report Section ids are listed" (CLI seam), from the accepted values of `report brief --section` in the command metadata.
+- [ ] 3.10 Drive "Section Crawl flags" (CLI seam). Add "Segment guidance" with Segments in v0.2.
+- [ ] 3.11 Docs: describe the install section and the workflows available in the release in `docs/skill.md`.
 - [ ] 3.12 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. SKILL.md: guardrails, hygiene and validity
 
-- [ ] 4.1 Drive "Hand-off threshold" (CLI seam).
-- [ ] 4.2 Drive "Unknown estimate is handed off" (CLI seam).
-- [ ] 4.3 Drive "Hand-off uses the dry run's command" (CLI seam), using the `command.sh` and `command.powershell` of `060-add-crawl-control`.
+- [ ] 4.1 (v0.2) Drive "Hand-off threshold" (CLI seam).
+- [ ] 4.2 (v0.2) Drive "Unknown estimate is handed off" (CLI seam).
+- [ ] 4.3 (v0.2) Drive "Hand-off uses the dry run's command" (CLI seam), using the `command.sh` and `command.powershell` of `060-add-crawl-control`.
 - [ ] 4.4 Drive "Codex network and Workspace" (CLI seam).
 - [ ] 4.5 Drive "Untrusted crawled text and the notice" (CLI seam).
 - [ ] 4.6 Drive "Hygiene section" (CLI seam), with the advice to follow a running Crawl with `linx status`, not `linx summary`, and to read a non-null `paused_since` as a Crawl waiting for the network.
@@ -105,13 +107,13 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 7.1 Drive "Script output equals the installed Skill" (install-and-packaging seam) with `scripts/generate_skill.py`, which calls the generator module.
 - [ ] 7.2 Drive "Stale files are removed" (install-and-packaging seam).
 - [ ] 7.3 Drive "Foreign folder is kept" (install-and-packaging seam).
-- [ ] 7.4 Drive "One Skill in the plugin" (install-and-packaging seam). Commit `skills/openlinx/` as written by `scripts/generate_skill.py skills/openlinx`, and add `skills/** text eol=lf` to `.gitattributes`.
-- [ ] 7.5 Drive "Plugin manifest" (install-and-packaging seam) by adding `.claude-plugin/plugin.json` with the `OWNER/REPO` placeholders.
-- [ ] 7.6 Drive "Marketplace manifest" (install-and-packaging seam) by adding `.claude-plugin/marketplace.json`.
-- [ ] 7.7 Drive "Copy and plugin share one version" (install-and-packaging seam).
+- [ ] 7.4 Drive "Repository copy of the Skill" (install-and-packaging seam). Commit `skills/openlinx/` as written by `scripts/generate_skill.py skills/openlinx`, and add `skills/** text eol=lf` to `.gitattributes`.
+- [ ] 7.5 (v0.2) Drive "Plugin manifest" (install-and-packaging seam) by adding `.claude-plugin/plugin.json` with the `OWNER/REPO` placeholders.
+- [ ] 7.6 (v0.2) Drive "Marketplace manifest" (install-and-packaging seam) by adding `.claude-plugin/marketplace.json`.
+- [ ] 7.7 (v0.2) Drive "Copy and plugin share one version" (install-and-packaging seam).
 - [ ] 7.8 Drive "Copy matches the generator at a release tag" (install-and-packaging seam) with a test marked `release`, which the release workflow of `085-add-release` runs. Check it on a commit whose copy was just regenerated, and again after changing one byte of the copy, when it must fail.
-- [ ] 7.9 Docs: write README sections for the Claude Code plugin (`claude plugin marketplace add OWNER/REPO`, `claude plugin install openlinx@openlinx`), the Codex plugin (`codex plugin marketplace add OWNER/REPO`) and other agents (`npx skills add OWNER/REPO --skill openlinx`). Check each by hand against a local clone and record the results in the PR.
-- [ ] 7.10 Docs: in `RELEASING.md`, add the release-commit steps: run `scripts/generate_skill.py skills/openlinx` and bump `plugin.json`.
+- [ ] 7.9 (v0.2) Docs: write README sections for the Claude Code plugin (`claude plugin marketplace add OWNER/REPO`, `claude plugin install openlinx@openlinx`), the Codex plugin (`codex plugin marketplace add OWNER/REPO`) and other agents (`npx skills add OWNER/REPO --skill openlinx`). Check each by hand against a local clone and record the results in the PR.
+- [ ] 7.10 Docs: in `RELEASING.md`, add the release-commit steps: run `scripts/generate_skill.py skills/openlinx` and, from v0.2, bump `plugin.json`.
 - [ ] 7.11 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. `linx doctor` framework and local checks
@@ -158,7 +160,7 @@ Every task is one red → green slice and one commit whose message names its sce
 - [ ] 10.6 Drive "Codex sandbox" (CLI seam, with the network probe double failing with a permission error).
 - [ ] 10.7 Drive "Default target" (CLI seam, with the network probe double accepting `example.com`).
 - [ ] 10.8 Drive "Connections only to the target" (HTTP fixture seam, with a recording network probe).
-- [ ] 10.9 Drive "Proxy from the environment is reported and redacted" (CLI seam, with the network-probe double accepting and recording the connection). Add `details.proxy` using the proxy resolution of `022-add-fetch-policy`, the redaction of `015-add-crawl-store`, and doctor's `--proxy` flag.
+- [ ] 10.9 Drive "Proxy from the environment is reported and redacted" (CLI seam, with the network-probe double accepting and recording the connection). Add `details.proxy` using the proxy resolution of `022-add-fetch-policy`, the redaction of `015-add-crawl-store`, and, from v0.2, doctor's explicit `--proxy` flag.
 - [ ] 10.10 Drive "Untrusted certificate" (HTTP fixture seam, against the HTTPS listener of `022-add-fetch-policy`). Add the verified handshake through 022's TLS setup, and `error_kind`.
 - [ ] 10.11 Drive "Trusted certificate" (HTTP fixture seam, with the trust-store probe double containing the fixture's test CA).
 - [ ] 10.12 Drive "Bundled fallback" (CLI seam, with the trust-store probe double).
@@ -184,7 +186,7 @@ Every task is one red → green slice and one commit whose message names its sce
 
 ## 12. Agent walkthrough and change review
 
-- [ ] 12.1 Docs: write a Quick check and Full audit walkthrough in `docs/skill.md`. Run both by hand in Claude Code and in Codex against the local fixture site, and check each against the Guardrails:
+- [ ] 12.1 Docs: exercise the Quick check in Claude Code and Codex against the local fixture site and document it in `docs/skill.md`. In v0.2 add the Full audit walkthrough and check the following:
   - the dry run comes first
   - a Hand-off happens when the estimate is above 5,000 URLs or `null`
   - there is one subagent per Report Section in Claude Code, and sequential Report Sections without subagents

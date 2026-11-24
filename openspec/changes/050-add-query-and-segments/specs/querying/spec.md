@@ -588,7 +588,7 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 #### Scenario: Item fields
 - **WHEN** a Crawl's only Issue is `title-missing` in category `titles` (issue, high) with 4 Affected URLs
 - **AND** `linx issues` runs
-- **THEN** its item contains `"rule_id": "title-missing"`, `"category": "titles"`, `"issue_type": "issue"`, `"priority": "high"` and `"affected_count": 4`, and its `description` equals the description that `linx rules show title-missing` prints
+- **THEN** its item contains `"rule_id": "title-missing"`, `"category": "titles"`, `"issue_type": "issue"`, `"priority": "high"` and `"affected_count": 4`, and its `description` equals the description recorded for `title-missing` in that Crawl
 
 #### Scenario: Filters combine
 - **WHEN** a Crawl has the Issues A (warning, high), B (issue, low), C (issue, high) and D (opportunity, high)
@@ -613,7 +613,7 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 
 #### Scenario: A Rule id is passed to the Issue list
 - **WHEN** `linx issues` is called with `title-missing` as a positional argument
-- **THEN** the exit code is 2, and the error has the code `usage_error`
+- **THEN** the exit code is 2, and the error has the code `usage_error` and a non-empty hint directing the caller to `linx issue <rule-id>`
 
 #### Scenario: Unknown Issue Type
 - **WHEN** `linx issues --type critical` runs
@@ -639,8 +639,9 @@ A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `i
 - **THEN** `rule.thresholds` is `{"max_chars": 70}`
 
 #### Scenario: Guidance of the Rule
-- **WHEN** `linx issue title-too-long` runs
-- **THEN** `rule.how_to_fix` equals the `how_to_fix` text that `linx rules show title-too-long` prints
+- **WHEN** a Crawl records guidance for `title-too-long` and a later installed version changes that Rule’s guidance
+- **AND** `linx issue title-too-long` reads that Crawl
+- **THEN** `rule.how_to_fix` equals the text recorded for `title-too-long` in that Crawl
 
 #### Scenario: The reproducing query of the Rule
 - **WHEN** `linx issue title-missing` runs

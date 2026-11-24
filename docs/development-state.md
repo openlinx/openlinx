@@ -1,71 +1,73 @@
 # Development state
 
-The 022 checkpoint was verified on 2026-11-18. Other stream checkpoints date
-from 2026-11-15. [README](../README.md) describes available behaviour;
-[ROADMAP](../ROADMAP.md) owns release scope and build order. Before continuing a
-stream, read [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) and
-[CONTEXT.md](../CONTEXT.md), then confirm its actual HEAD, diff and tasks.
+## Release checkpoint, 2026-11-25
 
-## Main and active streams
+Public `main` at `e50fb0ce` contains the foreground Crawl, the archived 022
+fetch policy and 023 code audit, and the 030 Page data implementation through
+group 4b. Python 3.12, 3.13 and 3.14 each passed on Linux, macOS and Windows.
+[Main CI](https://github.com/openlinx/openlinx/actions/runs/44448078238).
 
-At the 022 merge checkpoint, public
-[main at `62253122`](https://github.com/openlinx/openlinx/tree/62253122476f840e6ba15d3e2b0e1fd8404dab2c)
-contains the foreground Crawl, crawl store, fetch policy, completed code audit and
-Page data foundation. The integrated Crawl → Issues product path remains unfinished.
-A published branch or a local candidate does not establish feature acceptance or CI
-coverage of that candidate.
+The local release branch is `integrate/v01-crawl-issues`. At `91e1b7d2` it was
+65 commits ahead of main. Its Linux full check passed with 2,858 tests and 15
+platform skips. The three mypy targets passed. The first CI candidate,
+`ci/v01-crawl-issues` at `d6a1d577`, brings the 060 ownership work forward on
+that base. Its Linux full check passed with 2,867 tests, 15 platform skips and
+97.62% coverage. Actual OS results are tracked in the
+[candidate CI run](https://github.com/openlinx/openlinx/actions/runs/45503809104).
+The three-Command acceptance test is still open.
+[Build order and release scope](../ROADMAP.md#build-order).
 
-The local integration includes the platform runner fix at `30ca0c46`:
-`scripts/check.py` checks Windows, Linux and macOS types explicitly on every host.
-These static targets do not establish runtime compatibility on those operating systems.
-
-| Stream | Verified checkpoint | Product state and canonical tasks |
+| Change | Where work stood at the checkpoint | Next acceptance condition |
 |---|---|---|
-| 022 fetching | [PR #42](https://github.com/openlinx/openlinx/pull/42) merged at `62253122` | All 156 tasks complete and archived on main after Standards and Spec review. [Archived tasks](../openspec/changes/archive/2026-11-18-022-add-fetch-policy/tasks.md). |
-| 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
-| 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
-| 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
-| 026 parse pool | Public `8294855e` | Older core and pre-rename package; bounded shutdown and scale proof remain. [Checkpoint tasks](https://github.com/openlinx/openlinx/blob/8294855ecfffb9f07094b931ed0d94754d0bf16d/openspec/changes/026-add-parse-pool/tasks.md). |
-| 040 Rules | Public `330d5730` | Rule slice and reader refactor exist; current core/Page data integration and remaining v0.1 Rules are open. [Checkpoint tasks](https://github.com/openlinx/openlinx/blob/330d5730b3e4dad3ba6a5d9285fd89ef61213d98/openspec/changes/040-add-rules/tasks.md). |
-| 050 queries | Public `bd21fe41` | Groups 1–2 have implementation, with review fixes and 040 integration outstanding. [Checkpoint tasks](https://github.com/openlinx/openlinx/blob/bd21fe4164077076076c5e64805e9f80aeb4b434/openspec/changes/050-add-query-and-segments/tasks.md). |
+| [026 parse pool](../openspec/changes/026-add-parse-pool/tasks.md) | The release branch includes the separate-process synthetic fixture from `b781f2d9`. The default Page executor still runs in-process. The older pool implementation is at `8294855e`. | Port the benchmark harness and worker lifecycle to the current package. Verify bounded shutdown with busy and unready workers and worker exit after parent death. Record the in-process baseline at roughly 500k URLs and verify the default pool before 050 task 1.13. |
+| [030 Page data](../openspec/changes/030-add-page-data/tasks.md) | Main includes the group 4b changes, sentence-splitting and cookie Domain fixes. | Run the Links layout comparison (10.1), then the writer capacity benchmark on the chosen layout (10.11). Close the design Risks and whole-change review (4.15). |
+| [040 Rules](../openspec/changes/040-add-rules/tasks.md) | Five Rules evaluate real populations on the release branch: `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`. Four further catalogue entries still return no rows by design. | Cover the analysed-Page boundary for `h1-missing`. Widen to the 15 executable v0.1 Rules and the Health Score. The roadmap lists the release Rules by id. |
+| [050 queries](../openspec/changes/050-add-query-and-segments/tasks.md) | Tasks 1.1–1.7 are integrated. `linx issues` and the Issue detail Service exist. | Start at 1.8. Verify recorded thresholds, guidance, reproducing SQL, Affected URL detail and cursor isolation between Crawls. Add the singular `issue` Command and its usage hints. |
+| [060 Crawl control](../openspec/changes/060-add-crawl-control/tasks.md) | Ownership tasks 0.1–0.6 from `5fcf25e2` are in the first CI candidate at `d6a1d577`. | Prove the writer claim precedes schema creation (0.7). Complete ownership, detached Crawls, `status`, `stop` and `resume`. A resumed Crawl with recorded secret markers needs fresh inputs under the 022 contract. |
 
-### Page data and ownership candidates
+## What blocks Crawl → Issues
 
-030 findings **C01 and C02 are closed on public main**, through
-[PR #37](https://github.com/openlinx/openlinx/pull/37): the deferred structured-data
-count columns are declared and Windows subprocess-tree cleanup is guarded. They no
-longer block group 12. The pause-count fix is also in main through
-[PR #41](https://github.com/openlinx/openlinx/pull/41).
+1. Complete the singular Issue Command through 050 task 1.12 and the 026
+   prerequisites in the table. The first scale run records the in-process
+   baseline. The acceptance Crawl uses the default pool.
+2. On Linux, macOS and Windows, run `linx crawl`, `linx issues` and
+   `linx issue internal-4xx` as separate processes against one fixture Crawl.
+   Assert one Affected URL each for `title-missing` and `internal-4xx`, then
+   the fixture's exact `/e2e/gone` URL with `{"status_code": 404}`. Follow
+   with the query documentation and group review (050 tasks 1.13–1.15).
+3. For v0.1, finish the 030, 040 and 060 work above and add read-only `sql`,
+   `summary`, `pages` and `page`. Generate the 080 Skill from the finished
+   Commands, including the SQL cookbook, `skill install` and `doctor`.
+4. Re-run the roughly 500k-URL benchmark on the complete pipeline, sweep worker
+   counts and record live Issues latency and file sizes. The planned 085 change
+   owns the build, release checks and wheel-install smoke on all three systems.
+   The full-pipeline run and 085 are still open.
 
-Local 030 checkpoint `c31c717e00a21662e3eae72ba4f68c6e7ed71c7c` includes Page sizes,
-HTTP redirect data, bounded Max-Age parsing and Content Area roots outside the body,
-plus linear sentence splitting and IPv6 cookie Domain handling that rejects folded values.
-Restore local branch `coord/030-sizes-2026-11-13`; its current task file is
-`openspec/changes/030-add-page-data/tasks.md`.
-The earlier foundation integration with main `741b92f7` passed the local full check
-and supplemental Windows type check. The sentence-splitting and cookie Domain
-review fixes are complete locally; group 4b review and whole-change closure remain
-governed by the tasks. Cross-OS candidate CI and feature acceptance remain unverified.
-The first unresolvable meta refresh followed by a valid one is already an explicit
-design Risk; reconcile the specification's wording with that accepted limitation.
-Tasks 10.1 and 10.11 still require the Links layout and writer-capacity benchmarks
-on a quiet machine at a time chosen by the maintainers. Task 4.15 also requires
-shortening the design's guard-test Risks entries before archival.
+The 030 review also needs to reconcile the first unresolvable meta refresh with the documented extraction behaviour. [030 design risks](../openspec/changes/030-add-page-data/design.md#risks--trade-offs).
 
-Local 060 checkpoint `5fcf25e28ec9d81fc005ae8e9142f9e568afdb6b` holds the writer
-claim through Crawl creation and execution and tests release on completion, failure,
-creation failure and process death. Restore local branch `060-add-crawl-control`;
-its current tasks, including group 0, are in
-`openspec/changes/060-add-crawl-control/tasks.md`.
-Its integration with main `741b92f7` and task 0.6's guard for an existing writer
-claim file passed the local full check and supplemental Windows type check. The
-stream is frozen after task **0.6**. Task **0.7**, proving ownership before schema
-creation, the remaining ownership scenarios and group 0's review with actual
-cross-OS CI remain open.
-Detached Crawls, `status`, `stop` and `resume` remain planned. Later draft task groups require
-reconciliation with the implemented lifecycle before they are built.
+Stop during post-crawl passes crosses three changes. The Crawl core currently
+closes its stop signal before passes. 060 owns stop and writer ownership, 026
+owns worker shutdown and 040 owns Rule materialisation. Reconcile pass
+cancellation in those contracts before implementing that stop path.
 
-### Archived fetching change
+The 026 port has an additional Linux shutdown case to close before selecting
+the pool by default. With one interrupt, a worker held inside a native call
+exited and the Crawl left its URL queued. With two interrupts, the owner
+exited with code 130 but a worker was still alive after the 10-second check.
+This occurred both during preparation and while a new worker read its settings
+snapshot. Verify both cases against the integrated pool on each supported OS.
+
+## Planning estimate at this checkpoint
+
+Allow 1–3 working weeks for the foreground Crawl → Issues milestone on the three
+supported systems, and 5–9 working weeks from this checkpoint for v0.1. Both
+ranges assume the three implementation streams can continue in parallel and a
+quiet machine is available for the scale runs. Update the forecast after the
+500k in-process baseline, the default pool shutdown tests and task 050 1.13.
+A release candidate still needs the full-pipeline benchmark, wheel installation
+on all three systems and the remaining Commands in the roadmap.
+
+## Historical verification of 022 (2026-11-18)
 
 The change was archived and merged in [PR #42](https://github.com/openlinx/openlinx/pull/42).
 The archive includes the synced
@@ -275,52 +277,3 @@ focused decoder, Resource and negotiation cases in each of the nine runtime
 cells across Linux, macOS and Windows. Python 3.12 and 3.13 used
 `backports.zstd` 1.8.0. Python 3.14 used `compression.zstd`.
 All focused tests ran and passed at `bd5c37b1`. [CI run](https://github.com/openlinx/openlinx/actions/runs/44200525556).
-
-The integration branch also carries 030 Page data and developer-check changes.
-060 still owns the resume Command and its Workspace input handling. It remains
-frozen at task 0.6. The continue Service accepts fresh auth, sensitive headers
-and explicit proxy credentials. Page capability population belongs to 030.
-
-### Next quality work
-
-Follow the [comment review and test quality plan](test-organization-plan.md).
-Review comments for decisions and non-obvious reasons, then verify the test
-contracts at their public seams. Start by reproducing the two recorded
-test-quality candidates. Preserve existing regression scenarios and keep
-test organization in separate changes.
-
-## What blocks Crawl → Issues
-
-1. **Port 026, 040 and 050 to current contracts.** Their public checkpoints still use
-   the pre-rename package and older core/store interfaces. Preserve their product work while
-   reconciling the rename, settings tables, schema and PageExecutor lifecycle.
-2. **Close 026 shutdown before relying on detached workers.** Task 4.2 still needs
-   bounded shutdown for a Page that never finishes and a worker that never becomes
-   ready after the pool breaks. The current close path cancels deadline/readiness
-   timers before an unbounded join; busy-worker parent death is also unresolved.
-   Finish shutdown documentation/review, then validate the benchmark harness's
-   executor selection before claiming the roughly 500k-URL baseline.
-3. **Integrate 040 with current Page data.** Task 5.10's strict conditional xfail
-   awaits real non-indexable populations; Indexability is now available in main.
-   Redirect tasks 7.2–7.4 and canonical/noindex tasks 8.5–8.11 remain open. Register
-   Rule settings with the current service and preserve schema/view guards. Task
-   10.11 depends on 060 resume retaining recorded configuration.
-4. **Finish 050's existing review work.** Tasks 1.21–1.23 cover the jsonl output
-   guard, documentation and cleanup. Task 2.13 still needs UTF-8, signed-integer and
-   256-predicate limits plus linear tokenization (**C04**). The Issue table test
-   derives expected fix text and SQL from its runtime Rule (**C05**); replace those
-   expectations with independent literals at the public seam. Reconcile 040's reader
-   before widening queries.
-5. **Prove the integrated path.** Exercise a foreground Crawl → Issues on all three
-   supported operating systems after the streams are integrated; then measure the
-   full pipeline at scale. Branch-local implementation is not that end-to-end proof.
-
-060 owns writer claims and Crawl control; 026 owns worker lifecycle; 040 owns Rule
-passes. Before implementing stop during passes, reconcile their contract: the current
-core closes its stop signal before passes, and passes have no stop view. Writer
-ownership alone does not provide pass cancellation or bounded worker shutdown.
-Keep these decisions in the owning changes' design/specs and preserve their guards.
-
-Verify later published refs with `git ls-remote origin`; compare ancestry and diffs
-against the checkpoints above before choosing the next task. Operational schedules
-and validation transcripts belong outside this product map.

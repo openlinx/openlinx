@@ -5,7 +5,7 @@ Lets people and agents find out, with one Command, whether OpenLinx can run and 
 ## ADDED Requirements
 
 ### Requirement: Doctor report
-`linx doctor [--url <url>] [--proxy <url>]` SHALL run a fixed list of checks. It SHALL print a JSON object with these fields:
+`linx doctor [--url <url>]` (with an additional `--proxy <url>` option from v0.2) SHALL run a fixed list of checks. It SHALL print a JSON object with these fields:
 - `status`: the worst check status, where `fail` is worse than `warn` and `warn` is worse than `ok`
 - `version`: the CLI version
 - `counts`: `{"ok": n, "warn": n, "fail": n}`
@@ -180,7 +180,7 @@ The `wal` check SHALL report the journal mode that a new Crawl in the Workspace 
 The `network` check SHALL use the network probe to resolve the host of the target URL and open a TCP connection to it, or to the proxy that a Crawl would use, within 10 seconds. `details` SHALL include `url`, `elapsed_ms`, `proxy` and, on failure, `error`. The status SHALL be `ok` when the connection opens and `fail` otherwise.
 
 `details.proxy` SHALL be `{source, url}` for the proxy in effect for the target, found as `022-add-fetch-policy` finds it for a Crawl. `source` is one of:
-- `flag`: doctor's `--proxy`
+- `flag`: doctor's `--proxy` (from v0.2)
 - `settings`: the proxy setting in `openlinx.toml`
 - `env`: `HTTP_PROXY` or `HTTPS_PROXY` for the target's scheme, when `NO_PROXY` does not exclude the target host
 - `none`: no proxy is in effect
