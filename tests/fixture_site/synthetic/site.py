@@ -474,26 +474,35 @@ class SyntheticSite:
         content_type = "text/html; charset=nonsense" if fault is Fault.UNKNOWN_CHARSET else HTML
         return Bytes(self.render(n), content_type=content_type, headers=headers, delay=delay)
 
-    def manifest(self) -> dict[str, Any]:
-        """The injected counts and the URLs a Crawl must account for, in one pass of hashes."""
-        faults = dict.fromkeys(Fault, 0)
-        refreshes = 0
+    def shared_urls(self) -> Iterator[tuple[Pool, int]]:
+        """Yield each shared URL linked by a parsed Page once, retaining at most the pool sizes."""
         seen = {pool: bytearray(pool.size) for pool in POOLS}
-        filled = dict.fromkeys(POOLS, 0)
-        open_pools = len(POOLS)
+        remaining = sum(pool.size for pool in POOLS)
         for n in range(self.pages):
-            fault = self.fault(n)
-            if fault is not None:
-                faults[fault] += 1
-            refreshes += n % REFRESH_EVERY == 1 and fault not in LOSES_LINKS
-            if not open_pools or fault in LOSES_LINKS:
+            if self.fault(n) in LOSES_LINKS:
                 continue
             for pool, indices in pool_refs(n):
                 for index in indices:
                     if not seen[pool][index]:
                         seen[pool][index] = 1
-                        filled[pool] += 1
-                        open_pools -= filled[pool] == pool.size
+                        yield pool, index
+                        remaining -= 1
+                        if remaining == 0:
+                            return
+
+    def manifest(self) -> dict[str, Any]:
+        """The injected counts and the URLs a Crawl must account for."""
+        faults = dict.fromkeys(Fault, 0)
+        refreshes = 0
+        for n in range(self.pages):
+            fault = self.fault(n)
+            if fault is not None:
+                faults[fault] += 1
+            refreshes += n % REFRESH_EVERY == 1 and fault not in LOSES_LINKS
+
+        filled = dict.fromkeys(POOLS, 0)
+        for pool, _ in self.shared_urls():
+            filled[pool] += 1
 
         def of_kind(kind: str) -> int:
             return sum(count for pool, count in filled.items() if pool.kind == kind)
