@@ -31,8 +31,13 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 
 ### D1. Own `spawn` worker processes behind `020`'s seam
 - **The workers:** `n` processes started with `multiprocessing.get_context("spawn")`, each with its own pipe, that prepare one Page at a time.
-- **Their number:** `n = max(1, cores − 2)`, the verdict of the writer prototype of 2026-10-11 on the maintainer's laptop (8 physical cores, 6 workers). `cores` is `psutil.cpu_count(logical=False)`, or `os.cpu_count() // 2` when psutil cannot tell, capped by `os.process_cpu_count()` where Python has it (3.13 and later), so a container's CPU limit counts. `psutil` is a runtime dependency imported inside `openlinx.crawl.parse_pool`, never on the startup path (`tests/cli/test_startup.py`). The re-run after `080` sweeps smaller counts and may lower the default (D6).
-- **The pool executor** implements `020`'s `PageExecutor.prepare(url, response)`: it hands the URL and its response to an idle worker, or queues it until one is idle, and awaits the page-preparation record. One thread of the crawl process waits on every worker's pipe and process sentinel with `multiprocessing.connection.wait`, with a timeout at the nearest deadline (D8), and resolves the awaiting futures on the event loop. The engine and the extractors do not change.
+- **Their number:** `n = max(1, cores − 2)`, the verdict of the writer prototype of 2026-10-11 on the maintainer's laptop (8 physical cores, 6 workers). `cores` is `psutil.cpu_count(logical=False)`, or `os.cpu_count() // 2` when psutil cannot tell, capped by `os.process_cpu_count()` where Python has it (3.13 and later), so a container's CPU limit counts. `psutil` is a runtime dependency imported inside `openlinx.crawl.pages.parse_pool`, never on the startup path (`tests/cli/test_startup.py`). The re-run after `080` sweeps smaller counts and may lower the default (D6).
+- **The pool executor** lives in the page preparation layer (`openlinx.crawl.pages.parse_pool`)
+  and implements `020`'s `PageExecutor.prepare(url, response)`. It hands the URL and its
+  response to an idle worker, or queues it until one is idle, and awaits the prepared Page.
+  One thread waits for worker results using `multiprocessing.connection.wait` and hands them
+  to the event loop, which tracks preparation and readiness deadlines through the real Clock.
+  The engine and the extractors do not change.
 - **The settings snapshot (`PageSettings`) and the registered extractors** (by reference) are the arguments a worker starts with, so they reach each worker once. A work item is then only the fetched response, so the snapshot is never pickled once per response. The worker's loop keeps them in local variables for its life, so the worker module holds no state. Each worker sets SIGINT to ignored (SIGBREAK too, on Windows) when it starts.
   - *Alternative:* `functools.partial(prepare, snapshot)` per submit. It pickles the snapshot, its compiled patterns and the extractor list with every response. Rejected.
 - **Why own workers rather than `concurrent.futures.ProcessPoolExecutor`:** the executor knows which worker holds which Page and since when, so it can end exactly the worker over its deadline (D8) and charge a crash to exactly one URL (D3).
@@ -98,6 +103,9 @@ Each crash therefore costs one URL and one worker start.
 The benchmark (group 1) is a script, not a test seam.
 
 - **HTTP (local fixture site) (3) and seam 3+6:** the Crawl through the Crawl Service, with test extractors added to `default_hooks()` (`020` D9): one records its process id, one is slow, one never returns, one ends its worker. They are module-level in a test module, which a `spawn` worker imports by name. The results are read from `urls`. A test shortens the preparation deadline through the pool executor's parameter, whose default is the constant (D8).
+- **Crawl Service's executor extension (2):** call the public `PageExecutor` lifecycle with
+  real workers to exercise readiness, cancellation and process exit. A test controls the
+  snapshot or extractor to observe the relevant worker before blocking it.
 - **CLI (1), subprocess runs on each OS:**
   - the Windows `spawn` scenario
   - worker shutdown after completion and after SIGINT (CTRL_BREAK_EVENT to a new process group on Windows), with child processes listed through `psutil`

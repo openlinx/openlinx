@@ -79,6 +79,11 @@ cover admission, deadlines, lifecycle and system DNS.
 values Handlers receive and how their rows reach the Store. Other Hook cases are in
 [test_hooks.py](../tests/crawl/test_hooks.py).
 
+[test_parse_pool.py](../tests/crawl/test_parse_pool.py) exercises the spawn executor through
+the Crawl Service, HTTP fixture and read-only crawl file.
+[test_parse_shutdown.py](../tests/crawl/test_parse_shutdown.py) exercises its public executor
+lifecycle with real workers.
+
 Shared helpers are in `tests/support/` and the fixture site in `tests/fixture_site/` (see [Helpers](#helpers)).
 
 ### Boundary doubles
