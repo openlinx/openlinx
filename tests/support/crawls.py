@@ -59,7 +59,8 @@ def new_crawl(workspace: Workspace) -> NewCrawl:
 def create_any_crawl(temp_workspace: TempWorkspace, **changes: Any) -> CrawlFile:
     """`new_crawl` with `changes`, created at `STARTED_AT` where the current folder resolves."""
     request = replace(new_crawl(current_workspace(temp_workspace)), **changes)
-    return create_crawl(request, FakeClock(start=STARTED_AT), Collected())
+    with create_crawl(request, FakeClock(start=STARTED_AT), Collected()) as crawl:
+        return crawl
 
 
 def insert_seed(position: int, url: str) -> Callable[[Connection], None]:
@@ -86,9 +87,10 @@ def crawl_without_seeds(temp_workspace: TempWorkspace) -> CrawlFile:
 def create_crawl_at(temp_workspace: TempWorkspace, started_at: str, suffix: str) -> CrawlFile:
     """Any Crawl started at the ISO time `started_at`, whose id ends with `suffix`."""
     clock = FakeClock(start=datetime.fromisoformat(started_at))
-    return create_crawl(
+    with create_crawl(
         new_crawl(current_workspace(temp_workspace)), clock, Collected(), scripted_choice(suffix)
-    )
+    ) as crawl:
+        return crawl
 
 
 def query(file: Path, sql: str, params: Sequence[Any] = ()) -> list[tuple[Any, ...]]:

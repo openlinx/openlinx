@@ -391,6 +391,42 @@ A Crawl's writer claim SHALL be an operating-system lock on the file `<crawl id>
 
 > **v0.1.**
 
+#### Scenario: A running Crawl keeps its writer claim
+- **WHEN** a foreground Crawl is serving a request against the slow fixture site, and a separate process tries to acquire its writer claim without waiting
+- **THEN** the other process cannot acquire the claim, and the Crawl remains running
+
+#### Scenario: A completed Crawl releases its writer claim
+- **WHEN** the Crawl Service returns a completed Crawl while its caller process stays alive
+- **THEN** another process can acquire that Crawl's writer claim
+
+#### Scenario: A failed Crawl releases its writer claim
+- **WHEN** the Crawl Service finishes recording a failed Crawl while its caller process stays alive
+- **THEN** another process can acquire that Crawl's writer claim, and its crawl file remains readable
+
+#### Scenario: A failed creation releases its writer claim
+- **WHEN** a filesystem or SQLite failure prevents initialization of a new Crawl while its caller process stays alive
+- **THEN** no incomplete crawl file remains, and another process can acquire the writer claim
+
+#### Scenario: A killed Crawl releases its writer claim
+- **WHEN** the process of a running Crawl is killed with SIGKILL on POSIX or TerminateProcess on Windows
+- **THEN** a different process can acquire its writer claim without waiting
+
+#### Scenario: Creation holds its writer claim before writing the schema
+- **WHEN** a process is initializing a new Crawl before its schema is written
+- **THEN** a separate process cannot acquire that Crawl's writer claim
+
+#### Scenario: Post-crawl passes keep the writer claim
+- **WHEN** a registered post-crawl pass is still running after fetching has ended
+- **THEN** a separate process cannot acquire that Crawl's writer claim
+
+#### Scenario: Failure recording keeps the writer claim
+- **WHEN** the main writer has failed and the Crawl Service is recording the failure through its fallback writer
+- **THEN** a separate process cannot acquire that Crawl's writer claim
+
+#### Scenario: A continuing Crawl keeps its writer claim
+- **WHEN** the Crawl Service continues a stopped Crawl created by this build and is serving a request
+- **THEN** a separate process cannot acquire that Crawl's writer claim until the service returns and its writers have closed
+
 #### Scenario: Two resumes at the same time
 - **WHEN** two `linx resume --crawl <id>` processes start at the same time for a `stopped` Crawl of the slow fixture site
 - **THEN** exactly one of them exits with code 5 and the error code `crawl_locked`

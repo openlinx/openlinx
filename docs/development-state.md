@@ -12,8 +12,10 @@ The local release branch is `integrate/v01-crawl-issues`. At `91e1b7d2` it was
 platform skips. The three mypy targets passed. The first CI candidate,
 `ci/v01-crawl-issues` at `d6a1d577`, brings the 060 ownership work forward on
 that base. Its Linux full check passed with 2,867 tests, 15 platform skips and
-97.62% coverage. Actual OS results are tracked in the
+97.62% coverage. All nine jobs passed on Ubuntu, macOS and Windows with Python
+3.12, 3.13 and 3.14 in the
 [candidate CI run](https://github.com/openlinx/openlinx/actions/runs/45503809104).
+Each job also ran both console scripts from the built wheel with `--version`.
 The three-Command acceptance test is still open.
 [Build order and release scope](../ROADMAP.md#build-order).
 
@@ -22,7 +24,7 @@ The three-Command acceptance test is still open.
 | [026 parse pool](../openspec/changes/026-add-parse-pool/tasks.md) | The release branch includes the separate-process synthetic fixture from `b781f2d9`. The default Page executor still runs in-process. The older pool implementation is at `8294855e`. | Port the benchmark harness and worker lifecycle to the current package. Verify bounded shutdown with busy and unready workers and worker exit after parent death. Record the in-process baseline at roughly 500k URLs and verify the default pool before 050 task 1.13. |
 | [030 Page data](../openspec/changes/030-add-page-data/tasks.md) | Main includes the group 4b changes, sentence-splitting and cookie Domain fixes. | Run the Links layout comparison (10.1), then the writer capacity benchmark on the chosen layout (10.11). Close the design Risks and whole-change review (4.15). |
 | [040 Rules](../openspec/changes/040-add-rules/tasks.md) | Five Rules evaluate real populations on the release branch: `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`. Four further catalogue entries still return no rows by design. | Cover the analysed-Page boundary for `h1-missing`. Widen to the 15 executable v0.1 Rules and the Health Score. The roadmap lists the release Rules by id. |
-| [050 queries](../openspec/changes/050-add-query-and-segments/tasks.md) | Tasks 1.1–1.7 are integrated. `linx issues` and the Issue detail Service exist. | Start at 1.8. Verify recorded thresholds, guidance, reproducing SQL, Affected URL detail and cursor isolation between Crawls. Add the singular `issue` Command and its usage hints. |
+| [050 queries](../openspec/changes/050-add-query-and-segments/tasks.md) | Tasks 1.1–1.8 are integrated. `linx issues` and the Issue detail Service exist. The Service returned the recorded threshold of 70 after the Workspace threshold changed to 85. | Verify recorded guidance, reproducing SQL, Affected URL detail and cursor isolation between Crawls. Add the singular `issue` Command and its usage hints. |
 | [060 Crawl control](../openspec/changes/060-add-crawl-control/tasks.md) | Ownership tasks 0.1–0.6 from `5fcf25e2` are in the first CI candidate at `d6a1d577`. | Prove the writer claim precedes schema creation (0.7). Complete ownership, detached Crawls, `status`, `stop` and `resume`. A resumed Crawl with recorded secret markers needs fresh inputs under the 022 contract. |
 
 ## What blocks Crawl → Issues
@@ -43,12 +45,18 @@ The three-Command acceptance test is still open.
    owns the build, release checks and wheel-install smoke on all three systems.
    The full-pipeline run and 085 are still open.
 
-The 030 review also needs to reconcile the first unresolvable meta refresh with the documented extraction behaviour. [030 design risks](../openspec/changes/030-add-page-data/design.md#risks--trade-offs).
+The 030 Page extraction seam reproduced an Indexability error. With a first
+meta refresh to `javascript:void(0)` and a second to `/second`, it recorded
+`/second` as the redirect target and the Page as `non_indexable`. A first
+reload without a URL and a first valid redirect gave the expected results.
+Task 4.15 must reconcile this exception with the first-element contract.
+[030 design risks](../openspec/changes/030-add-page-data/design.md#risks--trade-offs).
 
 Stop during post-crawl passes crosses three changes. The Crawl core currently
-closes its stop signal before passes. 060 owns stop and writer ownership, 026
-owns worker shutdown and 040 owns Rule materialisation. Reconcile pass
-cancellation in those contracts before implementing that stop path.
+closes its stop signal before passes. The existing final-pass regression
+confirms that a late stop leaves a completed Crawl with its original result.
+060 must report the targeted run's actual end and keep the stop request from
+reaching a successor. 026 owns worker shutdown and 040 owns materialisation.
 
 The 026 port has an additional Linux shutdown case to close before selecting
 the pool by default. With one interrupt, a worker held inside a native call
@@ -57,6 +65,34 @@ exited with code 130 but a worker was still alive after the 10-second check.
 This occurred both during preparation and while a new worker read its settings
 snapshot. Verify both cases against the integrated pool on each supported OS.
 
+The HTTP benchmark preflight on seed 83 requested 105 Page addresses. One
+bodyless HTTP 500 had a URL outcome and no HTML Page. The Store contained 104
+Pages and all 2,275 expected URLs. Replacing one Resource URL while preserving
+the row count failed verification. The 10k and 500k runs are still open.
+
+On the first CI candidate, the three-process acceptance preflight completed
+the fixture Crawl and found one Affected URL each for `title-missing` and
+`internal-4xx`. The singular Command exited with `usage_error` because `issue`
+has yet to be registered. Task 050 1.13 remains open.
+
+## Test review at this checkpoint
+
+In the integration with 060 ownership and 050 task 1.8, 201 Python test modules
+contain 1,586 test functions before parametrisation. Inspection found no empty
+test bodies, always-true literal assertions or equality comparisons of an
+expression to itself. Of the 14 functions without a direct assertion or
+exception expectation, each delegates to an assertion helper, checks a child
+process or runs Page extraction over generated inputs with extractor failures
+checked by the helper. The release-path review also used deliberate changes.
+Reading the installed Rule threshold yielded 60 instead of the recorded 70.
+Removing the analysed-Page predicate returned an extra 404 for `h1-missing`.
+Replacing a stored Resource while preserving the count failed URL accounting.
+
+Four registered Rules still use empty-result SQL. Of these, `title-too-long`
+belongs to v0.1. The other three (`h2-missing`, `low-word-count` and
+`url-parameters`) are outside the release's 15 Rules. Ten of those 15 still
+need executable queries and tests distinguishing affected and unaffected URLs.
+
 ## Planning estimate at this checkpoint
 
 Allow 1–3 working weeks for the foreground Crawl → Issues milestone on the three
@@ -64,8 +100,9 @@ supported systems, and 5–9 working weeks from this checkpoint for v0.1. Both
 ranges assume the three implementation streams can continue in parallel and a
 quiet machine is available for the scale runs. Update the forecast after the
 500k in-process baseline, the default pool shutdown tests and task 050 1.13.
-A release candidate still needs the full-pipeline benchmark, wheel installation
-on all three systems and the remaining Commands in the roadmap.
+A release candidate still needs the full-pipeline benchmark, the remaining
+Commands and the 085 wheel install check that runs `linx doctor` with the
+pinned Python on all three systems.
 
 ## Historical verification of 022 (2026-11-18)
 

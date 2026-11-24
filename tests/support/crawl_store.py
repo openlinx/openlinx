@@ -10,6 +10,8 @@ from sqlalchemy import text
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.rules.model import Rule
 from openlinx.rules.registry import RULES
+from openlinx.rules.settings import RulesSettings
+from openlinx.services.rules import rule_rows
 from openlinx.store.crawls import record_state
 from openlinx.store.issues import affected_urls_unit
 from openlinx.store.links import inlink_counts, inlink_ranges, pages_with_status_200, write_links
@@ -88,16 +90,20 @@ def crawl_store(
     temp_workspace: TempWorkspace,
     *,
     pages: Mapping[str, str] | None = None,
+    rule_settings: Mapping[str, Mapping[str, int | bool]] | None = None,
     completed: bool = True,
     journal_setting: JournalSetting = "wal",
     example_issues: tuple[IssueExample, ...] = _ORDERED_ISSUES,
 ) -> Path:
     """Record linked HTML Pages with the installed Rules, completing the Crawl by default.
 
-    Without explicit Pages, record non-HTML 404s for the example Issues of later Rules.
+    Explicit Pages can carry validated Rule settings. Without Pages, record non-HTML 404s
+    for the example Issues of later Rules.
     """
     responses: Mapping[str, str | None]
     if pages is None:
+        if rule_settings is not None:
+            raise ValueError("Rule settings require explicit Pages.")
         rules, snapshots = _rules(example_issues)
         crawl_file = create_any_crawl(
             temp_workspace, rules=snapshots, journal_setting=journal_setting
@@ -109,7 +115,11 @@ def crawl_store(
         }
     else:
         rules = RULES
-        crawl_file = create_any_crawl(temp_workspace, journal_setting=journal_setting)
+        configured = RulesSettings().model_dump() if rule_settings is None else rule_settings
+        snapshots = rule_rows(configured)
+        crawl_file = create_any_crawl(
+            temp_workspace, rules=snapshots, journal_setting=journal_setting
+        )
         responses = pages
 
     root = NormalizedUrl("https://example.com/")
@@ -182,8 +192,10 @@ def crawl_store(
             pages_200 = writer.run(pages_with_status_200)
             for first, last in writer.run(inlink_ranges):
                 writer.run(inlink_counts(first, last, pages_200))
+            enabled = {row.id for row in snapshots if row.enabled}
             for rule in rules:
-                writer.run(affected_urls_unit(rule))
+                if rule.id in enabled:
+                    writer.run(affected_urls_unit(rule))
             writer.run(record_state("completed", STARTED_AT + timedelta(seconds=len(queued) + 2)))
     return crawl_file.path
 

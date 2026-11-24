@@ -1,4 +1,4 @@
-> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+Writer ownership uses the existing Crawl Service lifecycle. The remaining control and background-process decisions need the reconciliation listed under Open Questions before their implementation.
 
 ## Context
 
@@ -16,14 +16,12 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   - the result on stdout, events and diagnostics on stderr, and partial results
   - the paging envelope, and the exit-code table (busy 5, usage 2)
   - no environment variables as settings
-- **`020-add-crawl-core`,** re-grounded on 2026-10-14 against its code through group 6 (its first pull request):
-  - the Crawl Service in `openlinx.services.crawling`: `plan_crawl(request, tables)`, validation and config resolution before anything is created, which turns a `CrawlRequest` (the Seed, `cwd`, `home`, `workspace`, `command_argv`, `secret_names` and the settings given as `flags`) into a `CrawlPlan` (`seed`, `settings`, `scope`, `new_crawl`); and `start_crawl(plan, clock, reporter, hooks, *, resolver=None)`, which creates the Crawl, builds its `CrawlContext` in one place (`_crawl_context`, `020` D15), runs it under `asyncio.Runner(loop_factory=loop_factory)` and returns the `CrawlResult`, whose `to_json()` is the result of a foreground `linx crawl`
-  - the stop flag: `StopSignal` in `openlinx.crawl.stop`, in the context, set once with `set(reason, cause=None)`; the engine starts no request once it is set
-  - `TRANSITIONS` and `check_transition` in `openlinx.store.transitions`, which already allows `stopped` → `running` and `failed` → `running`, and `set_state(connection, state, at, stop_reason)` with its unit `record_state` in `openlinx.store.crawls`, the one writer of how a Crawl ends (D12); `StopReason` holds the six values of `crawl.stop_reason`
-  - `url_counts()` in `openlinx.store.urls`, the counting unit of the result, whose `UrlCounts` holds the `fetch_state` counts, `pages` and the five status classes
-  - `WarningLog` in `openlinx.crawl.warning_log`, the Crawl's Reporter, over `010`'s `CliReporter`, which writes events and diagnostics to stderr
-  - the settings registry with `CrawlSettings` (`openlinx.crawl.settings`), `OptionMeta(setting=...)`, and `secret_names(command, tables)` in `openlinx.cli.options`
-- **What `020` builds after its first pull request,** which some tasks here wait for (tasks.md names the `020` task each time): the `stopped` end of a stop flag and `--max-urls` (tasks 9.7 and 13.1), post-crawl passes on a stop (task 9.16), robots.txt (group 10), `--rate` (task 11.1), the progress counters and `progress` events (task 12.4), the failed ends with their errors (tasks 12.6–12.12), the network pause (tasks 12.15–12.22), interrupts and the stop's grace period (group 13), and the continue operation (group 14). Today the Crawl Service raises for any stop flag, because no `stopped` end is built yet.
+- **`020-add-crawl-core`,** as implemented and archived:
+  - `plan_crawl` validates a start before creating anything; `start_crawl` creates the file and runs the Crawl; `continue_crawl` restores the recorded crawl settings and queue.
+  - The full `_crawled` operation owns the event loop, interrupts, post-crawl passes and the failure path. `_failed_end` can open another writer after the normal writer closes, so ownership must surround the whole operation.
+  - `StopSignal`, state transitions, URL limits, robots.txt, rate, progress, network pauses, grace periods and stopped/failed ends are implemented.
+  - Modules live under `openlinx.crawl.engine` and `openlinx.crawl.fetch`; use their current package interfaces instead of the draft's flat module names.
+- **`023-fix-code-audit`,** as implemented and archived: `default_tables()` is the services' settings registry, CLI options are checked against their settings fields, and the composition root builds hooks from typed settings. A resume must restore every applicable recorded table, including Content Area; neither today's TOML nor default hooks reproduce that snapshot.
 - **`015`'s code that this change builds on:** `create_crawl(request, clock, reporter, choice=secrets.choice)` in `openlinx.services.crawls` draws the id with `new_crawl_id(started_at, choice)` and claims it by creating `<id>.sqlite` exclusively (`_claim_new_file` in `openlinx.store.crawls`), drawing again when that file exists; `opening(path, *, role, busy_seconds=None)` in `openlinx.store.connections` opens a connection with a `ConnectionRole` (`create`, `write` or `read`, `017` D8); and `--crawl` (`CrawlOpt` in `openlinx.cli.options`, with `latest`) resolves through `resolve_crawl(reference, workspace=..., cwd=...)` in `openlinx.store.selection`.
 - **`024-add-list-and-sitemap-modes`:** the list and sitemap readers.
 - **Consumers:**
@@ -53,7 +51,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 The OS releases the claim when a process dies, so "`running` and nobody holds the claim" means the process is dead.
 - **When a Command finds this:** it calls `check_writer` (D12), which records `interrupted` when no process holds the claim, and in the same transaction sets the run's `end_state`.
 - **The heartbeat:** `crawl_runs.heartbeat_at` and the progress counters (D7), written every 5 seconds through the writer. For liveness it only feeds `heartbeat_age_s` and the `heartbeat_stale` warning, for a live process that is suspended, for example a sleeping laptop.
-- **Probing races:** a probe holds the claim for milliseconds, so `resume` and `crawls rm` try to acquire it for up to 2 seconds before they report `crawl_locked`.
+- **Probing races:** acquisition is nonblocking for probes, starts and resumes. A held claim is reported as `crawl_locked` without retry, as the writer-exclusion requirement specifies.
 - *Alternative:* a heartbeat timeout alone. It is slow to notice deaths, and it wrongly declares suspended processes dead. Rejected as the authority.
 
 ### D3. Detach: the parent reserves the id, the child creates the Crawl
@@ -131,10 +129,14 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
   - It then releases the claim and deletes the claim's lock file.
 
 ### D12. The writer claim, control writes, `interrupted` and reserved ids
-`015` was planned to build these, and they moved here on 2026-10-05, because only background Crawls and `resume` need them. They live in `openlinx.store` (`020` D14).
+**In short:** a context owns the OS claim from creation through every writer closing; control data stays in `openlinx.store` (`020` D14).
 - **The writer claim** (`openlinx.store.claim`): an operating-system lock on `<id>.lock`, taken without waiting: `msvcrt.locking` on Windows and `fcntl.flock` on POSIX, on the lock file, never on the crawl file.
   - The operating system releases it when the process ends, SIGKILL and TerminateProcess included, so "`running` and the claim is free" means the process is dead (D2).
-  - It is taken where the id is claimed: `create_crawl` draws the id and takes `<id>.lock` before it creates `<id>.sqlite` (`_claim_new_file`), and gives the claim to the Crawl Service with the `CrawlFile`; a resume takes it before it opens the writer. The Crawl Service holds it until the writer is closed. A Crawl therefore never exists without a live claim (D3).
+  - `claim_writer(CrawlFile)` is a context manager. Its context owns and closes the lock descriptor; `CrawlFile` remains only an id and path, never a hidden resource owner. Windows locks byte 0 with `LK_NBLCK`; POSIX uses `LOCK_EX | LOCK_NB`. Only a lock conflict maps to `crawl_locked`; other I/O errors retain their proper diagnostic.
+  - `create_crawl_file` and `create_crawl` become context managers yielding their existing result values. Creation takes the claim before the exclusive SQLite create. `start_crawl` holds the creation context around the entire `_crawled` operation, including post-crawl passes and `_failed_end`, until all writers close.
+  - Initialization cleanup ends before the creation context yields: a failure to initialize removes the incomplete SQLite file while still holding the claim, but an exception from running an initialized Crawl must preserve that file. The descriptor closes on every exit; the lock file remains.
+  - A resume acquires the same claim before reading mutable admission conditions or opening a writer, revalidates state and limit under it, and holds it through the entire continue operation. Validate the supported crawl-control structure before treating a free claim as evidence of a dead process; an old development build did not hold claims.
+  - *Alternative:* returning a bare lock descriptor inside `CrawlFile`. Rejected because ordinary record consumers would unknowingly own a resource, and exceptional returns could leak ownership.
   - Failing to take it is `crawl_locked` (exit code 5), declared by this change.
   - The lock file stays behind. It is harmless, it marks the id as taken, and `crawls rm` deletes it.
 - **Control writes** (`write_control`, in `openlinx.store.control`): a read-write connection without the claim, opened with `opening(path, role="control", busy_seconds=5)`, a new `ConnectionRole` whose connect listener installs a SQLite authorizer that refuses every write to a table not marked `info={"control": True}`.
@@ -214,11 +216,18 @@ Boundary doubles, all from the approved list:
 
 ## Migration Plan
 
-None. Before v0.1 the schema is not yet public: this change adds `crawl_runs` and `control_requests` to the declared schema and `docs/schema.md`, each in the slice that needs it, and `schema_version` stays `1` (`015` D5). `control_requests` carries `info={"control": True}`.
+No migration is provided for files from earlier development builds (015 D5 and CONTRIBUTING). Control Commands must reject an unsupported structure before writing or inferring liveness, without synthesising past runs. Before v0.1: this change adds `crawl_runs` and `control_requests` to the declared schema and `docs/schema.md`, each in the slice that needs it, and `schema_version` stays `1` (`015` D5). `control_requests` carries `info={"control": True}`.
 
 ## Open Questions
 
-These are deferrable, and each adds a Command or flag later without changing these specs:
+The following decisions must be reconciled before their affected groups start; they do not block the writer-ownership foundation:
+- Restore all applicable recorded config tables and build hooks from them. Preserve 023's option metadata rules while an omitted resume override means keep the recorded value.
+- Target stop requests at a particular run so an unhandled request cannot stop its successor. Post-crawl calculations finish without cancellation; `stop` waits within `--wait` and does not cancel those calculations. Define request handling and terminal-state reporting for that phase before implementing control requests.
+- Define detached resume separately from creating a new Crawl: pin the selected file, let the child acquire ownership and revalidate admission, append to its log, and acknowledge this launch rather than a prior run row. Cover competing parents and fast completion.
+- Preserve 020's existing URL-limit accounting and explicitly specify retained, raised and unlimited overrides. Resolve elapsed time for an interrupted run whose exact death time is unknown, and distinguish stored URL counts from historical request attempts before implementing average rate.
+- Integrate the existing 022 URL-limit fixes for resume acceptance; verify executable hint targets from 050 and actual parse workers from 026 where their contracts require them.
+
+The following features remain deferrable and add Commands or flags without changing these specs:
 - `linx crawl --like <id>` (or `crawls rerun <id>`), to re-run a Crawl directly from its recorded config.
 - Retention: `crawls prune --older-than`, or a Workspace setting that caps the number of kept Crawls.
 - `status --watch` for people.
