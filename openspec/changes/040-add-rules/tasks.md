@@ -81,7 +81,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture Page `/long-title`.
 - [ ] 5.5 Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
 - [ ] 5.6 Drive "Multiple titles" at seam 2, and register `title-multiple`.
-- [ ] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
+- [x] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
 - [ ] 5.8 Drive "Title equals H1" and "Comparison with H1 is case-sensitive" at seam 2. This is a trivial pair: the same comparison. Register `title-same-as-h1`.
 - [ ] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
 - [ ] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.

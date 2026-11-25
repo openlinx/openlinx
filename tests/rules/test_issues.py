@@ -101,6 +101,34 @@ def test_detail_is_stored_as_json(fixture_site: StartSite) -> None:
     assert _decoded_details(query(file, sql)) == _decoded_details([(url_id, detail)])
 
 
+@pytest.mark.usefixtures("temp_workspace")
+def test_rule_that_did_not_fire_has_no_issue(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/rules/": Page(
+                    body='<title>Shop</title><h1>Shop</h1><a href="/rules/shoes">Shoes</a>',
+                ),
+                "/rules/shoes": Page(body="<title>Shoes</title><p>Running shoes</p>"),
+            }
+        )
+    )
+    file = crawled(server.url("/rules/"))
+
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    assert query(
+        file,
+        "SELECT pages.url_path, pages.title_1 FROM pages JOIN urls ON urls.id = pages.url_id "
+        "WHERE urls.parsed = 1 ORDER BY pages.url_path",
+    ) == [("/rules/", "Shop"), ("/rules/shoes", "Shoes")]
+    assert query(file, "SELECT enabled FROM rules WHERE id = 'title-missing'") == [(1,)]
+    assert query(
+        file,
+        "SELECT rule_id, affected_count FROM issues "
+        "WHERE rule_id IN ('h1-missing', 'title-missing') ORDER BY rule_id",
+    ) == [("h1-missing", 1)]
+
+
 def test_replay_replaces_only_the_affected_urls_of_one_rule(
     issue_crawl: tuple[Path, str],
 ) -> None:
