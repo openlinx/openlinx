@@ -60,11 +60,11 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
   The opt-in subprocess tests cover completion, a single interrupt and abrupt owner death
   during Page preparation by a replacement, settings unpickling, and the admission wait.
   Linux proof includes a Page blocked in native code and a pre-admission owner death with
-  the work sockets retained by a separate process. The executor tests cover cancellation
-  during spawn, stalled work delivery and a forked child holding the result pipe and the
-  POSIX process sentinel. The default CLI and native Windows and macOS acceptance remain
-  open. Abrupt owner death during interpreter bootstrap before the worker target runs has
-  yet to be exercised.
+  the work sockets retained by a separate process. It also covers one and two interrupts
+  while a worker is blocked in native code before reaching its target, then a fresh Crawl
+  which stores both Pages. The executor tests cover cancellation during spawn, stalled work
+  delivery and a forked child holding the result pipe and the POSIX process sentinel. The
+  default CLI and native Windows and macOS acceptance remain open.
 
 ## 5. Change check
 

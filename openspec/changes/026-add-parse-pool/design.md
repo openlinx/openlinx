@@ -68,11 +68,18 @@ Each crash therefore costs one URL and one worker start.
   before sending an admission byte and the settings snapshot. A worker waiting for that byte
   also checks the Crawl's identity so it can exit before enrolment, even if a different process
   inherited the work channel. The spec gives workers 10 seconds after the Crawl exits.
+- **POSIX startup:** the OS places each worker in the guardian's process group before running
+  the interpreter. The guardian can end a worker in that group before it has received the PID.
+  An inherited startup pipe keeps the guardian checking the group while a launch coincides
+  with owner death. A temporary file carries the spawn preparation data so the Crawl can
+  finish the launch even when the worker stalls before reading it.
 - **Orderly close:** close takes ownership of ongoing starts and replacements, closes the
   work sockets after the engine's grace period, and ends any remaining workers within a
-  shared grace and reap budget. A worker that still holds cancelled work is killed immediately.
-  The guardian is joined once the workers have been reaped. On POSIX the executor checks the
-  actual process exit status because another process can retain the sentinel's writer.
+  shared grace and reap budget. A worker that still holds cancelled work, or is unready when
+  the engine has cancelled a call waiting for a start or a worker, is killed immediately.
+  The guardian is joined once the workers have been reaped. The executor also reaps an ended
+  worker before launching its replacement. On POSIX a sentinel can close before the OS
+  reports exit or stay open after exit when another process has inherited its writer.
 
 ### D5. Windows consoles
 `multiprocessing` creates its children with no creation flags, so they attach to their parent's console, and a console-less parent is the only way to get new windows.

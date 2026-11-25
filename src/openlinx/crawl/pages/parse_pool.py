@@ -13,12 +13,11 @@ from contextlib import suppress
 from dataclasses import dataclass
 from multiprocessing.connection import _ConnectionBase, wait
 from multiprocessing.process import BaseProcess
-from time import monotonic
 from typing import Any, BinaryIO
 
 from openlinx.clock import SystemClock
 from openlinx.crawl.fetch.fetcher import FetchResult
-from openlinx.crawl.pages.parse_guard import ADMISSION, Guard, Owner, await_admission
+from openlinx.crawl.pages.parse_guard import ADMISSION, Guard, Owner, await_admission, wait_for_exit
 from openlinx.crawl.pages.parse_wire import Outcome, crashed_page, decode_outcome, encode_outcome
 from openlinx.crawl.pages.preparation import PageSettings, PreparedPage, prepare_page
 from openlinx.crawl.urls import NormalizedUrl
@@ -103,33 +102,18 @@ def worker_limit(platform: str, version: tuple[int, int]) -> int | None:
     return None
 
 
-def _reap(process: BaseProcess) -> None:
+def _reap(process: BaseProcess, clock: SystemClock) -> None:
     # A worker whose result pipe closed may still be exiting.
-    if not _wait_for_exit(process, monotonic()):
+    if not wait_for_exit(process, clock.monotonic(), clock):
         process.kill()
-    _join_process(process, monotonic() + _REAP_SECONDS)
-    # An external waitpid can consume the status before Process.close() checks it.
-    with suppress(ValueError):
-        process.close()
+    _join_process(process, clock.monotonic() + _REAP_SECONDS, clock)
+    process.close()
 
 
-def _join_process(process: BaseProcess, deadline: float) -> None:
-    if not _wait_for_exit(process, deadline):
+def _join_process(process: BaseProcess, deadline: float, clock: SystemClock) -> None:
+    if not wait_for_exit(process, deadline, clock):
         raise RuntimeError(f"The parse worker {process.name} did not end.")
     process.join(0)
-
-
-def _wait_for_exit(process: BaseProcess, deadline: float) -> bool:
-    # POSIX uses a pipe for the sentinel. If a grandchild inherits it, the original
-    # process may exit while the pipe remains open. exitcode checks the process itself.
-    while process.exitcode is None:
-        remaining = deadline - monotonic()
-        # The sentinel also proves exit when a different observer consumed the status.
-        if wait([process.sentinel], min(0.1, max(0.0, remaining))):
-            return True
-        if remaining <= 0:
-            return False
-    return True
 
 
 @dataclass(frozen=True, eq=False)
@@ -171,6 +155,7 @@ class PoolExecutor:
         self._clock = SystemClock()
         self._guard = Guard(self._clock)
         self._starting: asyncio.Task[None] | None = None
+        self._start_cancelled = False
         self._settings: PageSettings | None = None
         # The workers not yet retired, and those still running, idle or busy, or ready; a
         # worker that ended is retired, so a long hostile Crawl keeps no pipe or process of
@@ -207,7 +192,11 @@ class PoolExecutor:
         if self._starting is not None or self._closing:
             raise RuntimeError("the parse pool starts more than once or after close")
         self._starting = asyncio.create_task(self._start(settings))
-        await asyncio.shield(self._starting)
+        try:
+            await asyncio.shield(self._starting)
+        except asyncio.CancelledError:
+            self._start_cancelled = True
+            raise
 
     async def _start(self, settings: PageSettings) -> None:
         self._settings = settings
@@ -246,6 +235,7 @@ class PoolExecutor:
         await asyncio.shield(self._close_task)
 
     async def _close(self) -> None:
+        abandoned = self._start_cancelled or any(future.cancelled() for _, future in self._waiting)
         for _, future in self._waiting:
             future.cancel()
         self._waiting.clear()
@@ -257,8 +247,11 @@ class PoolExecutor:
         try:
             for worker in self._live:
                 held = self._busy.get(worker)
-                if held is not None and (held.future.cancelled() or self._broken is not None):
-                    # The engine has already abandoned this Page.
+                abandoned_work = held is not None and (
+                    held.future.cancelled() or self._broken is not None
+                )
+                if abandoned_work or (abandoned and worker not in self._ready):
+                    # The engine has already abandoned the Page or its wait for readiness.
                     worker.process.kill()
                 self._end_channel(worker)
         finally:
@@ -286,15 +279,15 @@ class PoolExecutor:
         # The exit budget is shared across workers, including one that sent its last result
         # but is stuck in interpreter shutdown. Page and readiness timers can expire sooner.
         grace = min(_SHUTDOWN_GRACE, max(self._deadline, self._ready_deadline))
-        end = monotonic() + grace
+        end = self._clock.monotonic() + grace
         try:
             for worker in workers:
                 process = worker.process
-                if not _wait_for_exit(process, end):
+                if not wait_for_exit(process, end, self._clock):
                     process.kill()
-            reap_by = monotonic() + _REAP_SECONDS
+            reap_by = self._clock.monotonic() + _REAP_SECONDS
             for worker in workers:
-                _join_process(worker.process, reap_by)
+                _join_process(worker.process, reap_by, self._clock)
         finally:
             with suppress(OSError):
                 self._wake_writer.send(None)
@@ -321,15 +314,11 @@ class PoolExecutor:
         task_reader, task_writer = socket.socketpair()
         task_writer.setblocking(False)
         result_reader, result_writer = spawn.Pipe(duplex=False)
-        process = spawn.Process(
-            target=_work,
-            # Its pipe ends alone: on Windows a child that died while it unpickled the snapshot
-            # would leave its result pipe's write end open here (design D1).
-            args=(task_reader, result_writer, self._guard.owner),
-            name=f"parse-worker-{number}",
-            daemon=True,
+        # Its pipe ends alone: on Windows a child that died while it unpickled the snapshot
+        # would leave its result pipe's write end open here (design D1).
+        process = self._guard.worker(
+            _work, (task_reader, result_writer, self._guard.owner), f"parse-worker-{number}"
         )
-        # Starting a spawn process blocks while it pickles its arguments across.
         try:
             with self._clock.off_loop():
                 await asyncio.to_thread(process.start)
@@ -365,7 +354,7 @@ class PoolExecutor:
         try:
             self._end_channel(worker)
             with self._clock.off_loop():
-                await asyncio.to_thread(_reap, worker.process)
+                await asyncio.to_thread(_reap, worker.process, self._clock)
             self._workers.remove(worker)
             if pid is not None:
                 await self._guard.remove(pid)

@@ -5,6 +5,7 @@ import threading
 from collections.abc import Sequence
 from dataclasses import replace
 from functools import partial
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 
 import msgspec
@@ -118,6 +119,7 @@ def test_worker_failure_records_only_its_page_and_starts_a_replacement(
     temp_workspace: TempWorkspace,
     fixture_site: StartSite,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     *,
     crash: bool,
     parse_error: str,
@@ -144,6 +146,19 @@ def test_worker_failure_records_only_its_page_and_starts_a_replacement(
         handlers=(*hooks.handlers, handler("preparation_process", _observations, _write)),
     )
 
+    spawned: list[int] = []
+    start = BaseProcess.start
+
+    def observe_start(process: BaseProcess) -> None:
+        if process.name == "parse-worker-1":
+            (first,) = spawned
+            assert not psutil.pid_exists(first), f"Original worker PID {first} is still unreaped"
+        start(process)
+        if process.name in {"parse-worker-0", "parse-worker-1"}:
+            assert process.pid is not None
+            spawned.append(process.pid)
+
+    monkeypatch.setattr(BaseProcess, "start", observe_start)
     result = crawl_result(site.url("/"), hooks, pages=partial(PoolExecutor, workers=1, deadline=2))
 
     assert result.failure is None
@@ -158,4 +173,5 @@ def test_worker_failure_records_only_its_page_and_starts_a_replacement(
     first, replacement = (pid for _, pid in rows)
     assert [mark.name for mark in marks.iterdir()] == [str(first)]
     assert first != replacement
+    assert spawned == [first, replacement]
     assert all(not psutil.pid_exists(pid) for pid in (first, replacement))
