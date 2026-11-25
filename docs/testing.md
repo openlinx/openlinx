@@ -82,7 +82,13 @@ values Handlers receive and how their rows reach the Store. Other Hook cases are
 [test_parse_pool.py](../tests/crawl/test_parse_pool.py) exercises the spawn executor through
 the Crawl Service, HTTP fixture and read-only crawl file.
 [test_parse_shutdown.py](../tests/crawl/test_parse_shutdown.py) exercises its public executor
-lifecycle with real workers.
+lifecycle with real workers. [test_parse_process_tree.py](../tests/crawl/test_parse_process_tree.py)
+observes the same worker identities through normal completion, foreground interrupts and
+abrupt owner death. The executor seam also covers
+[delivery](../tests/crawl/test_parse_transport.py),
+[spawn cancellation](../tests/crawl/test_parse_spawn_cancel.py),
+[inherited descriptors](../tests/crawl/test_parse_inherited.py) and
+[cancelled queued Pages](../tests/crawl/test_parse_queue.py).
 
 Shared helpers are in `tests/support/` and the fixture site in `tests/fixture_site/` (see [Helpers](#helpers)).
 

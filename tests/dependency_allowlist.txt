@@ -19,6 +19,7 @@ yarl  # aiohttp: URLs, built from the normalised URL as given (design D13 of 020
 idna  # host names as aiohttp encodes them, UTS46 (design D13 of 020-add-crawl-core)
 msgspec  # frozen DiscoveredLink and page-preparation records cross the planned 026-add-parse-pool process boundary (ADR-0006, 020-add-crawl-core D5)
 orjson  # JSON output
+psutil  # identify the Crawl and its parse workers independently of inherited IPC endpoints
 publicsuffixlist  # registrable domains for the www rule and --scope subdomains, bundled, never downloaded (design D4 of 020-add-crawl-core)
 pydantic-settings  # openlinx.toml settings
 pydantic  # pydantic-settings: the settings models

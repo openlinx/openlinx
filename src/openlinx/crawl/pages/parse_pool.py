@@ -2,7 +2,9 @@
 
 import asyncio
 import multiprocessing
+import pickle
 import signal
+import socket
 import sys
 import threading
 from collections import deque
@@ -12,10 +14,11 @@ from dataclasses import dataclass
 from multiprocessing.connection import _ConnectionBase, wait
 from multiprocessing.process import BaseProcess
 from time import monotonic
-from typing import Any
+from typing import Any, BinaryIO
 
 from openlinx.clock import SystemClock
 from openlinx.crawl.fetch.fetcher import FetchResult
+from openlinx.crawl.pages.parse_guard import ADMISSION, Guard, Owner, await_admission
 from openlinx.crawl.pages.parse_wire import Outcome, crashed_page, decode_outcome, encode_outcome
 from openlinx.crawl.pages.preparation import PageSettings, PreparedPage, prepare_page
 from openlinx.crawl.urls import NormalizedUrl
@@ -30,6 +33,7 @@ _REAP_SECONDS = 5.0
 _WINDOWS_WAIT_HANDLES = 63
 # A worker's first answer; an outcome is a pickle, which never starts with these bytes.
 _READY = b"ready"
+_TAKEN = b"taken"
 _START_FAILED = b"failed:"
 
 # A Connection on POSIX, a PipeConnection on Windows: the one class both pipe ends share.
@@ -41,14 +45,21 @@ class WorkerStartError(RuntimeError):
     """A worker could not read its snapshot, or ended before it was ready: the Crawl's error."""
 
 
-def _work(tasks: _PipeEnd, results: _PipeEnd) -> None:
-    """A worker's life; the snapshot is its first message, so it is pickled once (design D1)."""
-    # Ctrl+C reaches every process of a console: the crawl process ends its workers in order.
+def _work(channel: socket.socket, results: _PipeEnd, owner: Owner) -> None:
+    # Ctrl+C reaches every process of a console: the Crawl process ends workers in order.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     if sys.platform == "win32":
         signal.signal(signal.SIGBREAK, signal.SIG_IGN)
+    with channel:
+        if await_admission(channel, owner):
+            with channel.makefile("rb") as tasks:
+                _read_work(tasks, results)
+
+
+def _read_work(tasks: BinaryIO, results: _PipeEnd) -> None:
+    """Read the settings once, then prepare one Page at a time."""
     try:
-        settings: PageSettings = tasks.recv()
+        settings: PageSettings = pickle.load(tasks)  # noqa: S301 - private owner channel
     except (EOFError, OSError):
         return
     # A snapshot it cannot read, such as an extractor whose module it cannot import.
@@ -62,11 +73,13 @@ def _work(tasks: _PipeEnd, results: _PipeEnd) -> None:
         return
     while True:
         try:
-            work = tasks.recv()
+            work = pickle.load(tasks)  # noqa: S301 - private owner channel
         # The crawl process ended without stopping this worker: nothing is left to do.
-        except (EOFError, OSError):
+        except (EOFError, OSError, pickle.UnpicklingError):
             return
-        if work is None:
+        try:
+            results.send_bytes(_TAKEN)
+        except OSError:
             return
         url, response = work
         outcome: Outcome
@@ -91,17 +104,32 @@ def worker_limit(platform: str, version: tuple[int, int]) -> int | None:
 
 
 def _reap(process: BaseProcess) -> None:
-    # Killed first, so that the join is bounded: an ended worker may still be exiting.
-    process.kill()
+    # A worker whose result pipe closed may still be exiting.
+    if not _wait_for_exit(process, monotonic()):
+        process.kill()
     _join_process(process, monotonic() + _REAP_SECONDS)
-    process.close()
+    # An external waitpid can consume the status before Process.close() checks it.
+    with suppress(ValueError):
+        process.close()
 
 
 def _join_process(process: BaseProcess, deadline: float) -> None:
-    # Another observer can already have reaped the child; the sentinel still records exit.
-    if not wait([process.sentinel], max(0.0, deadline - monotonic())):
+    if not _wait_for_exit(process, deadline):
         raise RuntimeError(f"The parse worker {process.name} did not end.")
     process.join(0)
+
+
+def _wait_for_exit(process: BaseProcess, deadline: float) -> bool:
+    # POSIX uses a pipe for the sentinel. If a grandchild inherits it, the original
+    # process may exit while the pipe remains open. exitcode checks the process itself.
+    while process.exitcode is None:
+        remaining = deadline - monotonic()
+        # The sentinel also proves exit when a different observer consumed the status.
+        if wait([process.sentinel], min(0.1, max(0.0, remaining))):
+            return True
+        if remaining <= 0:
+            return False
+    return True
 
 
 @dataclass(frozen=True, eq=False)
@@ -109,7 +137,7 @@ class _Worker:
     process: BaseProcess
     # The crawl process writes work to one pipe and reads outcomes from the other, so the event
     # loop's sends and the waiter thread's receives never share a connection.
-    tasks: _PipeEnd
+    tasks: socket.socket
     results: _PipeEnd
 
 
@@ -141,6 +169,8 @@ class PoolExecutor:
         self._ready_deadline = ready_deadline
         # Process readiness and termination use real elapsed time, even in embedded Crawls.
         self._clock = SystemClock()
+        self._guard = Guard(self._clock)
+        self._starting: asyncio.Task[None] | None = None
         self._settings: PageSettings | None = None
         # The workers not yet retired, and those still running, idle or busy, or ready; a
         # worker that ended is retired, so a long hostile Crawl keeps no pipe or process of
@@ -169,12 +199,22 @@ class PoolExecutor:
         self._retired: list[_PipeEnd] = []
         self._watched_lock = threading.Lock()
         self._waiter: threading.Thread | None = None
+        self._sending: dict[_Worker, asyncio.Task[None]] = {}
         # True: watch the pipes again, for a replacement; None: stop.
         self._wake_reader, self._wake_writer = multiprocessing.Pipe(duplex=False)
 
     async def start(self, settings: PageSettings) -> None:
+        if self._starting is not None or self._closing:
+            raise RuntimeError("the parse pool starts more than once or after close")
+        self._starting = asyncio.create_task(self._start(settings))
+        await asyncio.shield(self._starting)
+
+    async def _start(self, settings: PageSettings) -> None:
         self._settings = settings
+        await self._guard.start()
         for _ in range(self.workers):
+            if self._closing:
+                break
             await self._spawn()
         # A daemon: nothing it waits for may keep the crawl process from exiting.
         self._waiter = threading.Thread(
@@ -209,6 +249,8 @@ class PoolExecutor:
         for _, future in self._waiting:
             future.cancel()
         self._waiting.clear()
+        if self._starting is not None:
+            await asyncio.gather(self._starting, return_exceptions=True)
         # Replacements already in flight are owned by this close once their starts finish.
         await asyncio.gather(*self._retiring, return_exceptions=True)
         workers = tuple(self._workers)
@@ -218,11 +260,12 @@ class PoolExecutor:
                 if held is not None and (held.future.cancelled() or self._broken is not None):
                     # The engine has already abandoned this Page.
                     worker.process.kill()
-                else:
-                    with suppress(OSError):
-                        worker.tasks.send(None)
+                self._end_channel(worker)
         finally:
-            await self._release(workers)
+            try:
+                await self._release(workers)
+            finally:
+                await self._guard.close()
 
     async def _release(self, workers: tuple[_Worker, ...]) -> None:
         try:
@@ -247,7 +290,7 @@ class PoolExecutor:
         try:
             for worker in workers:
                 process = worker.process
-                if not wait([process.sentinel], max(0.0, end - monotonic())):
+                if not _wait_for_exit(process, end):
                     process.kill()
             reap_by = monotonic() + _REAP_SECONDS
             for worker in workers:
@@ -275,13 +318,14 @@ class PoolExecutor:
         number = self._spawned
         self._spawned += 1
         spawn = multiprocessing.get_context("spawn")
-        task_reader, task_writer = spawn.Pipe(duplex=False)
+        task_reader, task_writer = socket.socketpair()
+        task_writer.setblocking(False)
         result_reader, result_writer = spawn.Pipe(duplex=False)
         process = spawn.Process(
             target=_work,
             # Its pipe ends alone: on Windows a child that died while it unpickled the snapshot
             # would leave its result pipe's write end open here (design D1).
-            args=(task_reader, result_writer),
+            args=(task_reader, result_writer, self._guard.owner),
             name=f"parse-worker-{number}",
             daemon=True,
         )
@@ -299,6 +343,9 @@ class PoolExecutor:
             result_writer.close()
         worker = _Worker(process, task_writer, result_reader)
         self._workers.append(worker)
+        if process.pid is None:
+            raise RuntimeError("A started process has no PID.")
+        await self._guard.enroll(process.pid)
         # Idle only once ready: a Page sent earlier would wait for the worker's start, and its
         # deadline would count that wait (design D8).
         self._live.add(worker)
@@ -309,18 +356,19 @@ class PoolExecutor:
         )
         if self._started:
             self._wake_writer.send(True)
-        # A worker that ended already answers with the end of its result pipe.
-        with suppress(OSError):
-            task_writer.send(self._settings)
+        self._send(worker, self._settings)
 
     async def _retire(self, worker: _Worker) -> None:
         """Closes what an ended worker leaves, then starts its replacement (design D3)."""
         name = worker.process.name
+        pid = worker.process.pid
         try:
-            worker.tasks.close()
+            self._end_channel(worker)
             with self._clock.off_loop():
                 await asyncio.to_thread(_reap, worker.process)
             self._workers.remove(worker)
+            if pid is not None:
+                await self._guard.remove(pid)
         # Its process may still run: a replacement beside it would keep one more for good, and a
         # failure that ended this task unread would leave the waiting Pages waiting for ever.
         except Exception as error:
@@ -345,16 +393,10 @@ class PoolExecutor:
             if future.done():
                 continue
             worker = self._idle.popleft()
-            try:
-                worker.tasks.send(work)
-            # It ended since it last answered, before the waiter saw it.
-            except OSError:
-                self._waiting.appendleft((work, future))
-                self._ended(worker)
-                continue
-            # From the moment the worker takes it, never from its time in the queue (D8).
+            self._send(worker, work)
+            # Charge delivery to this worker, independently of the time this Page waited.
             deadline = asyncio.create_task(
-                self._after(self._deadline, self._overdue, worker, future)
+                self._after(self._deadline, self._delivery_stalled, worker, future)
             )
             self._busy[worker] = _Held(work[0], future, deadline)
 
@@ -367,6 +409,31 @@ class PoolExecutor:
     ) -> None:
         with self._clock.off_loop():
             loop.call_soon_threadsafe(callback, *args)
+
+    def _send(self, worker: _Worker, message: PageSettings | _Work) -> None:
+        self._sending[worker] = asyncio.create_task(self._deliver(worker, message))
+
+    async def _deliver(self, worker: _Worker, message: PageSettings | _Work) -> None:
+        try:
+            payload = pickle.dumps(message, pickle.HIGHEST_PROTOCOL)
+            # The worker waits for this byte independently of task EOF until it is enrolled.
+            if isinstance(message, PageSettings):
+                payload = ADMISSION + payload
+            await asyncio.get_running_loop().sock_sendall(worker.tasks, payload)
+        except OSError:
+            self._ended(worker)
+        except Exception as error:
+            self._break(error)
+        finally:
+            # An outcome may arrive just before the loop resumes a completed send.
+            if self._sending.get(worker) is asyncio.current_task():
+                self._sending.pop(worker)
+
+    def _end_channel(self, worker: _Worker) -> None:
+        sending = self._sending.pop(worker, None)
+        if sending is not None:
+            sending.cancel()
+        worker.tasks.close()
 
     def _wait_for_outcomes(self, loop: asyncio.AbstractEventLoop) -> None:
         """The waiter thread: every worker's outcome, handed to the event loop's thread."""
@@ -406,6 +473,8 @@ class PoolExecutor:
                     continue
                 if message == _READY:
                     self._notify(loop, self._on_ready, worker)
+                elif message == _TAKEN:
+                    self._notify(loop, self._taken, worker)
                 elif message.startswith(_START_FAILED):
                     reason = message.removeprefix(_START_FAILED).decode(errors="replace")
                     failure = WorkerStartError(
@@ -414,6 +483,22 @@ class PoolExecutor:
                     self._notify(loop, self._break, failure)
                 else:
                     self._notify(loop, self._finished, worker, decode_outcome(message))
+
+    def _delivery_stalled(self, worker: _Worker, future: asyncio.Future[PreparedPage]) -> None:
+        held = self._busy.get(worker)
+        if held is not None and held.future is future:
+            worker.process.kill()
+            self._ended(worker)
+
+    def _taken(self, worker: _Worker) -> None:
+        held = self._busy.get(worker)
+        if held is None:
+            return
+        held.deadline.cancel()
+        deadline = asyncio.create_task(
+            self._after(self._deadline, self._overdue, worker, held.future)
+        )
+        self._busy[worker] = _Held(held.url, held.future, deadline)
 
     def _on_ready(self, worker: _Worker) -> None:
         if worker not in self._live:
