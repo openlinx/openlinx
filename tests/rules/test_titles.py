@@ -118,3 +118,11 @@ def test_title_too_long_by_characters(fixture_site: StartSite) -> None:
     assert evaluate_rule(file, TITLE_TOO_LONG) == [
         AffectedUrl(url_id=url_id, detail={"length": 61})
     ]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_title_at_the_limit(fixture_site: StartSite) -> None:
+    server = fixture_site(Site({"/": Page(body="<title>" + "a" * 60 + "</title>")}))
+    file = crawled(server.url("/"))
+    assert query(file, "SELECT title_1_length FROM pages") == [(60,)]
+    assert evaluate_rule(file, TITLE_TOO_LONG) == []
