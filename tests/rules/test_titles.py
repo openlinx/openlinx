@@ -5,7 +5,7 @@ from sqlalchemy import update
 
 from openlinx.clock import SystemClock
 from openlinx.rules.headings import H1_MISSING
-from openlinx.rules.titles import TITLE_MISSING
+from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
 from openlinx.store.issues import evaluate_rule
 from openlinx.store.records import AffectedUrl
 from openlinx.store.schema import pages
@@ -96,3 +96,25 @@ def test_non_analysed_pages_are_skipped_by_page_rules(fixture_site: StartSite) -
     ) == [(0, 0, 0)]
     assert evaluate_rule(file, TITLE_MISSING) == expected
     assert evaluate_rule(file, H1_MISSING) == expected
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_title_too_long_by_characters(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Home</title><a href="/long">Long title</a>'),
+                "/long": Page(body="<title>" + "я" * 61 + "</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    [(url_id, length, width)] = query(
+        file,
+        "SELECT url_id, title_1_length, title_1_width_px FROM pages WHERE address = ?",
+        (server.url("/long"),),
+    )
+    assert (length, width) == (61, None)
+    assert evaluate_rule(file, TITLE_TOO_LONG) == [
+        AffectedUrl(url_id=url_id, detail={"length": 61})
+    ]

@@ -1,6 +1,6 @@
 """Declare the Rules for Page titles."""
 
-from openlinx.rules.model import NO_ROWS, Rule, Threshold
+from openlinx.rules.model import Rule, Threshold
 
 TITLE_MISSING = Rule(
     id="title-missing",
@@ -35,7 +35,13 @@ TITLE_TOO_LONG = Rule(
         "what sets the Page apart, is not shown."
     ),
     how_to_fix="Shorten the title to the limit, with the words that describe the Page first.",
-    reproduce_sql=NO_ROWS,
+    reproduce_sql="""\
+SELECT pages.url_id, json_object('length', pages.title_1_length) AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1 AND pages.title_1_length > (
+    SELECT json_extract(thresholds, '$.max_chars') FROM rules WHERE id = 'title-too-long'
+)""",
     thresholds=(Threshold("max_chars", 60, "characters"),),
 )
 

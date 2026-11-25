@@ -37,6 +37,7 @@ unchanged.
 | `internal-5xx` | `issue` | `high` | An Internal URL has a recorded HTTP status from 500 through 599. | JSON object with `status_code` |
 | `internal-no-response` | `issue` | `high` | An Internal URL has `fetch_state = 'error'` and a recorded `fetch_error` other than `record_failed`. | JSON object with `error`, the recorded `fetch_error` |
 | `title-missing` | `issue` | `high` | An analysed Page has no `<title>` or its first `<title>` is empty. | SQL `NULL` |
+| `title-too-long` | `opportunity` | `medium` | An analysed Page's first title exceeds its recorded `max_chars` limit (default 60). | JSON object with `length`, the measured character count |
 | `h1-missing` | `warning` | `medium` | An analysed Page has no `<h1>` or its first `<h1>` is empty. | SQL `NULL` |
 
 The response-code Rules use the recorded outcome for each Internal URL, including those
@@ -46,7 +47,7 @@ Crawl receives a response but cannot record it, the `record_failed` warning repo
 write failure. The `internal-no-response` Rule excludes that case.
 
 The title and heading Rules apply to analysed Pages (`urls.parsed = 1`). Missing measurements
-from a failed extractor do not trigger either Rule on their own. Read a Rule's guidance
+from a failed extractor do not trigger these Rules on their own. Read a Rule's guidance
 and reproducing SQL with [`linx rules show`](#read-one-rule).
 
 ## Browse the catalogue
@@ -99,12 +100,12 @@ the same fields in each item by default.
   "description": "A Page's first title is longer than max_chars characters.",
   "why_it_matters": "Search engines cut a long title short in their results, so its end, often the brand or what sets the Page apart, is not shown.",
   "how_to_fix": "Shorten the title to the limit, with the words that describe the Page first.",
-  "reproduce_sql": "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
+  "reproduce_sql": "SELECT pages.url_id, json_object('length', pages.title_1_length) AS detail\nFROM pages\nJOIN urls ON urls.id = pages.url_id\nWHERE urls.parsed = 1 AND pages.title_1_length > (\n    SELECT json_extract(thresholds, '$.max_chars') FROM rules WHERE id = 'title-too-long'\n)"
 }
 ```
 
-Registered Rules whose conditions are still pending return no rows, as shown by the
-`title-too-long` query in this example.
+The query reads the effective character limit recorded in the Crawl. The `length`
+in each Affected URL's detail is the measured length of the first title.
 
 `applies_to` names the Rule's intended population, such as `internal_pages` for title Rules or
 `internal_urls` for response-code Rules. The model also allows `resources` for Rules about

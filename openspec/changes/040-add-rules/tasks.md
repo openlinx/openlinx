@@ -75,7 +75,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 5. Title Rules and the post-crawl pass
 
-- [ ] 5.1 Drive "Title too long by characters" at seam 2.
+- [x] 5.1 Drive "Title too long by characters" at seam 2.
 - [ ] 5.2 Drive "Title at the limit" at seam 2.
 - [ ] 5.3 Drive "Raised title limit" at seam 2, passing effective thresholds to the evaluation entry point.
 - [ ] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture page `/rules/long-title`.
