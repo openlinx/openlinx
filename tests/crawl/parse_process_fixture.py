@@ -88,21 +88,22 @@ def _sockets() -> tuple[int, ...]:
 
 
 @contextmanager
-def _hold_spawn_handoff(folder: Path) -> Iterator[None]:
+def _hold_spawn_handoff(folder: Path, *, retain_sockets: bool) -> Iterator[None]:
     spawn = BaseProcess.start
 
     def start(process: BaseProcess) -> None:
         spawn(process)
         if process.name != "parse-worker-0":
             return
-        kept = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
-            pass_fds=_sockets(),
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        (folder / "retained").write_text(str(kept.pid), encoding="ascii")
+        if retain_sockets:
+            kept = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(30)"],
+                pass_fds=_sockets(),
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            (folder / "retained").write_text(str(kept.pid), encoding="ascii")
         (folder / "spawned").write_text(str(process.pid), encoding="ascii")
         threading.Event().wait(20)
 
@@ -112,8 +113,8 @@ def _hold_spawn_handoff(folder: Path) -> Iterator[None]:
 
 def main(url: str, folder: Path, phase: str) -> int:
     os.environ["PARSE_OWNER_PID"] = str(os.getpid())
-    if sys.platform == "linux" and phase == "pre_admission":
-        with _hold_spawn_handoff(folder):
+    if sys.platform == "linux" and phase in {"pre_admission", "bootstrap_handoff"}:
+        with _hold_spawn_handoff(folder, retain_sockets=phase == "pre_admission"):
             return _crawl(url, folder, phase)
     return _crawl(url, folder, phase)
 

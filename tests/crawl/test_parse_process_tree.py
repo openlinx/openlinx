@@ -305,3 +305,92 @@ def test_owner_death_ends_a_child_before_worker_admission(
                 if _running(child):
                     with suppress(psutil.NoSuchProcess):
                         child.kill()
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(sys.platform != "linux", reason="Observes Linux native bootstrap and spawn")
+@pytest.mark.parametrize("second_interrupt", [False, True], ids=["orderly-close", "parent-death"])
+def test_owner_interrupts_end_a_worker_still_in_native_spawn_bootstrap(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, tmp_path: Path, second_interrupt: bool
+) -> None:
+    site = fixture_site(Site(routes={"/": Page(body="Bootstrap")}))
+    bootstrap = tmp_path / "bootstrap_import"
+    bootstrap.mkdir()
+    (bootstrap / "sitecustomize.py").write_text(
+        """
+import ctypes
+import os
+import sys
+from pathlib import Path
+
+if "--multiprocessing-fork" in sys.argv:
+    folder = Path(os.environ["OPENLINX_PROBE_BOOTSTRAP"])
+    try:
+        # The guardian reads its start payload before the owner can spawn the next child.
+        with (folder / "guard_sitecustomize").open("x", encoding="ascii") as marker:
+            marker.write(str(os.getpid()))
+    except FileExistsError:
+        reader, writer = os.pipe()
+        (folder / "worker_sitecustomize").write_text(str(os.getpid()), encoding="ascii")
+        ctypes.PyDLL(None).read(reader, ctypes.create_string_buffer(1), 1)
+""",
+        encoding="utf-8",
+    )
+    phase = "bootstrap_handoff" if second_interrupt else "bootstrap_probe"
+    argv, env = _fixture_command(site.url("/"), tmp_path, phase)
+    # An ordinary long Python search path makes the stdlib's serialized preparation data
+    # exceed a spawn pipe's buffer. Nothing reads it while the worker imports sitecustomize.
+    search_path = [str(tmp_path / "unused" / f"{i:04d}" / ("x" * 176)) for i in range(340)]
+    env["PYTHONPATH"] = os.pathsep.join([str(bootstrap), env["PYTHONPATH"], *search_path])
+    env["OPENLINX_PROBE_BOOTSTRAP"] = str(tmp_path)
+    children: list[psutil.Process] = []
+    with (
+        (tmp_path / "stderr").open("w+b") as stderr,
+        subprocess.Popen(
+            argv, env=env, stdout=subprocess.DEVNULL, stderr=stderr, start_new_session=True
+        ) as process,
+    ):
+        try:
+            file = Path(_observed(tmp_path / "crawl_file"))
+            guard_pid = int(_observed(tmp_path / "guard_sitecustomize"))
+            worker_pid = int(_observed(tmp_path / "worker_sitecustomize"))
+            assert worker_pid != guard_pid
+            children = psutil.Process(process.pid).children(recursive=True)
+            worker = next(child for child in children if child.pid == worker_pid)
+            guard = next(child for child in children if child.pid == guard_pid)
+            if second_interrupt:
+                # The actual OS start returned to the test barrier but its PID has not
+                # reached the pool. The worker is stuck even before it can check admission.
+                assert int(_observed(tmp_path / "spawned")) == worker_pid
+            _is_blocked(worker)
+            assert _running(guard)
+            assert not (tmp_path / "prepared").exists()
+            process.send_signal(signal.SIGINT)
+            assert _observed(tmp_path / "stopping") == "interrupt"
+            _is_blocked(worker)
+            if second_interrupt:
+                process.send_signal(signal.SIGINT)
+                assert process.wait(timeout=2) == 130
+                record = crawl_row(file)
+                assert (record["state"], record["stop_reason"]) == ("running", None)
+            else:
+                assert process.wait(timeout=14) == 130
+                record = crawl_row(file)
+                assert (record["state"], record["stop_reason"]) == ("stopped", "interrupt")
+                assert query(file, "SELECT url, fetch_state FROM urls") == [
+                    (site.url("/"), "queued"),
+                ]
+            _ended(children, 10)
+        finally:
+            if process.poll() is None:
+                with suppress(psutil.NoSuchProcess):
+                    children.extend(psutil.Process(process.pid).children(recursive=True))
+                process.kill()
+                process.wait(timeout=5)
+            for child in children:
+                if _running(child):
+                    with suppress(psutil.NoSuchProcess):
+                        child.kill()
+    recovery = tmp_path / "recovery"
+    recovery.mkdir()
+    _finished_tree(fixture_site, recovery)

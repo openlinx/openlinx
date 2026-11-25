@@ -84,7 +84,9 @@ the Crawl Service, HTTP fixture and read-only crawl file.
 [test_parse_shutdown.py](../tests/crawl/test_parse_shutdown.py) exercises its public executor
 lifecycle with real workers. [test_parse_process_tree.py](../tests/crawl/test_parse_process_tree.py)
 observes the same worker identities through normal completion, foreground interrupts and
-abrupt owner death. The executor seam also covers
+abrupt owner death. On Linux it also blocks a worker in the interpreter before the worker
+target, checks exit after one and two interrupts, and verifies a subsequent Crawl in SQLite.
+The executor seam also covers
 [delivery](../tests/crawl/test_parse_transport.py),
 [spawn cancellation](../tests/crawl/test_parse_spawn_cancel.py),
 [inherited descriptors](../tests/crawl/test_parse_inherited.py) and

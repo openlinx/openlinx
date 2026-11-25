@@ -31,5 +31,9 @@ class SystemClock:
     async def sleep(self, seconds: float) -> None:
         await asyncio.sleep(seconds)
 
+    def sleep_in_thread(self, seconds: float) -> None:
+        """Pace status polling in a process supervisor running off the event loop."""
+        time.sleep(seconds)
+
     def off_loop(self) -> AbstractContextManager[None]:
         return nullcontext()
