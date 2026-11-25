@@ -6,4 +6,5 @@ directives: RobotsDirectives, NO_DIRECTIVES, robots_directives, meta_robots_cont
 decoding: decode_html, query_codec.
 links: parse_html, locate_links, LocatedLink.
 headers: header_links_with_parameters. refresh: refresh_url.
+parse_pool: PoolExecutor, WorkerStartError.
 """

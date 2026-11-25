@@ -7,25 +7,24 @@ fetch policy and 023 code audit, and the 030 Page data implementation through
 group 4b. Python 3.12, 3.13 and 3.14 each passed on Linux, macOS and Windows.
 [Main CI](https://github.com/openlinx/openlinx/actions/runs/44448078238).
 
-The local release branch is `integrate/v01-crawl-issues`. At `91e1b7d2` it was
-65 commits ahead of main. Its Linux full check passed with 2,858 tests and 15
-platform skips. The three mypy targets passed. The first CI candidate,
-`ci/v01-crawl-issues` at `d6a1d577`, brings the 060 ownership work forward on
-that base. Its Linux full check passed with 2,867 tests, 15 platform skips and
-97.62% coverage. All nine jobs passed on Ubuntu, macOS and Windows with Python
-3.12, 3.13 and 3.14 in the
-[candidate CI run](https://github.com/openlinx/openlinx/actions/runs/45503809104).
-Each job also ran both console scripts from the built wheel with `--version`.
-The three-Command acceptance test is still open.
-[Build order and release scope](../ROADMAP.md#build-order).
+The second CI candidate is `ci/v01-crawl-issues` at `daba7ac0`. Its full Linux
+check passed with 2,868 tests, 15 platform skips and 97.62% coverage. It
+contains 060 writer ownership through task 0.6 and the 050 recorded Rule
+threshold through task 1.8. The first candidate, `d6a1d577`, passed all nine
+OS/Python combinations. Each job ran both console scripts from the built wheel.
+[First CI run](https://github.com/openlinx/openlinx/actions/runs/45503809104) ·
+[Second CI run](https://github.com/openlinx/openlinx/actions/runs/45513483426).
 
-| Change | Where work stood at the checkpoint | Next acceptance condition |
+The next local integration, `integrate/v01-workers-and-issues`, includes the
+following work. [Build order and release scope](../ROADMAP.md#build-order).
+
+| Change | Included locally | Next acceptance condition |
 |---|---|---|
-| [026 parse pool](../openspec/changes/026-add-parse-pool/tasks.md) | The release branch includes the separate-process synthetic fixture from `b781f2d9`. The default Page executor still runs in-process. The older pool implementation is at `8294855e`. | Port the benchmark harness and worker lifecycle to the current package. Verify bounded shutdown with busy and unready workers and worker exit after parent death. Record the in-process baseline at roughly 500k URLs and verify the default pool before 050 task 1.13. |
-| [030 Page data](../openspec/changes/030-add-page-data/tasks.md) | Main includes the group 4b changes, sentence-splitting and cookie Domain fixes. | Run the Links layout comparison (10.1), then the writer capacity benchmark on the chosen layout (10.11). Close the design Risks and whole-change review (4.15). |
-| [040 Rules](../openspec/changes/040-add-rules/tasks.md) | Five Rules evaluate real populations on the release branch: `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`. Four further catalogue entries still return no rows by design. | Cover the analysed-Page boundary for `h1-missing`. Widen to the 15 executable v0.1 Rules and the Health Score. The roadmap lists the release Rules by id. |
-| [050 queries](../openspec/changes/050-add-query-and-segments/tasks.md) | Tasks 1.1–1.8 are integrated. `linx issues` and the Issue detail Service exist. The Service returned the recorded threshold of 70 after the Workspace threshold changed to 85. | Verify recorded guidance, reproducing SQL, Affected URL detail and cursor isolation between Crawls. Add the singular `issue` Command and its usage hints. |
-| [060 Crawl control](../openspec/changes/060-add-crawl-control/tasks.md) | Ownership tasks 0.1–0.6 from `5fcf25e2` are in the first CI candidate at `d6a1d577`. | Prove the writer claim precedes schema creation (0.7). Complete ownership, detached Crawls, `status`, `stop` and `resume`. A resumed Crawl with recorded secret markers needs fresh inputs under the 022 contract. |
+| [026 parse pool](../openspec/changes/026-add-parse-pool/tasks.md) | Explicit worker selection and bounded close (`3ac222c9`), seeded fixture, URL accounting, throughput, table/index sizes and WAL peak (`9c793de4`). The default executor runs in-process. | Prove cleanup on two interrupts and owner death on all supported systems. Verify the benchmark at 10k, record the in-process baseline at roughly 500k and qualify the default pool. |
+| [030 Page data](../openspec/changes/030-add-page-data/tasks.md) | Group 4b, sentence splitting and cookie Domain fixes. | Integrate the first-meta-refresh correction, compare four Links layouts (10.1), measure writer capacity on the chosen layout (10.11) and finish the whole-change review (4.15). |
+| [040 Rules](../openspec/changes/040-add-rules/tasks.md) | Five Rules evaluate real populations. The `h1-missing` regression (`68fff7fd`) checks an unanalysed 404 alongside the actual Affected URL. | Complete the remaining ten v0.1 Rules and the Health Score. |
+| [050 queries](../openspec/changes/050-add-query-and-segments/tasks.md) | The Issue detail Service reads the recorded threshold and the recorded description and guidance (`8785f4e0`). | Verify reproducing SQL, Affected URL detail and cursor isolation. Add the singular `issue` Command and its usage hints. |
+| [060 Crawl control](../openspec/changes/060-add-crawl-control/tasks.md) | Task 0.7 (`cb60a226`) proves a second process cannot claim the Crawl while the writer is creating its schema. | Verify ownership through filesystem aliases, then complete detached Crawls, `status`, `stop` and `resume`. Resume needs fresh inputs for recorded secret markers. |
 
 ## What blocks Crawl → Issues
 
@@ -45,11 +44,13 @@ The three-Command acceptance test is still open.
    owns the build, release checks and wheel-install smoke on all three systems.
    The full-pipeline run and 085 are still open.
 
-The 030 Page extraction seam reproduced an Indexability error. With a first
-meta refresh to `javascript:void(0)` and a second to `/second`, it recorded
-`/second` as the redirect target and the Page as `non_indexable`. A first
-reload without a URL and a first valid redirect gave the expected results.
-Task 4.15 must reconcile this exception with the first-element contract.
+The 030 Page extraction regression used a first meta refresh to
+`javascript:void(0)` and a second to `/second`. The original code recorded
+`/second` and marked the Page `non_indexable`. The fix in
+`fix/v01-first-meta-refresh` matches the first element's raw target to its
+discovered Link. The extraction and Rule suites passed 233 cases. A separate
+test failed when whitespace was normalised before URL resolution. The
+whole-change review remains open.
 [030 design risks](../openspec/changes/030-add-page-data/design.md#risks--trade-offs).
 
 Stop during post-crawl passes crosses three changes. The Crawl core currently
@@ -70,10 +71,12 @@ bodyless HTTP 500 had a URL outcome and no HTML Page. The Store contained 104
 Pages and all 2,275 expected URLs. Replacing one Resource URL while preserving
 the row count failed verification. The 10k and 500k runs are still open.
 
-On the first CI candidate, the three-process acceptance preflight completed
-the fixture Crawl and found one Affected URL each for `title-missing` and
-`internal-4xx`. The singular Command exited with `usage_error` because `issue`
-has yet to be registered. Task 050 1.13 remains open.
+A Linux rehearsal combined the draft singular Command with one explicitly
+selected parse worker and ran the three Commands as subprocesses. It returned
+one Affected URL for each expected Issue and the exact detail for
+`/e2e/gone` (HTTP 404). With the current default executor, those data
+checks passed and the worker-count assertion failed at zero. Task 050 1.13
+requires the default pool on all three systems.
 
 ## Test review at this checkpoint
 
@@ -87,6 +90,12 @@ checked by the helper. The release-path review also used deliberate changes.
 Reading the installed Rule threshold yielded 60 instead of the recorded 70.
 Removing the analysed-Page predicate returned an extra 404 for `h1-missing`.
 Replacing a stored Resource while preserving the count failed URL accounting.
+
+A separate seeded HTTP Crawl (105 Page addresses, seed 143) checked every
+Affected URL and its stored detail against the generated site. There were 99
+internal 404s, one internal 500, two missing titles, one missing H1 and zero
+URLs without a response. Replacing the H1 URL by the 500 URL in a copy of the
+Store kept all five counts and failed the membership check.
 
 Four registered Rules still use empty-result SQL. Of these, `title-too-long`
 belongs to v0.1. The other three (`h2-missing`, `low-word-count` and
