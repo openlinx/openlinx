@@ -6,7 +6,7 @@ from sqlalchemy import update
 from openlinx.clock import SystemClock
 from openlinx.rules.headings import H1_MISSING
 from openlinx.rules.registry import RULES
-from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
+from openlinx.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
 from openlinx.store.issues import evaluate_rule
 from openlinx.store.records import AffectedUrl
 from openlinx.store.schema import pages
@@ -133,6 +133,27 @@ def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -
         ("/boots", {"title_1": "Shoes", "pages": 2}),
         ("/trainers", {"title_1": "Shoes", "pages": 2}),
     ]
+
+
+def test_non_indexable_pages_are_not_compared(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/boots": "<title>Shoes</title>",
+            "https://example.com/trainers": (
+                '<title>Shoes</title><meta name="robots" content="noindex">'
+            ),
+        },
+        completed=False,
+    )
+    assert query(
+        file,
+        "SELECT pages.url_path, pages.indexability, pages.indexability_status "
+        "FROM pages JOIN urls ON urls.id = pages.url_id "
+        "WHERE urls.parsed = 1 AND pages.title_1 = 'Shoes' ORDER BY pages.url_path",
+    ) == [("/boots", "indexable", None), ("/trainers", "non_indexable", "noindex")]
+
+    assert evaluate_rule(file, TITLE_DUPLICATE) == []
 
 
 @pytest.mark.usefixtures("temp_workspace")
