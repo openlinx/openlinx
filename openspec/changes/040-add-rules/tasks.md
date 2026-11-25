@@ -83,7 +83,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 5.6 Drive "Multiple titles" at seam 2, and register `title-multiple`.
 - [x] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
 - [ ] 5.8 Drive "Title equals H1" and "Comparison with H1 is case-sensitive" at seam 2. This is a trivial pair: the same comparison. Register `title-same-as-h1`.
-- [ ] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
+- [x] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
 - [ ] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.
 - [ ] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
 - [ ] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.

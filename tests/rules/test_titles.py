@@ -1,10 +1,11 @@
-"""Verify title Rules over Pages written by a real Crawl."""
+"""Verify title Rules over Pages in a real crawl store."""
 
 import pytest
 from sqlalchemy import update
 
 from openlinx.clock import SystemClock
 from openlinx.rules.headings import H1_MISSING
+from openlinx.rules.registry import RULES
 from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
 from openlinx.store.issues import evaluate_rule
 from openlinx.store.records import AffectedUrl
@@ -12,6 +13,7 @@ from openlinx.store.schema import pages
 from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
+from tests.support.crawl_store import crawl_store
 from tests.support.crawling import crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -97,6 +99,40 @@ def test_non_analysed_pages_are_skipped_by_page_rules(fixture_site: StartSite) -
     ) == [(0, 0, 0)]
     assert evaluate_rule(file, TITLE_MISSING) == expected
     assert evaluate_rule(file, H1_MISSING) == expected
+
+
+def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/boots": "<title>Shoes</title>",
+            "https://example.com/trainers": "<title>Shoes</title>",
+            "https://example.com/sale": "<title>shoes</title>",
+            "https://example.com/empty-a": "<title></title>",
+            "https://example.com/empty-b": "<title></title>",
+        },
+        completed=False,
+    )
+    rows = query(
+        file, "SELECT url_path, url_id, title_1, indexability FROM pages ORDER BY url_path"
+    )
+    assert [(path, title, indexability) for path, _, title, indexability in rows] == [
+        ("/", "Home", "indexable"),
+        ("/boots", "Shoes", "indexable"),
+        ("/empty-a", "", "indexable"),
+        ("/empty-b", "", "indexable"),
+        ("/sale", "shoes", "indexable"),
+        ("/trainers", "Shoes", "indexable"),
+    ]
+    paths = {url_id: path for path, url_id, _, _ in rows}
+    rule = next((rule for rule in RULES if rule.id == "title-duplicate"), None)
+    assert rule is not None, "title-duplicate is missing from the Rule catalogue"
+
+    affected = [(paths[item.url_id], item.detail) for item in evaluate_rule(file, rule)]
+    assert sorted(affected, key=lambda item: item[0]) == [
+        ("/boots", {"title_1": "Shoes", "pages": 2}),
+        ("/trainers", {"title_1": "Shoes", "pages": 2}),
+    ]
 
 
 @pytest.mark.usefixtures("temp_workspace")
