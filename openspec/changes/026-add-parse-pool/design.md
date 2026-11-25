@@ -19,7 +19,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 ## Goals / Non-Goals
 
 **Goals:**
-- Measure first: a baseline of the in-process executor at ~500k URLs, before any pool code.
+- Measure first: a baseline of the in-process executor at ~500k URLs before selecting the pool by default.
 - The same page preparation and extractor code runs in workers, unchanged, and behaves identically on every OS.
 - Bounded memory, crash containment, and a clean shutdown.
 
@@ -30,11 +30,12 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
 ## Decisions
 
 ### D1. Own `spawn` worker processes behind `020`'s seam
-- **The workers:** `n` processes started with `multiprocessing.get_context("spawn")`, each with its own pipe, that prepare one Page at a time.
-- **Their number:** `n = max(1, cores − 2)`, the verdict of the writer prototype of 2026-10-11 on the maintainer's laptop (8 physical cores, 6 workers). `cores` is `psutil.cpu_count(logical=False)`, or `os.cpu_count() // 2` when psutil cannot tell, capped by `os.process_cpu_count()` where Python has it (3.13 and later), so a container's CPU limit counts. `psutil` is a runtime dependency imported inside `openlinx.crawl.pages.parse_pool`, never on the startup path (`tests/cli/test_startup.py`). The re-run after `080` sweeps smaller counts and may lower the default (D6).
+- **The workers:** `n` processes started with `multiprocessing.get_context("spawn")`, each with its own work socket and result pipe, that prepare one Page at a time.
+- **Their number:** `n = max(1, cores − 2)`, the verdict of the writer prototype of 2026-10-11 on the maintainer's laptop (8 physical cores, 6 workers). `cores` is `psutil.cpu_count(logical=False)`, or `os.cpu_count() // 2` when psutil cannot tell, capped by `os.process_cpu_count()` where Python has it (3.13 and later), so a container's CPU limit counts. `psutil` is a runtime dependency imported inside the Page preparation pool and its guardian, off the CLI help path (`tests/cli/test_startup.py`). The re-run after `080` sweeps smaller counts and may lower the default (D6).
 - **The pool executor** lives in the page preparation layer (`openlinx.crawl.pages.parse_pool`)
   and implements `020`'s `PageExecutor.prepare(url, response)`. It hands the URL and its
   response to an idle worker, or queues it until one is idle, and awaits the prepared Page.
+  The event loop can cancel a blocked work transfer without waiting for the worker to read.
   One thread waits for worker results using `multiprocessing.connection.wait` and hands them
   to the event loop, which tracks preparation and readiness deadlines through the real Clock.
   The engine and the extractors do not change.
@@ -61,7 +62,17 @@ Each crash therefore costs one URL and one worker start.
 
 ### D4. Shutdown
 - **Normal end and stop:** on a normal end, and on a stop (an interrupt, or `060`'s stop request), the engine stops submitting and waits for the Pages in flight, as part of the grace period `020`'s `StopSignal` gives requests in flight. The executor then sends each worker a stop message and joins it. A worker still preparing a Page when the grace period ends is killed, and that URL stays `queued`, as `020` leaves a request cancelled before its submit. Workers ignore SIGINT, so a console Ctrl+C reaches only the crawl process, which ends the workers in order.
-- **A second interrupt,** which calls `os._exit(130)` in `020`: the workers see their pipe close and exit. The spec gives them 10 seconds.
+- **A second interrupt** calls `os._exit(130)` in `020`. A separate guardian checks the
+  Crawl's OS process identity independently of the work channels. It ends its enrolled
+  workers even while native preparation holds a worker's GIL. The Crawl waits for enrolment
+  before sending an admission byte and the settings snapshot. A worker waiting for that byte
+  also checks the Crawl's identity so it can exit before enrolment, even if a different process
+  inherited the work channel. The spec gives workers 10 seconds after the Crawl exits.
+- **Orderly close:** close takes ownership of ongoing starts and replacements, closes the
+  work sockets after the engine's grace period, and ends any remaining workers within a
+  shared grace and reap budget. A worker that still holds cancelled work is killed immediately.
+  The guardian is joined once the workers have been reaped. On POSIX the executor checks the
+  actual process exit status because another process can retain the sentinel's writer.
 
 ### D5. Windows consoles
 `multiprocessing` creates its children with no creation flags, so they attach to their parent's console, and a console-less parent is the only way to get new windows.
@@ -77,7 +88,7 @@ Each crash therefore costs one URL and one worker start.
 - **What it records:** URLs per second, peak memory of the crawl process and of each worker, machine-wide CPU and clock frequency, the crawl file's size with each table's share, the WAL peak, and the share of the crawl process's CPU time spent in page preparation.
 - **Where it runs:** by hand, on a stated machine, never in CI or `scripts/check.py` (`docs/benchmarks.md`).
 - **The runs:**
-  - the baseline, against `020`'s in-process executor, before any pool code (task 1.2); it leaves out the Pages over the deadline and those that end their worker, which the in-process executor cannot contain
+  - the baseline, against `020`'s in-process executor, before switching the default (task 1.2); it leaves out the Pages over the deadline and those that end their worker, which the in-process executor cannot contain
   - the crawl-file layout variants the store benchmark of 2026-10-10 left out (task 1.3, ROADMAP 026): the `links` layout, unless `030`'s task 10.1 has chosen it already, by 10.1's four layouts and decision rule, so that whichever runs first settles it once; a 16 KB page size; a zstd dictionary for stored HTML; and the WAL size of a ~100k-Page run without a concurrent reader
   - with the pool, next to the baseline (task 5.1), with these variants, each against the same run without it (decided 2026-10-14: measured here, not built in `020`):
     - a bounded `url` → id LRU cache in the writer (for example 50,000 entries, cleared when a batch rolls back), which skips the `urls_url` lookup for the navigation and footer Links every Page repeats. If it wins, `030`'s group 10 builds it, sharing the writer's rollback hook of `030`'s task 10.2 (ruled 2026-10-14)
@@ -92,7 +103,7 @@ Each crash therefore costs one URL and one worker start.
 
 ### D8. A deadline for preparing one Page
 - **Why:** lexbor parses deeply nested `<div>` elements super-linearly: 20,000 levels take 0.44 s, 100,000 levels about 80 s of CPU for a 1.1 MB page, while `<span>`, `<p>` and `<li>` stay linear (measured during `020`'s group 3, 2026-10-14). One hostile Page would hold a worker for minutes. The user chose this generic deadline over a depth pre-scan in `020` (2026-10-14), because it also covers any other slow input.
-- **The deadline:** `PREPARE_DEADLINE_SECONDS = 30`, a constant of `openlinx.crawl.parse_pool`, with no flag, documented in `docs/architecture.md`. It runs from the moment a worker takes the Page, never from the time it waited in the queue, and it is real time measured by the executor's thread, not the context's `Clock`, because the work runs in another process. Thirty seconds is more than a thousand times a typical Page (about 26 ms in the writer prototype), lets 20,000 nested levels through, and stops 100,000. It is the same 30 seconds as the watchdog's margin over the Fetcher's deadline (`020` D16).
+- **The deadline:** `PREPARE_DEADLINE_SECONDS = 30`, a constant of `openlinx.crawl.pages.parse_pool`, with no flag, documented in `docs/architecture.md`. It runs when a worker acknowledges taking the Page and uses the real Clock because the work runs in another process. A ready worker that cannot take its dispatched Page within a separate delivery deadline is ended and recorded as `worker_crashed`. Time waiting in the pool queue is outside both deadlines. Thirty seconds is more than a thousand times a typical Page (about 26 ms in the writer prototype), lets 20,000 nested levels through, and stops 100,000. It is the same 30 seconds as the watchdog's margin over the Fetcher's deadline (`020` D16).
 - **The watchdog:** it races the request only, which ends before page preparation starts, so the two never add up. If `020`'s engine ever awaits page preparation under the watchdog, its watchdog function must add this deadline.
 - **Over the deadline:** the executor kills that one worker, records the URL with `parsed` = 0 and `parse_error` = `parse_timeout`, a value `020` lists (D18), and starts a replacement. The other workers and their Pages are not touched (D1).
 - **The stop grace period** stays `020`'s 10 seconds: a stop ends a slow Page with its worker (D4) and does not wait for its deadline.

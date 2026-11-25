@@ -1,5 +1,6 @@
 """Exercise list filters, paging and discovery through the public Issues Command."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -280,3 +281,13 @@ def test_issues_is_described_as_a_list_command() -> None:
         "--fields",
     }
     assert (options["--crawl"]["global"], options["--crawl"]["default"]) == (True, "latest")
+
+
+def test_a_rule_id_is_passed_to_the_issue_list() -> None:
+    result = run_cli("issues", "title-missing")
+
+    assert (result.exit_code, result.stdout) == (2, b"")
+    (error,) = result.errors()
+    assert error["code"] == "usage_error"
+    assert isinstance(error["hint"], str)
+    assert re.search(r"\blinx\s+issue\s+(?:<rule-id>|title-missing)(?=[\s`.,)]|$)", error["hint"])

@@ -31,8 +31,9 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
     and replacement regressions and exercise bounded close on cancelled work, failed
     readiness and a worker stuck after its last outcome.
   - [ ] 2.1b Select the pool at the composition root after the shutdown and parent-death
-    proofs. Keep the in-process executor available for the benchmark baseline.
-- [ ] 2.2 [CLI] Drive "The number of parse workers is reported": `parse_workers` in `crawl_started`, from the physical core count of design D1. Done when: `psutil` is a runtime dependency, imported in `openlinx.crawl.pages.parse_pool` only, and `tests/cli/test_startup.py` still passes.
+    proofs and the quiet 500k in-process baseline. Keep the in-process executor available
+    for benchmark comparisons.
+- [ ] 2.2 [CLI] Drive "The number of parse workers is reported": `parse_workers` in `crawl_started`, from the physical core count of design D1. Done when: `psutil` is a runtime dependency, confined to the Page preparation pool and its guardian, and `tests/cli/test_startup.py` still passes.
 - [ ] 2.3 [Subprocess, Windows in CI] Drive "Pages are parsed in worker processes on Windows (Windows)".
 - [ ] 2.4 Docs: document the parse pool (start method, worker count, the snapshot sent once when a worker starts, the unchanged extractor interface) in `docs/architecture.md`.
 - [ ] 2.5 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
@@ -56,11 +57,14 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 - [ ] 4.4 Docs: document shutdown and Windows console behaviour (why `060` uses CREATE_NO_WINDOW) in `docs/architecture.md`.
 - [ ] 4.5 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
-  The opt-in lifecycle tests cover worker close after dispatch. Before default selection,
-  verify cancellation during spawn, pipe writes that stall before a deadline can run,
-  and worker exit after abrupt owner death, including a worker blocked in native code
-  and a worker still starting. Retain the foreground completion, interrupt and Windows
-  process-tree scenarios for the default executor.
+  The opt-in subprocess tests cover completion, a single interrupt and abrupt owner death
+  during Page preparation by a replacement, settings unpickling, and the admission wait.
+  Linux proof includes a Page blocked in native code and a pre-admission owner death with
+  the work sockets retained by a separate process. The executor tests cover cancellation
+  during spawn, stalled work delivery and a forked child holding the result pipe and the
+  POSIX process sentinel. The default CLI and native Windows and macOS acceptance remain
+  open. Abrupt owner death during interpreter bootstrap before the worker target runs has
+  yet to be exercised.
 
 ## 5. Change check
 

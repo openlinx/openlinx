@@ -12,7 +12,7 @@ from openlinx.cli.click_compat import Context
 from openlinx.cli.commands import commands
 from openlinx.cli.crawl import crawl
 from openlinx.cli.init import init
-from openlinx.cli.issues import issues
+from openlinx.cli.issues import IssueListCommand, issue, issues
 from openlinx.cli.meta import CommandGroup, check_command, check_group
 from openlinx.cli.rules import RULES_GROUP
 from openlinx.cli.runner import Invocation, OpenLinxGroup, option_before_the_command
@@ -66,7 +66,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered = [commands, crawl, init, issues, RULES_GROUP, schema, *extra.commands]
+    registered = [commands, crawl, init, issue, issues, RULES_GROUP, schema, *extra.commands]
     # Typer would silently keep the last registration of a name.
     taken: set[str] = set()
     for entry in registered:
@@ -79,7 +79,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         if isinstance(entry, CommandGroup):
             app.add_typer(_group_app(entry), name=name)
         else:
-            app.command(name=name)(entry)
+            app.command(name=name, cls=IssueListCommand if entry is issues else None)(entry)
     return app
 
 

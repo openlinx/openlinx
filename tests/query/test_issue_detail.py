@@ -79,6 +79,39 @@ def test_guidance_of_the_rule(temp_workspace: TempWorkspace) -> None:
     )
 
 
+def test_the_reproducing_query_of_the_rule(temp_workspace: TempWorkspace) -> None:
+    recorded_sql = "SELECT url_id, NULL AS detail\nFROM pages\nWHERE title_count = 0"
+    installed = next(
+        row for row in rule_rows(RulesSettings().model_dump()) if row.id == "title-missing"
+    )
+    assert recorded_sql != installed.reproduce_sql
+    historical = replace(installed, reproduce_sql=recorded_sql)
+    file = create_any_crawl(temp_workspace, rules=(historical,)).path
+    request = QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file))
+
+    result = issue_detail(request, "title-missing")
+
+    assert result.header["rule"]["reproduce_sql"] == recorded_sql
+
+
+def test_detail_of_an_affected_url(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(temp_workspace, pages={"https://example.com/gone": None})
+    assert query(
+        file,
+        "SELECT crawl.state, urls.status_code FROM crawl CROSS JOIN urls "
+        "WHERE urls.url = 'https://example.com/gone'",
+    ) == [("completed", 404)]
+    request = QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file))
+
+    result = issue_detail(request, "internal-4xx")
+
+    assert (result.total, result.items, result.next_cursor) == (
+        1,
+        [{"url": "https://example.com/gone", "detail": {"status_code": 404}}],
+        None,
+    )
+
+
 def test_detail_pages_stored_urls_in_url_order(temp_workspace: TempWorkspace) -> None:
     file = crawl_store(
         temp_workspace,

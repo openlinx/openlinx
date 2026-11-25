@@ -192,6 +192,13 @@ Every Command that reads a Crawl takes the global flag `--crawl latest|<id>|<pat
 
 Use `--type`, `--priority` and `--category` to select Issues. Values can be comma-separated, repeated or given in mixed case. Each flag accepts any of its values, and an Issue must match every supplied flag. For example, `linx issues --type issue,warning --priority high` lists the high Priority Issues and Warnings, and `linx issues --category headings` lists Issues in the headings category. To see the category IDs, run `linx schema rules` and look at the values for `category`. A [cursor](#lists-paging-fields-and-cursors) belongs to the selected Crawl ID and the filter values. If `latest` resolves to another Crawl, start again without a cursor or select the original Crawl.
 
+
+## Viewing an Issue
+
+Use `linx issue <rule-id>` to show the recorded Rule and its Affected URLs in URL order. Each item contains `url` and `detail`. Use `--fields url` to return just the URLs in the items. The JSON `rule` header still includes the Rule's guidance, thresholds and reproducing SQL as recorded for the Crawl. JSONL and table formats print the items.
+
+An Issue detail cursor belongs to its Crawl and Rule. Use `linx issue title-missing` to look up that Rule ID. Passing the ID to `linx issues` returns `usage_error` with a hint for the detail Command.
+
 ## Exit codes
 
 The meaning of a code never changes. Codes 9 to 63 are reserved.
