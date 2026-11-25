@@ -26,6 +26,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.cli import await_event, start_cli_process
 from tests.support.clock import FakeClock
+from tests.support.crawl_store import crawl_store
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
@@ -206,6 +207,41 @@ def test_a_running_crawl_writes_no_affected_url(fixture_site: StartSite) -> None
 
     assert live_counts == [2]
     assert result.summary.state == "completed"
+
+
+async def test_a_second_pass_does_not_duplicate_rows(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/boots": "<title>Shoes</title>",
+            "https://example.com/trainers": "<title>Shoes</title>",
+        },
+        completed=False,
+    )
+    (issues_pass,) = (
+        crawl_pass for crawl_pass in default_hooks().passes if crawl_pass.name == "issues"
+    )
+    expected = [
+        ("https://example.com/boots", {"title_1": "Shoes", "pages": 2}),
+        ("https://example.com/trainers", {"title_1": "Shoes", "pages": 2}),
+    ]
+    sql = (
+        "SELECT urls.url, affected_urls.detail FROM affected_urls "
+        "JOIN urls ON urls.id = affected_urls.url_id "
+        "WHERE affected_urls.rule_id = 'title-duplicate' ORDER BY urls.url"
+    )
+    assert query(file, sql) == []
+
+    clock = FakeClock()
+    with CrawlWriter(file, clock) as writer:
+        context = PassContext(writer, clock)
+        for pass_number in (1, 2):
+            await issues_pass.run(context)
+            await writer.flush_async()
+            stored = query(file, sql)
+            assert [(url, json.loads(detail)) for url, detail in stored] == expected, (
+                f"after Issues pass {pass_number}"
+            )
 
 
 def test_replay_replaces_only_the_affected_urls_of_one_rule(
