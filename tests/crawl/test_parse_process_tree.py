@@ -4,6 +4,7 @@ import os
 import signal
 import subprocess
 import sys
+from collections.abc import Callable, Collection
 from contextlib import suppress
 from pathlib import Path
 from time import monotonic, sleep
@@ -25,9 +26,11 @@ def _fixture_command(url: str, folder: Path, phase: str) -> tuple[list[str], dic
     return command.argv, {**(command.env or os.environ), "PYTHONPATH": pythonpath}
 
 
-def _observed(path: Path) -> str:
+def _observed(path: Path, *, observe: Callable[[], None] | None = None) -> str:
     deadline = monotonic() + 20
     while monotonic() < deadline:
+        if observe is not None:
+            observe()
         with suppress(FileNotFoundError):
             if value := path.read_text(encoding="utf-8"):
                 return value
@@ -48,7 +51,7 @@ def _running(process: psutil.Process) -> bool:
     return False
 
 
-def _ended(children: list[psutil.Process], seconds: float) -> None:
+def _ended(children: Collection[psutil.Process], seconds: float) -> None:
     deadline = monotonic() + seconds
     while monotonic() < deadline and any(map(_running, children)):
         sleep(0.01)
@@ -158,19 +161,19 @@ def test_an_interrupt_ends_the_parse_workers(
 
 
 def _finished_tree(
-    site: StartSite, folder: Path, *, flags: int = 0, check_windows: bool = False
+    site: StartSite,
+    folder: Path,
+    *,
+    linked_pages: dict[str, Page] | None = None,
+    flags: int = 0,
+    visible_window_pids: Callable[[], set[int]] | None = None,
 ) -> None:
-    server = site(
-        Site(
-            routes={
-                "/": Page(body='<a href="/held">Follow</a>'),
-                "/held": Page(body="Second Page", delay=2),
-            }
-        )
-    )
+    if linked_pages is None:
+        linked_pages = {"/held": Page(body="Second Page", delay=2)}
+    seed = Page(body="".join(f'<a href="{path}">Follow</a>' for path in linked_pages))
+    server = site(Site(routes={"/": seed, **linked_pages}))
     argv, env = _fixture_command(server.url("/"), folder, "complete")
-    children: list[psutil.Process] = []
-    windows: set[int] = set()
+    children: set[psutil.Process] = set()
     with (
         (folder / "stderr").open("w+b") as stderr,
         subprocess.Popen(
@@ -179,29 +182,39 @@ def _finished_tree(
     ):
         try:
             owner = psutil.Process(process.pid)
-            file = Path(_observed(folder / "crawl_file"))
-            prepared = int(_observed(folder / "prepared"))
-            children = owner.children(recursive=True)
-            assert prepared in {child.pid for child in children}
-            if sys.platform == "win32" and check_windows:
-                windows = _visible_windows() & {child.pid for child in children}
-            assert _observed(folder / "closed") == "closed"
+
+            def observe() -> None:
+                current = owner.children(recursive=True)
+                children.update(current)
+                if visible_window_pids is not None:
+                    windows = visible_window_pids() & {child.pid for child in current}
+                    assert not windows, (
+                        f"visible top-level windows owned by Crawl descendants: {sorted(windows)}"
+                    )
+
+            # Start watching before the fixture can spawn and keep watching through close.
+            observe()
+            (folder / "allow_start").touch()
+            file = Path(_observed(folder / "crawl_file", observe=observe))
+            prepared = int(_observed(folder / "prepared", observe=observe))
+            worker = next((child for child in children if child.pid == prepared), None)
+            assert worker is not None, f"parse worker {prepared} was not a Crawl descendant"
+            assert _running(worker)
+            assert _observed(folder / "closed", observe=observe) == "closed"
             assert process.poll() is None
             # The owner is still running, so its death cannot trigger the guardian.
-            _ended([child for child in children if child.pid == prepared], 3)
+            _ended([worker], 3)
             (folder / "allow_exit").touch()
             assert process.wait(timeout=20) == 0
             _ended(children, 10)
             assert crawl_row(file)["state"] == "completed"
             assert query(file, "SELECT url, parsed FROM urls ORDER BY url") == [
-                (server.url("/"), 1),
-                (server.url("/held"), 1),
+                (server.url(path), 1) for path in sorted(("/", *linked_pages))
             ]
-            assert windows == set()
         finally:
             if process.poll() is None:
                 with suppress(psutil.NoSuchProcess):
-                    children.extend(psutil.Process(process.pid).children(recursive=True))
+                    children.update(psutil.Process(process.pid).children(recursive=True))
                 process.kill()
                 process.wait(timeout=5)
             for child in children:
@@ -221,19 +234,27 @@ if sys.platform == "win32":
     import ctypes
     from ctypes import wintypes
 
+    _user32 = ctypes.WinDLL("user32", use_last_error=True)
+    _window_callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    _user32.EnumWindows.argtypes = [_window_callback, wintypes.LPARAM]
+    _user32.EnumWindows.restype = wintypes.BOOL
+    _user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    _user32.IsWindowVisible.restype = wintypes.BOOL
+    _user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    _user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+
     def _visible_windows() -> set[int]:
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
         visible: set[int] = set()
 
         def found(window: int, _: int) -> bool:
-            if user32.IsWindowVisible(window):
+            if _user32.IsWindowVisible(window):
                 owner = wintypes.DWORD()
-                user32.GetWindowThreadProcessId(window, ctypes.byref(owner))
-                visible.add(owner.value)
+                if _user32.GetWindowThreadProcessId(window, ctypes.byref(owner)):
+                    visible.add(owner.value)
             return True
 
-        callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(found)
-        user32.EnumWindows(callback, 0)
+        if not _user32.EnumWindows(_window_callback(found), 0):
+            raise ctypes.WinError(ctypes.get_last_error())
         return visible
 
 
@@ -242,9 +263,17 @@ if sys.platform == "win32":
 def test_parse_workers_open_no_console_window(
     temp_workspace: TempWorkspace, fixture_site: StartSite, tmp_path: Path
 ) -> None:
+    """Qualify the opt-in pool until the installed CLI selects it by default."""
     if sys.platform == "win32":
+        linked_pages = {f"/p{number}": Page(body=f"Page {number}") for number in range(1, 31)}
+        # Keep the Crawl active after the worker has prepared the Seed.
+        linked_pages["/p30"] = Page(body="Last Page", delay=2)
         _finished_tree(
-            fixture_site, tmp_path, flags=subprocess.CREATE_NO_WINDOW, check_windows=True
+            fixture_site,
+            tmp_path,
+            linked_pages=linked_pages,
+            flags=subprocess.CREATE_NO_WINDOW,
+            visible_window_pids=_visible_windows,
         )
 
 

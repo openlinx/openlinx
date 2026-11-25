@@ -119,7 +119,17 @@ def main(url: str, folder: Path, phase: str) -> int:
     return _crawl(url, folder, phase)
 
 
+def _await_observer(marker: Path) -> None:
+    deadline = monotonic() + 15
+    while not marker.exists():
+        if monotonic() >= deadline:
+            raise RuntimeError(f"The observer did not create {marker.name}.")
+        sleep(0.01)
+
+
 def _crawl(url: str, folder: Path, phase: str) -> int:
+    if phase == "complete":
+        _await_observer(folder / "allow_start")
     hooks = default_hooks()
     probe = extractor("probe", prepare, Probe(folder, phase))
     result = crawl_result(
@@ -130,11 +140,7 @@ def _crawl(url: str, folder: Path, phase: str) -> int:
     )
     if phase == "complete":
         (folder / "closed").write_text("closed", encoding="ascii")
-        end = monotonic() + 15
-        while not (folder / "allow_exit").exists():
-            if monotonic() >= end:
-                raise RuntimeError("The observer did not release the completed Crawl.")
-            sleep(0.01)
+        _await_observer(folder / "allow_exit")
     return 130 if result.summary.stop_reason == "interrupt" else 0
 
 
