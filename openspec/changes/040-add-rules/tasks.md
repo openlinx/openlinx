@@ -86,7 +86,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
 - [x] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.
 - [x] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
-- [ ] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
+- [x] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
 - [ ] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
 - [ ] 5.14 Docs: add the other 5 title Rules (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1.
 - [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.

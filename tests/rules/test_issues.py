@@ -16,6 +16,7 @@ from sqlalchemy import Connection, Engine, event
 
 from openlinx.crawl.engine.hooks import Pass, PassContext
 from openlinx.output.reporter import Collected
+from openlinx.rules.registry import RULES
 from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
 from openlinx.services.hooks import default_hooks
 from openlinx.store.issues import affected_urls_unit, evaluate_rule, read_issues
@@ -38,6 +39,12 @@ RULE_PAGES = Site(
         ),
         "/rules/untitled": Page(body="<p>Missing title</p>"),
         "/rules/gone": Status(404, body="Not found", content_type="text/plain"),
+    }
+)
+DUPLICATE_TITLE_PAGES = Site(
+    {
+        "/rules/": Page(body='<title>Shoes</title><a href="/rules/trainers">Trainers</a>'),
+        "/rules/trainers": Page(body='<title>Shoes</title><a href="/rules/">Shoes</a>'),
     }
 )
 
@@ -134,14 +141,7 @@ def test_rule_that_did_not_fire_has_no_issue(fixture_site: StartSite) -> None:
 
 @pytest.mark.usefixtures("temp_workspace")
 def test_duplicates_found_by_the_post_crawl_passes(fixture_site: StartSite) -> None:
-    server = fixture_site(
-        Site(
-            {
-                "/rules/": Page(body='<title>Shoes</title><a href="/rules/trainers">Trainers</a>'),
-                "/rules/trainers": Page(body='<title>Shoes</title><a href="/rules/">Shoes</a>'),
-            }
-        )
-    )
+    server = fixture_site(DUPLICATE_TITLE_PAGES)
     reporter = Collected()
     inlinks_before_issues: list[list[tuple[Any, ...]]] = []
 
@@ -175,6 +175,37 @@ def test_duplicates_found_by_the_post_crawl_passes(fixture_site: StartSite) -> N
         (server.url("/rules/trainers"), {"title_1": "Shoes", "pages": 2}),
     ]
     assert inlinks_before_issues == [[("/rules/", 1), ("/rules/trainers", 1)]]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_a_running_crawl_writes_no_affected_url(fixture_site: StartSite) -> None:
+    server = fixture_site(DUPLICATE_TITLE_PAGES)
+    reporter = Collected()
+    live_counts: list[int] = []
+
+    async def observe_running_crawl(_context: PassContext) -> None:
+        (started,) = (data for name, data in reporter.events if name == "crawl_started")
+        file = Path(started["crawl_file"])
+        assert query(file, "SELECT state FROM crawl") == [("running",)]
+        assert query(file, "SELECT url_path, title_1 FROM pages ORDER BY url_path") == [
+            ("/rules/", "Shoes"),
+            ("/rules/trainers", "Shoes"),
+        ]
+        live_counts.extend(
+            issue.affected_count
+            for issue in read_issues(file, RULES)
+            if issue.rule_id == "title-duplicate"
+        )
+        assert query(file, "SELECT rule_id, url_id FROM affected_urls") == []
+
+    defaults = default_hooks()
+    # Read committed Pages before any built-in pass can write Affected URLs.
+    probe = Pass("observe-running-crawl", observe_running_crawl)
+    hooks = replace(defaults, passes=(probe, *defaults.passes))
+    result = crawl_result(server.url("/rules/"), hooks, reporter=reporter)
+
+    assert live_counts == [2]
+    assert result.summary.state == "completed"
 
 
 def test_replay_replaces_only_the_affected_urls_of_one_rule(
@@ -387,8 +418,7 @@ def test_issue_visible_before_the_crawl_ends(
         )
         assert evaluate_rule(file, TITLE_MISSING) == [AffectedUrl(url_id=url_id, detail=None)]
 
-        from openlinx.rules.registry import RULES
-        from openlinx.store.issues import read_affected_urls, read_issues
+        from openlinx.store.issues import read_affected_urls
 
         issues = [(issue.rule_id, issue.affected_count) for issue in read_issues(file, RULES)]
         affected = read_affected_urls(file, "title-missing", RULES)
