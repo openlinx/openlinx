@@ -89,7 +89,7 @@ def _rules(examples: tuple[IssueExample, ...]) -> tuple[tuple[Rule, ...], tuple[
 def crawl_store(
     temp_workspace: TempWorkspace,
     *,
-    pages: Mapping[str, str] | None = None,
+    pages: Mapping[str, str | None] | None = None,
     rule_settings: Mapping[str, Mapping[str, int | bool]] | None = None,
     completed: bool = True,
     journal_setting: JournalSetting = "wal",
@@ -97,8 +97,8 @@ def crawl_store(
 ) -> Path:
     """Record linked HTML Pages with the installed Rules, completing the Crawl by default.
 
-    Explicit Pages can carry validated Rule settings. Without Pages, record non-HTML 404s
-    for the example Issues of later Rules.
+    Supply Rule settings with explicit URLs. A URL with a None body records a non-HTML
+    404. With no explicit URLs, record those 404s for example Issues.
     """
     responses: Mapping[str, str | None]
     if pages is None:
