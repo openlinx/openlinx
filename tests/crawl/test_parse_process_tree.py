@@ -149,14 +149,16 @@ def test_an_interrupt_ends_the_parse_workers(
                         site.url("/hang"),
                     ],
                 ) == [("queued",)]
-                assert query(
+                stored_links = query(
                     file,
                     "SELECT target.url FROM links "
                     "JOIN urls AS source ON source.id = links.source_url_id "
                     "JOIN urls AS target ON target.id = links.target_url_id "
                     "WHERE source.url = ? ORDER BY links.ordinal",
                     [site.url("/")],
-                ) == [(site.url(path),) for path in linked_paths]
+                )
+                assert len(stored_links) == 30
+                assert stored_links == [(site.url(path),) for path in linked_paths]
             else:
                 assert (record["state"], record["stop_reason"]) == ("running", None)
         finally:
