@@ -212,6 +212,51 @@ def test_a_detail_cursor_cannot_be_used_for_another_rule(temp_workspace: TempWor
     assert raised.value.code == "invalid_cursor"
 
 
+def test_a_detail_cursor_cannot_be_used_for_another_crawl(temp_workspace: TempWorkspace) -> None:
+    source_file = crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/a": "<h1>First</h1>",
+            "https://example.com/b": "<h1>Second</h1>",
+        },
+    )
+    other_file = crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/a": "<h1>First</h1>",
+            "https://example.com/z": "<h1>Last</h1>",
+        },
+    )
+    ((source_id,),) = query(source_file, "SELECT id FROM crawl")
+    ((other_id,),) = query(other_file, "SELECT id FROM crawl")
+    assert source_id != other_id
+    source = QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=source_id)
+    other = replace(source, crawl=other_id)
+
+    first = issue_detail(source, "title-missing", limit=1)
+    other_first = issue_detail(other, "title-missing", limit=1)
+    for page in (first, other_first):
+        assert (page.total, page.items) == (
+            2,
+            [{"url": "https://example.com/a", "detail": None}],
+        )
+        assert page.next_cursor
+    original_second = issue_detail(source, "title-missing", limit=1, cursor=first.next_cursor)
+    other_second = issue_detail(other, "title-missing", limit=1, cursor=other_first.next_cursor)
+    assert (original_second.items, original_second.next_cursor) == (
+        [{"url": "https://example.com/b", "detail": None}],
+        None,
+    )
+    assert (other_second.items, other_second.next_cursor) == (
+        [{"url": "https://example.com/z", "detail": None}],
+        None,
+    )
+
+    with pytest.raises(OpenLinxError) as raised:
+        issue_detail(other, "title-missing", limit=1, cursor=first.next_cursor)
+    assert raised.value.code == "invalid_cursor"
+
+
 @pytest.mark.parametrize("journal_mode", ["wal", "delete"])
 def test_the_rule_header_and_affected_urls_share_a_snapshot(
     temp_workspace: TempWorkspace, journal_mode: JournalSetting
