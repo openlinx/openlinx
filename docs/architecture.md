@@ -76,15 +76,15 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
 - **Engine:** reads the frontier depth by depth and decides each URL once, at dispatch: the Scope (URLs outside it are status-checked but not followed), robots.txt (Protego, through the robots.txt loader), the depth limit and the URL limit.
 - **Requester:** makes every request of a Crawl, a URL's own and robots.txt's: the host's slot (per-host concurrency, default 5), its turn under `--rate`, the global cap, the URL limit, retries, the watchdog and the network pause's gate and probes. Nothing else calls the Fetcher; a guard in `tests/test_code_style.py` names any request made elsewhere.
 - **Fetcher:** aiohttp behind an interface, so httpx2, niquests or Playwright (v1.1) can replace it. It makes one hop; `022` follows redirects hop by hop and records every hop. HTTP version is measured once per host with a TLS ALPN check.
-- **Page executor:** in process, or `026`'s process pool, so that parsing never blocks the event loop.
+- **Page executor:** prepares Pages in the Crawl process by default. A caller can supply `026`'s process pool through the Crawl Service's `pages=` parameter.
   - Extractors turn a response into Page data, Links and Resources.
   - lxml is loaded only when an XPath Custom Extraction exists (v0.3).
 - **Rules:** for a running, failed or interrupted Crawl, the Issues reader evaluates the enabled Rules on demand over stored rows. Before the Crawl becomes completed or stopped, the post-crawl pass materialises Affected URLs after the inlink counts. Subsequent reads use those rows. [Rule execution order](../openspec/changes/040-add-rules/design.md#d5-when-rules-run).
 - **Writer:** the only writer, flushing in batches. A crash loses at most the unflushed batch.
 - **Process model:**
   - `crawl` runs in the foreground by default.
-  - `--detach` starts a separate background process (CREATE_NO_WINDOW on Windows, so the parse workers open no console windows; `start_new_session` on POSIX).
-  - `status`, `stop` and `resume` talk to it through control rows in the store, so no OS signals are needed.
+  - `060` specifies a separate background process for `--detach`, with `CREATE_NO_WINDOW` on Windows and `start_new_session` on POSIX. See [Parse worker shutdown and Windows consoles](#parse-worker-shutdown-and-windows-consoles).
+  - `060` uses the Store for `status`, `stop` and `resume`, so those Commands can control a Crawl through its file.
 - **As built by `020-add-crawl-core`:** the Crawl Service builds one `CrawlContext` (`openlinx.crawl.engine.context`) for a Crawl: its settings, the Scope, the clock, the warning log, the writer, the Fetcher, the page executor, the hooks and the stop flag. The engine takes it: `openlinx.crawl.engine.dispatch` runs the depths and builds the run's Requester and robots.txt loader; `openlinx.crawl.engine.units` decides each URL and requests it through the Requester; `openlinx.crawl.engine.outcomes` follows each unit to its outcome; `openlinx.crawl.engine.crawl_warnings` gives the warnings.
   - **The Requester** (`openlinx.crawl.fetch.requester`): `request_url(url)` takes the host's slot, then its turn under `--rate`, then the global cap, then returns `NotStarted` once the Crawl is stopping or at `--max-urls`, or else counts the request toward `--max-urls`, sends it and returns its `Attempted` outcome after the retries; `request_robots_txt(url)` takes the same slots and is never counted. The engine and the robots.txt loader (`openlinx.crawl.robots.loader`) call it and hold no Fetcher.
   - **The Fetcher Protocol** (`openlinx.crawl.fetch.fetcher`): `async def fetch(request: Request) -> FetchResult | FetchFailure`. It makes one hop and never follows a redirect. A `FetchResult` holds the status, the reason phrase as received, the headers in order and letter case with cookie values redacted, the body, decoded and read up to 20 MiB by `read_body` (`openlinx.crawl.fetch.body`), `body_truncated`, `transferred_bytes`, `fetched_at` and `response_time_ms`. A request without an HTTP response is returned as a `FetchFailure` (its `fetch_error` code, a message, `fetched_at`), never raised; only cancellation passes through. `AiohttpFetcher` is the implementation; `022` replaces it behind the same Protocol.
@@ -101,6 +101,72 @@ Frontier ──► Engine ──► Requester ──► Fetcher ──► Page e
   - **Continuing a Crawl** (`continue_crawl` in `openlinx.services.crawling`): it continues a `stopped` or `failed` Crawl from its crawl file alone, with the settings, Scope and Seed recorded there, and queues again its `error` URLs and those skipped as `robots_unreachable`. Then it runs as a start does, to the same end and the same passes. `060`'s `resume` calls it.
   - **How `030` and `040` plug in:** `030` adds its Page extractor, with its config, its handlers, one per table, and its inlink pass to `default_hooks()` in `openlinx.services.hooks`, importing `Handler`, `Pass`, `PassContext` and `UrlResult` from `openlinx.crawl.engine.hooks` and `is_html_type` from `openlinx.crawl.pages.preparation`, with its row types in `openlinx.store.page_records` and the writers its handlers name in `openlinx.store.pages` and `openlinx.store.links` ([page-data.md](page-data.md)); `040` adds its pass, which materialises the Issues of its Rules, in `openlinx.store.issues`. Neither touches the engine. A feature's `handle` function lives in its feature's package, beside the code it reads, as `030`'s does beside its page data; only a one-line `handle` with no feature package, such as `_response_headers`, stays in `openlinx.services.hooks` beside `default_hooks()`, the composition root.
 - **Output streams:** stdout carries the Command's single JSON result (or NDJSON rows for data streams). stderr carries JSON lines: diagnostics and progress events. Settings come only from flags and `openlinx.toml`, never from environment variables; the proxy variables are the one exception (see [crawling.md](crawling.md#proxy-variables)).
+
+### Parse worker shutdown and Windows consoles
+
+The Crawl Service awaits the pool's `close()` during teardown, including on failure.
+Closing the work sockets tells workers that input has ended. The pool gives them a
+shared grace period to exit, kills any that remain, then confirms exit and joins them
+before joining the guardian. A replacement can start only after its predecessor has
+been reaped. [026 shutdown design](../openspec/changes/026-add-parse-pool/design.md#d4-shutdown).
+
+The first interrupt sets `StopSignal` in the Crawl process. Workers ignore `SIGINT`
+and, on Windows, `SIGBREAK` once their worker function starts. The engine stops
+dispatching and allows up to ten seconds for work in flight. It cancels remaining URL
+tasks at the end of that grace period. An unfinished URL whose outcome was never
+submitted stays `queued`. At close, the pool kills workers holding cancelled work or
+still starting after the engine cancelled its wait for readiness.
+
+A second interrupt exits the Crawl process immediately with code 130, leaving the
+last committed Crawl State in the file. The guardian checks whether the Crawl is
+alive by PID and creation time, independently of the work sockets. It kills enrolled
+workers on owner death even if a worker is stuck in native code. Workers waiting
+for admission also check whether the owner is alive. On POSIX, workers join the
+guardian's process group at OS launch, so it can find them even before Python
+reaches the worker function or the Crawl reports their PIDs. The ten-second worker
+lifetime limit starts when the Crawl process exits.
+[Worker lifetime requirement](../openspec/changes/026-add-parse-pool/specs/crawl-performance/spec.md#requirement-parse-workers-end-with-the-crawl).
+
+Windows workers use the standard `multiprocessing` spawn path and inherit the
+Crawl's console. The `060` contract calls for `CREATE_NO_WINDOW` in a new process
+group. The design gives workers a hidden console to inherit, independent of the
+caller's terminal. A console-less parent launched with `DETACHED_PROCESS` can cause
+its spawned workers to get visible console windows of their own.
+[026 console design](../openspec/changes/026-add-parse-pool/design.md#d5-windows-consoles) ·
+[060 Windows process creation](../openspec/changes/060-add-crawl-control/design.md#d4-windows-process-creation-approved) ·
+[060 terminal contract](../openspec/changes/060-add-crawl-control/specs/crawl-control/spec.md#requirement-background-crawls-outlive-their-terminal).
+
+The opt-in subprocess tests pass `PoolExecutor(workers=1)` through `pages=` and
+check real descendant PIDs. The native matrix at `dc1ab989` on Linux, macOS and
+Windows with Python 3.12–3.14 verified that the observed worker exited on normal
+close while the Crawl process was still alive. The interrupt cases used a small
+fixture and exited with code 130. After one interrupt, the blocked URL stayed
+`queued` in a `stopped` Crawl with reason `interrupt`. After two interrupts during
+replacement or settings loading, the file still recorded `running`. The observed
+descendants stopped running within ten seconds of the Crawl process's exit. The
+Windows jobs found no visible top-level window owned by an observed descendant in
+a single snapshot under `CREATE_NO_WINDOW`.
+[Native matrix](https://github.com/openlinx/openlinx/actions/runs/45711999634).
+
+Rerun the native matrix on the new candidate SHA with the expanded interrupt
+fixture, whose Seed links to 30 Pages (`SIGINT` on Linux and macOS,
+`CTRL_BREAK_EVENT` on Windows), and with the updated console test on Windows.
+The expanded interrupt cases passed on Linux at `8795e142`. The updated console
+test samples visible top-level windows and descendant PIDs from before startup
+through pool close and checks that all 31 Pages were parsed. Its observations
+are limited to the snapshots it takes. Linux also covers owner death before
+admission with inherited work sockets and one or two interrupts during native
+interpreter startup. Equivalent early-start evidence is pending on macOS and
+Windows. [Subprocess tests](../tests/crawl/test_parse_process_tree.py).
+
+`linx crawl` currently selects `InProcessExecutor` and reports
+`crawl_started.data.parse_workers=0`. The default pool selection follows the shutdown
+and owner-death proofs and the quiet in-process baseline at roughly 500,000 URLs.
+Once selected, completion, interrupt and Windows console acceptance use the
+installed `linx crawl` with actual worker PIDs and the expected positive
+`crawl_started.data.parse_workers` count. The detached Command's terminal and
+job object behaviour belongs to `060`'s acceptance tests.
+[026 implementation tasks](../openspec/changes/026-add-parse-pool/tasks.md#2-page-preparation-in-worker-processes).
 
 ## Crawl store
 
