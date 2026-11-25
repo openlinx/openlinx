@@ -76,6 +76,29 @@ def test_issue_row_counts_its_affected_urls(issue_crawl: tuple[Path, str]) -> No
     assert missing_title_issue(file) == [("titles", "issue", "high", 2)]
 
 
+@pytest.mark.usefixtures("temp_workspace")
+def test_detail_is_stored_as_json(fixture_site: StartSite) -> None:
+    title = "Buy running shoes, trail boots and sandals online at low cost"
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/long-title">Shoes</a>'),
+                "/long-title": Page(body=f"<title>{title}</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    [(address, detail)] = query(
+        file,
+        "SELECT urls.url, affected_urls.detail FROM affected_urls "
+        "JOIN urls ON urls.id = affected_urls.url_id WHERE rule_id = 'title-too-long'",
+    )
+    assert address == server.url("/long-title")
+    assert isinstance(detail, str)
+    assert json.loads(detail) == {"length": 61}
+
+
 def test_replay_replaces_only_the_affected_urls_of_one_rule(
     issue_crawl: tuple[Path, str],
 ) -> None:
