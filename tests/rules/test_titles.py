@@ -135,7 +135,11 @@ def test_raised_title_limit(temp_workspace: TempWorkspace, fixture_site: StartSi
     server = fixture_site(
         Site(
             {
-                "/": Page(body="<title>" + "a" * 65 + '</title><a href="/long">Long title</a>'),
+                "/": Page(
+                    body="<title>" + "a" * 65 + '</title><a href="/at-limit">At the limit</a>'
+                    '<a href="/long">Long title</a>'
+                ),
+                "/at-limit": Page(body="<title>" + "a" * 70 + "</title>"),
                 "/long": Page(body="<title>" + "b" * 71 + "</title>"),
             }
         )
@@ -144,9 +148,48 @@ def test_raised_title_limit(temp_workspace: TempWorkspace, fixture_site: StartSi
     [(long_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/long"),))
     assert query(file, "SELECT url_path, title_1_length FROM pages ORDER BY url_path") == [
         ("/", 65),
+        ("/at-limit", 70),
         ("/long", 71),
     ]
     settings.write_text("[rules.title-too-long]\nmax_chars = 85\n", encoding="utf-8")
     assert evaluate_rule(file, TITLE_TOO_LONG) == [
         AffectedUrl(url_id=long_id, detail={"length": 71})
+    ]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_long_title_requires_an_analysed_page(fixture_site: StartSite) -> None:
+    title = "a" * 61
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body=f'<title>{title}</title><a href="/not-found">Broken link</a>'),
+                "/not-found": Status(404, body=f"<title>{title}</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    analysed = server.url("/")
+    unanalysed = server.url("/not-found")
+    ids = dict(query(file, "SELECT url, id FROM urls WHERE url IN (?, ?)", (analysed, unanalysed)))
+
+    # An unanalysed Page normally has NULL title fields. Set them to values that
+    # satisfy the length predicate so only the parsed filter can exclude it.
+    with CrawlWriter(file, SystemClock()) as writer:
+        writer.run(
+            executing(
+                update(pages)
+                .where(pages.c.url_id == ids[unanalysed])
+                .values(title_count=1, title_1=title, title_1_length=61)
+            )
+        )
+
+    assert query(
+        file,
+        "SELECT urls.parsed, pages.title_1_length FROM urls "
+        "JOIN pages ON pages.url_id = urls.id WHERE urls.id = ?",
+        (ids[unanalysed],),
+    ) == [(0, 61)]
+    assert evaluate_rule(file, TITLE_TOO_LONG) == [
+        AffectedUrl(url_id=ids[analysed], detail={"length": 61})
     ]

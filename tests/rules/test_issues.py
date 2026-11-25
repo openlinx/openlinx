@@ -89,14 +89,16 @@ def test_detail_is_stored_as_json(fixture_site: StartSite) -> None:
     )
     file = crawled(server.url("/"))
     assert query(file, "SELECT state FROM crawl") == [("completed",)]
-    [(address, detail)] = query(
+    [(url_id, address, detail)] = query(
         file,
-        "SELECT urls.url, affected_urls.detail FROM affected_urls "
+        "SELECT affected_urls.url_id, urls.url, affected_urls.detail FROM affected_urls "
         "JOIN urls ON urls.id = affected_urls.url_id WHERE rule_id = 'title-too-long'",
     )
     assert address == server.url("/long-title")
     assert isinstance(detail, str)
     assert json.loads(detail) == {"length": 61}
+    [(sql,)] = query(file, "SELECT reproduce_sql FROM rules WHERE id = 'title-too-long'")
+    assert _decoded_details(query(file, sql)) == _decoded_details([(url_id, detail)])
 
 
 def test_replay_replaces_only_the_affected_urls_of_one_rule(

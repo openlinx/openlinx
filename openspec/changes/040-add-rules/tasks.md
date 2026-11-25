@@ -15,7 +15,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **Release scope.** v0.1 ships the [15 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after release, within the existing ROADMAP milestones. Plan their Rule-specific work in 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9 for v0.2. The pixel threshold for `title-too-long` also waits for v0.2. For shared behaviour, use a v0.1 Rule to exercise snapshots, disabling, empty Issue results and resume. Keep the examples that depend on a deferred Rule, including the image Resource example in 10.4, for the post-release plan. Each group's documentation and review cover the Rules in that release.
 
-**Implementation through task 4.7.** The CLI lists nine Rules. The thin slice's five Rules have executable evaluation queries. The other four registrations still use no-row queries: `title-too-long` (`max_chars`, default 60), `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
+**Implementation through task 5.4.** The CLI lists nine Rules. Six have executable evaluation queries, including `title-too-long` with its recorded character limit (`max_chars`, default 60). Three registrations still use no-row queries: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
 
 ## 1. Rule model and the rules Command (slice)
 
