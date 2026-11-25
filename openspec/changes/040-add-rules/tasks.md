@@ -77,7 +77,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 - [x] 5.1 Drive "Title too long by characters" at seam 2.
 - [x] 5.2 Drive "Title at the limit" at seam 2.
-- [ ] 5.3 Drive "Raised title limit" at seam 2, passing effective thresholds to the evaluation entry point.
+- [x] 5.3 Drive "Raised title limit" at seam 2. The query reads the effective threshold from the Crawl's recorded Rule (design D15).
 - [ ] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture page `/rules/long-title`.
 - [ ] 5.5 Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
 - [ ] 5.6 Drive "Multiple titles" at seam 2, and register `title-multiple`.

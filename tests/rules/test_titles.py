@@ -14,6 +14,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawled
 from tests.support.crawls import query
+from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
 
 
@@ -126,3 +127,26 @@ def test_title_at_the_limit(fixture_site: StartSite) -> None:
     file = crawled(server.url("/"))
     assert query(file, "SELECT title_1_length FROM pages") == [(60,)]
     assert evaluate_rule(file, TITLE_TOO_LONG) == []
+
+
+def test_raised_title_limit(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    settings = temp_workspace.root / "openlinx.toml"
+    settings.write_text("[rules.title-too-long]\nmax_chars = 70\n", encoding="utf-8")
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body="<title>" + "a" * 65 + '</title><a href="/long">Long title</a>'),
+                "/long": Page(body="<title>" + "b" * 71 + "</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    [(long_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/long"),))
+    assert query(file, "SELECT url_path, title_1_length FROM pages ORDER BY url_path") == [
+        ("/", 65),
+        ("/long", 71),
+    ]
+    settings.write_text("[rules.title-too-long]\nmax_chars = 85\n", encoding="utf-8")
+    assert evaluate_rule(file, TITLE_TOO_LONG) == [
+        AffectedUrl(url_id=long_id, detail={"length": 71})
+    ]
