@@ -14,7 +14,10 @@ from urllib.parse import urlsplit
 import pytest
 from sqlalchemy import Connection, Engine, event
 
+from openlinx.crawl.engine.hooks import Pass, PassContext
+from openlinx.output.reporter import Collected
 from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
+from openlinx.services.hooks import default_hooks
 from openlinx.store.issues import affected_urls_unit, evaluate_rule, read_issues
 from openlinx.store.records import AffectedUrl
 from openlinx.store.writer import CrawlWriter
@@ -22,7 +25,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.cli import await_event, start_cli_process
 from tests.support.clock import FakeClock
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import replay_now
@@ -127,6 +130,51 @@ def test_rule_that_did_not_fire_has_no_issue(fixture_site: StartSite) -> None:
         "SELECT rule_id, affected_count FROM issues "
         "WHERE rule_id IN ('h1-missing', 'title-missing') ORDER BY rule_id",
     ) == [("h1-missing", 1)]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_duplicates_found_by_the_post_crawl_passes(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/rules/": Page(body='<title>Shoes</title><a href="/rules/trainers">Trainers</a>'),
+                "/rules/trainers": Page(body='<title>Shoes</title><a href="/rules/">Shoes</a>'),
+            }
+        )
+    )
+    reporter = Collected()
+    inlinks_before_issues: list[list[tuple[Any, ...]]] = []
+
+    async def record_inlinks(_context: PassContext) -> None:
+        (started,) = (data for name, data in reporter.events if name == "crawl_started")
+        inlinks_before_issues.append(
+            query(
+                Path(started["crawl_file"]), "SELECT url_path, inlinks FROM pages ORDER BY url_path"
+            )
+        )
+
+    defaults = default_hooks()
+    # Both passes leave stored results, so observe the counts just before Issues runs.
+    passes: list[Pass] = []
+    for crawl_pass in defaults.passes:
+        if crawl_pass.name == "issues":
+            passes.append(Pass("record-inlinks-before-issues", record_inlinks))
+        passes.append(crawl_pass)
+    hooks = replace(defaults, passes=tuple(passes))
+    file = crawl_result(server.url("/rules/"), hooks, reporter=reporter).crawl_file
+
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    stored = query(
+        file,
+        "SELECT urls.url, affected_urls.detail FROM affected_urls "
+        "JOIN urls ON urls.id = affected_urls.url_id "
+        "WHERE affected_urls.rule_id = 'title-duplicate' ORDER BY urls.url",
+    )
+    assert [(url, json.loads(detail)) for url, detail in stored] == [
+        (server.url("/rules/"), {"title_1": "Shoes", "pages": 2}),
+        (server.url("/rules/trainers"), {"title_1": "Shoes", "pages": 2}),
+    ]
+    assert inlinks_before_issues == [[("/rules/", 1), ("/rules/trainers", 1)]]
 
 
 def test_replay_replaces_only_the_affected_urls_of_one_rule(
