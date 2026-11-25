@@ -75,13 +75,16 @@ def _is_blocked(worker: psutil.Process) -> None:
 def test_an_interrupt_ends_the_parse_workers(
     temp_workspace: TempWorkspace, fixture_site: StartSite, tmp_path: Path, phase: str
 ) -> None:
+    """Interrupt the opt-in Crawl while an observed worker is blocked."""
     first_link = "/die" if phase == "replacement" else "/hang"
+    linked_paths = [first_link, *(f"/p{number}" for number in range(2, 31))]
     site = fixture_site(
         Site(
             routes={
-                "/": Page(body=f'<a href="{first_link}">Follow</a>'),
+                "/": Page(body="".join(f'<a href="{path}">Follow</a>' for path in linked_paths)),
                 "/die": Page(body="Exit", headers=(("Link", "</hang>; rel=canonical"),)),
                 "/hang": Page(body="Hung preparation"),
+                **{path: Page(body="Linked Page") for path in linked_paths[1:]},
             }
         )
     )
@@ -146,6 +149,14 @@ def test_an_interrupt_ends_the_parse_workers(
                         site.url("/hang"),
                     ],
                 ) == [("queued",)]
+                assert query(
+                    file,
+                    "SELECT target.url FROM links "
+                    "JOIN urls AS source ON source.id = links.source_url_id "
+                    "JOIN urls AS target ON target.id = links.target_url_id "
+                    "WHERE source.url = ? ORDER BY links.ordinal",
+                    [site.url("/")],
+                ) == [(site.url(path),) for path in linked_paths]
             else:
                 assert (record["state"], record["stop_reason"]) == ("running", None)
         finally:
