@@ -4,6 +4,8 @@ How every `linx` Command talks to agents and people. The spec is [openspec/specs
 
 `linx commands` describes every Command, the exit codes and the diagnostic codes as one JSON document. Agents read it instead of this page. It gives each option's bounds as `min` and `max`, null where there is none, and leaves out hidden options, which the tool passes to itself.
 
+Grouped Commands appear by their full path in `linx commands`. Use `linx rules list` to browse the Rule catalogue without opening a Crawl. Bare `linx rules` runs the same list. Put options after the full Command name, for example `linx rules list --limit 1`.
+
 ## stdout and stderr
 
 | Stream | Carries |

@@ -25,6 +25,16 @@ def test_the_command_lists_itself() -> None:
     assert "commands" in names
 
 
+def test_a_command_in_a_group_is_listed_by_its_full_path() -> None:
+    entries = run_cli("commands").json()["commands"]
+    assert "rules" not in [entry["name"] for entry in entries]
+    (entry,) = [entry for entry in entries if entry["name"] == "rules list"]
+    options = {option["name"]: option for option in entry["options"]}
+    assert (entry["output"], entry["formats"]) == ("list", ["json", "jsonl", "table"])
+    assert set(options) == {"--format", "--limit", "--cursor", "--fields"}
+    assert [options["--limit"][key] for key in ("default", "min", "max")] == [50, 0, 1000]
+
+
 def test_tool_version() -> None:
     tool = run_cli("commands").json()["tool"]
 

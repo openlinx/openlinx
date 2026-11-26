@@ -2,17 +2,19 @@
 
 import re
 from collections.abc import Callable
-from typing import cast
+from typing import Annotated, cast
 
 import pytest
 import typer
 from pydantic import BaseModel, ConfigDict, Field
 
-from openlinx.cli.app import build_app
-from openlinx.cli.options import options_with_meta
-from openlinx.cli.runner import OpenLinxGroup
+from openlinx.cli.app import AppExtra, build_app
+from openlinx.cli.meta import CommandGroup, command_meta
+from openlinx.cli.options import FormatOpt, OptionMeta, options_with_meta
+from openlinx.cli.runner import OpenLinxGroup, commands_by_path
+from openlinx.output.writer import Format
 from openlinx.workspace.tables import SettingsTables, Table, check_table
-from tests.support.app import example_app
+from tests.support.app import EXAMPLE_TABLE, example_app
 
 
 class Loose(BaseModel):
@@ -79,35 +81,73 @@ def test_every_registered_table_follows_the_rules(app: Callable[[], typer.Typer]
 def test_every_option_setting_names_a_setting_of_a_registered_table(
     app: Callable[[], typer.Typer],
 ) -> None:
-    group = cast(OpenLinxGroup, typer.main.get_group(app()))
+    assert _missing_option_settings(app()) == [], (
+        "an option's OptionMeta(setting=...) names no registered setting: fix its key"
+    )
+
+
+def _missing_option_settings(app: typer.Typer) -> list[str]:
+    group = cast(OpenLinxGroup, typer.main.get_group(app))
     tables = dict(group.settings_tables.items())
-    settings = [
+    settings = (
         extra.setting
-        for command in group.commands.values()
+        for _, command in commands_by_path(group, include_hidden=True)
         for _, extra in options_with_meta(command)
         if extra.setting is not None
-    ]
-
-    assert [
+    )
+    return [
         setting
         for setting in settings
         if not _names_a_flat_setting(tables, *setting.partition(".")[::2])
-    ] == [], "an option's OptionMeta(setting=...) names no registered setting: fix its key"
+    ]
 
 
 @pytest.mark.parametrize("app", [build_app, example_app])
 def test_options_of_secret_settings_have_only_long_names(app: Callable[[], typer.Typer]) -> None:
-    group = cast(OpenLinxGroup, typer.main.get_group(app()))
-    tables = group.settings_tables
+    assert _short_secret_options(app()) == [], (
+        "an option of a secret setting has a short name: give it only its long name"
+    )
 
-    assert [
-        (command.name, name)
-        for command in group.commands.values()
+
+def _short_secret_options(app: typer.Typer) -> list[tuple[str, str]]:
+    group = cast(OpenLinxGroup, typer.main.get_group(app))
+    tables = group.settings_tables
+    return [
+        (path, name)
+        for path, command in commands_by_path(group, include_hidden=True)
         for option, extra in options_with_meta(command)
         if extra.setting is not None and tables.is_secret(extra.setting)
         for name in option.opts
         if not name.startswith("--")
-    ] == [], "an option of a secret setting has a short name: give it only its long name"
+    ]
+
+
+def _app_with_grouped_option(setting: str, *option_names: str) -> typer.Typer:
+    @command_meta(name="example check", output="document", formats=[Format.JSON])
+    def check(
+        output_format: FormatOpt = Format.JSON,
+        option: Annotated[
+            str | None, typer.Option(*option_names), OptionMeta(setting=setting)
+        ] = None,
+    ) -> dict[str, str]:
+        return {}
+
+    group = CommandGroup(
+        name="example", summary="Check a setting-backed option.", commands=(check,), default=check
+    )
+    return build_app(extra=AppExtra(settings_tables={"example": EXAMPLE_TABLE}, commands=[group]))
+
+
+def test_a_grouped_option_must_name_a_registered_setting() -> None:
+    app = _app_with_grouped_option("example.absent", "--absent")
+
+    assert _missing_option_settings(app) == ["example.absent"]
+
+
+def test_a_grouped_option_inherits_the_secret_setting_rule() -> None:
+    app = _app_with_grouped_option("example.token", "--token", "-t")
+
+    assert _short_secret_options(app) == [("example check", "-t")]
 
 
 def _names_a_flat_setting(tables: dict[str, Table], name: str, key: str) -> bool:
