@@ -84,9 +84,9 @@ def test_a_compressed_body_is_capped_after_decoding(coding: str) -> None:
     # A decompression bomb: 25 MiB of zeros in a body of a few kilobytes.
     packed = _packed(bytes(25 * 1024 * 1024), coding)
 
-    body = _decoded(packed, coding)
+    body = asyncio.run(read_body(_chunks(packed, 4096), coding))
 
-    assert (len(body.data), body.truncated) == (BODY_LIMIT, True)
+    assert (len(body.data), body.truncated) == (20_971_520, True)
 
 
 @pytest.mark.parametrize(

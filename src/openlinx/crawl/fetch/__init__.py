@@ -1,8 +1,7 @@
 """Make requests through the Requester, which owns admission and retry policy.
 
 fetcher: Fetcher, FetcherFactory, FetchPolicy, ProbesHttpVersion, Request, FetchResult,
-FetchFailure, aiohttp_fetcher, header_values, joined_header, DEFAULT_USER_AGENT,
-REQUEST_DEADLINE_SECONDS.
+FetchFailure, aiohttp_fetcher, header_values, joined_header, DEFAULT_USER_AGENT.
 politeness: RequestLimits, RateGate, global_cap.
 requester: Requester, NotStarted, Attempted, ProbeResult, watchdog_seconds.
 body: BODY_LIMIT, is_decodable. proxy: SECRET_KEYS, ProxyVariables.
