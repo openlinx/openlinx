@@ -274,6 +274,9 @@ async def aiohttp_fetcher(
                 auto_decompress=False,
             )
         )
+        # The Requester owns retries and counts each attempt. aiohttp has no public switch for
+        # its implicit retry after a disconnect, which can also occur on a fresh connection.
+        session._retry_connection = False
         yield AiohttpFetcher(
             session,
             clock,
