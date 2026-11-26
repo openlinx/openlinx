@@ -244,14 +244,18 @@ def test_item_fields(temp_workspace: TempWorkspace) -> None:
         "title-missing",
     )
 
-    assert result.total == 1
-    (item,) = result.items
+    assert result.total == 2
+    item, meta_description = result.items
     assert item["rule_id"] == "title-missing"
     assert item["category"] == "titles"
     assert item["issue_type"] == "issue"
     assert item["priority"] == "high"
     assert item["affected_count"] == 4
     assert item["description"] == shown["description"]
+    assert (meta_description["rule_id"], meta_description["affected_count"]) == (
+        "meta-description-missing",
+        5,
+    )
 
 
 def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspace) -> None:
@@ -266,5 +270,6 @@ def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspa
     assert query(file, "SELECT state FROM crawl") == [("running",)]
     assert query(file, "SELECT count(*) FROM affected_urls") == [(0,)]
     assert [(item["rule_id"], item["affected_count"]) for item in result.items] == [
-        ("title-missing", 1)
+        ("title-missing", 1),
+        ("meta-description-missing", 2),
     ]
