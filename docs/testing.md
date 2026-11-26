@@ -84,8 +84,19 @@ the Crawl Service, HTTP fixture and read-only crawl file.
 [test_parse_shutdown.py](../tests/crawl/test_parse_shutdown.py) exercises its public executor
 lifecycle with real workers. [test_parse_process_tree.py](../tests/crawl/test_parse_process_tree.py)
 observes the same worker identities through normal completion, foreground interrupts and
-abrupt owner death. On Linux it also blocks a worker in the interpreter before the worker
-target, checks exit after one and two interrupts, and verifies a subsequent Crawl in SQLite.
+abrupt owner death. On Linux and macOS a FIFO holds a spawned worker in the interpreter before
+its target while the foreground Crawl receives SIGINT. The second-interrupt case also holds the
+return from the real process start so the guardian has not been given the worker PID. The worker
+reports its PID after opening the FIFO reader, and Linux also checks the native wait via `/proc`.
+On Windows a hidden private console contains a sender and the foreground Crawl.
+The sender issues one targeted or broadcast Ctrl+Break while an initial worker,
+replacement or guardian is held in `sitecustomize`. The test observes native
+console membership, window visibility and redirected streams before bootstrap.
+It retains process handles through the exit check, and records raw status before
+cleanup. A worker held in startup exits with the pool's CPython termination status
+(`0x10000`) or the guardian's psutil termination status (`15`). The guardian
+exits normally. The test reads unfinished URLs and stored Pages, then checks both
+Pages from a subsequent Crawl. [Private console fixture](../tests/crawl/parse_windows_console.py)
 The executor seam also covers
 [delivery](../tests/crawl/test_parse_transport.py),
 [spawn cancellation](../tests/crawl/test_parse_spawn_cancel.py),

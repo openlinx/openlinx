@@ -1,13 +1,15 @@
 """Exercise foreground shutdown with PID identities and a real blocked Page."""
 
+import json
 import os
 import signal
 import subprocess
 import sys
 from collections.abc import Callable, Collection
-from contextlib import suppress
+from contextlib import ExitStack, suppress
+from errno import ENXIO
 from pathlib import Path
-from time import monotonic, sleep
+from time import monotonic, monotonic_ns, sleep
 
 import psutil
 import pytest
@@ -246,6 +248,7 @@ def test_no_parse_worker_outlives_a_completed_crawl(
 
 
 if sys.platform == "win32":
+    import _winapi
     import ctypes
     from ctypes import wintypes
 
@@ -382,13 +385,189 @@ def test_owner_death_ends_a_child_before_worker_admission(
                         child.kill()
 
 
+def _open_bootstrap_gate(path: Path) -> int:
+    """Connect only once the worker has opened its end of the FIFO in sitecustomize."""
+    if sys.platform != "win32":
+        deadline = monotonic() + 20
+        while monotonic() < deadline:
+            try:
+                return os.open(path, os.O_WRONLY | os.O_NONBLOCK)
+            except OSError as error:
+                if error.errno != ENXIO:
+                    raise
+            sleep(0.01)
+    raise AssertionError("no worker entered the sitecustomize FIFO gate")
+
+
+def _cleanup_interrupted_tree(
+    process: subprocess.Popen[bytes], children: Collection[psutil.Process]
+) -> None:
+    remaining = set(children)
+    if process.poll() is None:
+        with suppress(psutil.NoSuchProcess):
+            remaining.update(psutil.Process(process.pid).children(recursive=True))
+        process.kill()
+        process.wait(timeout=5)
+    for child in remaining:
+        if _running(child):
+            with suppress(psutil.NoSuchProcess):
+                child.kill()
+
+
+def _assert_recovery_pages(fixture_site: StartSite, folder: Path) -> Path:
+    folder.mkdir()
+    file, server = _finished_tree(fixture_site, folder)
+    assert query(
+        file,
+        "SELECT urls.url, urls.parsed FROM pages LEFT JOIN urls ON urls.id = pages.url_id "
+        "ORDER BY urls.url",
+    ) == [(server.url("/"), 1), (server.url("/held"), 1)]
+    return file
+
+
 @pytest.mark.slow
-@pytest.mark.skipif(sys.platform != "linux", reason="Observes Linux native bootstrap and spawn")
-@pytest.mark.parametrize("second_interrupt", [False, True], ids=["orderly-close", "parent-death"])
+@pytest.mark.skipif(sys.platform != "win32", reason="Ctrl+Break is a Windows console event")
+@pytest.mark.parametrize("delivery", ["targeted", "broadcast"])
+@pytest.mark.parametrize("phase", ["worker", "replacement", "guardian"])
+def test_ctrl_break_ends_the_parse_tree_during_windows_bootstrap(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    tmp_path: Path,
+    phase: str,
+    delivery: str,
+) -> None:
+    """Interrupt a private console before a selected spawn child can run its target."""
+    if sys.platform == "win32":
+        _windows_bootstrap_case(fixture_site, tmp_path, phase, delivery)
+
+
+def _windows_bootstrap_case(site: StartSite, folder: Path, phase: str, delivery: str) -> None:
+    if sys.platform == "win32":
+        from tests.crawl.parse_windows_console import bootstrap_probe, private_console
+
+        seed = '<a href="/die">Crash</a><a href="/held">Pending</a>'
+        server = site(
+            Site(
+                routes={
+                    "/": Page(body=seed),
+                    "/die": Page(body="Crash"),
+                    "/held": Page(body="Pending", after="/die"),
+                }
+            )
+        )
+        first_worker, guardian = "parse-worker-0", "parse-worker-guard"
+        blocked = "parse-worker-1" if phase == "replacement" else first_worker
+        argv, env = _fixture_command(server.url("/"), folder, f"windows_{phase}")
+        bootstrap_probe(folder, env, blocked, guardian if phase == "guardian" else "")
+        with private_console(folder, argv, env, delivery) as console:
+            file = Path(_observed(folder / "crawl_file"))
+            guard_probe = json.loads(_observed(folder / guardian))
+            work_probe = json.loads(_observed(folder / blocked))
+            probes = [guard_probe, work_probe]
+            assert guard_probe["pid"] != work_probe["pid"]
+            guard_handle = console.watch(guard_probe["pid"])
+            worker_handle = console.watch(work_probe["pid"])
+            assert _winapi.WaitForSingleObject(guard_handle, 0) == _winapi.WAIT_TIMEOUT
+            assert _winapi.WaitForSingleObject(worker_handle, 0) == _winapi.WAIT_TIMEOUT
+            urls = "SELECT url, fetch_state, parsed, parse_error FROM urls ORDER BY url"
+            if phase == "replacement":
+                first_probe = json.loads(_observed(folder / first_worker))
+                probes.append(first_probe)
+                assert int(_observed(folder / "prepared")) == first_probe["pid"]
+                assert first_probe["pid"] != work_probe["pid"]
+                expected = [
+                    (server.url("/"), "fetched", 1, None),
+                    (server.url("/die"), "fetched", 0, "worker_crashed"),
+                    (server.url("/held"), "queued", 0, None),
+                ]
+            else:
+                expected = [(server.url("/"), "queued", 0, None)]
+            committed_by = monotonic() + 5
+            while (rows := query(file, urls)) != expected:
+                assert monotonic() < committed_by, rows
+                sleep(0.01)
+            record = crawl_row(file)
+            assert (record["state"], record["stop_reason"]) == ("running", None)
+
+            visible_windows = _visible_windows()
+            (folder / "send_break").touch()
+            _await_windows_interrupt(folder, console.owner_handle, worker_handle, work_probe["pid"])
+            assert (folder / "stopping").read_text(encoding="ascii") == "interrupt"
+            assert console.exit_status(console.owner_handle, 0) == 130
+            worker_status = console.exit_status(worker_handle, 10)
+            guard_status = console.exit_status(guard_handle, 0)
+            assert worker_status in (0x10000, signal.SIGTERM), (
+                f"worker exited with {worker_status:#x}"
+            )
+            assert guard_status == 0, f"guardian exited with {guard_status:#x}"
+            members = set(json.loads(_observed(folder / "console_pids")))
+            assert members == {console.owner_pid, console.broker.pid}
+            assert console.broker.wait(timeout=5) == 130
+            streams = {
+                name: (folder / name).read_text(encoding="utf-8") for name in ("stdout", "stderr")
+            }
+            for probe in probes:
+                assert not ({console.owner_pid, console.broker.pid} & set(probe["console_pids"]))
+                assert not probe["window_visible"], probe
+                assert probe["pid"] not in visible_windows
+                for stream, output in streams.items():
+                    assert f"{probe['pid']} {stream} before spawn" in output
+            record = crawl_row(file)
+            assert (record["state"], record["stop_reason"]) == ("stopped", "interrupt")
+            assert query(file, urls) == expected
+            assert query(
+                file,
+                "SELECT urls.url, urls.parsed FROM pages JOIN urls ON urls.id = pages.url_id "
+                "ORDER BY urls.url",
+            ) == ([(server.url("/"), 1), (server.url("/die"), 0)] if phase == "replacement" else [])
+        assert _assert_recovery_pages(site, folder / "recovery") != file
+
+
+def _await_windows_interrupt(folder: Path, owner: int, worker: int, worker_pid: int) -> None:
+    if sys.platform == "win32":
+        shutdown_budget_ns = 14_000_000_000
+        deadline = monotonic_ns() + shutdown_budget_ns
+        stopping_observed_ns = None
+        while _winapi.WaitForSingleObject(owner, 0) == _winapi.WAIT_TIMEOUT:
+            now = monotonic_ns()
+            if now >= deadline:
+                if stopping_observed_ns is None:
+                    raise AssertionError("Crawl did not confirm stopping=interrupt")
+                (folder / "interrupt_timeout.json").write_text(
+                    json.dumps(
+                        {
+                            "worker_pid": worker_pid,
+                            "worker_wait": _winapi.WaitForSingleObject(worker, 0),
+                            "stopping": "interrupt",
+                            "stopping_observed_ns": stopping_observed_ns,
+                            "worker_wait_started_ns": now,
+                        }
+                    ),
+                    encoding="ascii",
+                )
+                raise AssertionError("Crawl did not exit after one interrupt")
+            if stopping_observed_ns is None:
+                with suppress(FileNotFoundError):
+                    if (folder / "stopping").read_text(encoding="ascii") == "interrupt":
+                        stopping_observed_ns = monotonic_ns()
+                        deadline = stopping_observed_ns + shutdown_budget_ns
+                        (folder / "release_guardian").touch()
+            sleep(0.01)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(sys.platform not in {"linux", "darwin"}, reason="Uses a POSIX bootstrap FIFO")
+@pytest.mark.parametrize(
+    "second_interrupt",
+    [pytest.param(False, id="orderly-close"), pytest.param(True, id="parent-death")],
+)
 def test_owner_interrupts_end_a_worker_still_in_native_spawn_bootstrap(
     temp_workspace: TempWorkspace, fixture_site: StartSite, tmp_path: Path, second_interrupt: bool
 ) -> None:
     site = fixture_site(Site(routes={"/": Page(body="Bootstrap")}))
+    fifo = tmp_path / "bootstrap_gate"
+    if sys.platform != "win32":
+        os.mkfifo(fifo)
     bootstrap = tmp_path / "bootstrap_import"
     bootstrap.mkdir()
     (bootstrap / "sitecustomize.py").write_text(
@@ -405,9 +584,13 @@ if "--multiprocessing-fork" in sys.argv:
         with (folder / "guard_sitecustomize").open("x", encoding="ascii") as marker:
             marker.write(str(os.getpid()))
     except FileExistsError:
-        reader, writer = os.pipe()
-        (folder / "worker_sitecustomize").write_text(str(os.getpid()), encoding="ascii")
-        ctypes.PyDLL(None).read(reader, ctypes.create_string_buffer(1), 1)
+        try:
+            with (folder / "bootstrap_gate").open("rb", buffering=0) as gate:
+                (folder / "worker_sitecustomize").write_text(str(os.getpid()), encoding="ascii")
+                ctypes.PyDLL(None).read(gate.fileno(), ctypes.create_string_buffer(1), 1)
+        finally:
+            # site ignores ordinary exceptions. An unexpected return must abort startup.
+            raise SystemExit("The bootstrap gate returned before worker shutdown.")
 """,
         encoding="utf-8",
     )
@@ -418,16 +601,22 @@ if "--multiprocessing-fork" in sys.argv:
     search_path = [str(tmp_path / "unused" / f"{i:04d}" / ("x" * 176)) for i in range(340)]
     env["PYTHONPATH"] = os.pathsep.join([str(bootstrap), env["PYTHONPATH"], *search_path])
     env["OPENLINX_PROBE_BOOTSTRAP"] = str(tmp_path)
+    url_states = "SELECT url, fetch_state, parsed FROM urls"
+    queued_seed = [(site.url("/"), "queued", 0)]
     children: list[psutil.Process] = []
     with (
         (tmp_path / "stderr").open("w+b") as stderr,
         subprocess.Popen(
             argv, env=env, stdout=subprocess.DEVNULL, stderr=stderr, start_new_session=True
         ) as process,
+        ExitStack() as gate,
     ):
         try:
             file = Path(_observed(tmp_path / "crawl_file"))
             guard_pid = int(_observed(tmp_path / "guard_sitecustomize"))
+            # The worker reports its identity after opening the reader. Keep the writer
+            # open and empty so its native read cannot release the bootstrap gate.
+            gate.callback(os.close, _open_bootstrap_gate(fifo))
             worker_pid = int(_observed(tmp_path / "worker_sitecustomize"))
             assert worker_pid != guard_pid
             children = psutil.Process(process.pid).children(recursive=True)
@@ -437,35 +626,36 @@ if "--multiprocessing-fork" in sys.argv:
                 # The actual OS start returned to the test barrier but its PID has not
                 # reached the pool. The worker is stuck even before it can check admission.
                 assert int(_observed(tmp_path / "spawned")) == worker_pid
+                # Let the asynchronous writer commit the Seed before testing abrupt exit.
+                committed_by = monotonic() + 5
+                while (rows := query(file, url_states)) != queued_seed:
+                    assert monotonic() < committed_by, rows
+                    sleep(0.01)
             _is_blocked(worker)
             assert _running(guard)
+            assert process.poll() is None
             assert not (tmp_path / "prepared").exists()
+            deadline = monotonic() + 14
             process.send_signal(signal.SIGINT)
             assert _observed(tmp_path / "stopping") == "interrupt"
             _is_blocked(worker)
             if second_interrupt:
+                assert process.poll() is None
+                assert _running(guard)
+                assert _running(worker)
+                deadline = monotonic() + 2
                 process.send_signal(signal.SIGINT)
-                assert process.wait(timeout=2) == 130
-                record = crawl_row(file)
-                assert (record["state"], record["stop_reason"]) == ("running", None)
-            else:
-                assert process.wait(timeout=14) == 130
-                record = crawl_row(file)
-                assert (record["state"], record["stop_reason"]) == ("stopped", "interrupt")
-                assert query(file, "SELECT url, fetch_state FROM urls") == [
-                    (site.url("/"), "queued"),
-                ]
+            assert process.wait(timeout=deadline - monotonic()) == 130
+            assert monotonic() < deadline
             _ended(children, 10)
+            record = crawl_row(file)
+            if second_interrupt:
+                assert (record["state"], record["stop_reason"]) == ("running", None)
+                assert query(file, "SELECT url FROM seeds") == [(site.url("/"),)]
+                assert query(file, "SELECT url_id FROM pages") == []
+            else:
+                assert (record["state"], record["stop_reason"]) == ("stopped", "interrupt")
+            assert query(file, url_states) == queued_seed
         finally:
-            if process.poll() is None:
-                with suppress(psutil.NoSuchProcess):
-                    children.extend(psutil.Process(process.pid).children(recursive=True))
-                process.kill()
-                process.wait(timeout=5)
-            for child in children:
-                if _running(child):
-                    with suppress(psutil.NoSuchProcess):
-                        child.kill()
-    recovery = tmp_path / "recovery"
-    recovery.mkdir()
-    _finished_tree(fixture_site, recovery)
+            _cleanup_interrupted_tree(process, children)
+    _assert_recovery_pages(fixture_site, tmp_path / "recovery")

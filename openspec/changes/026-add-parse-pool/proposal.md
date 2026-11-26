@@ -17,7 +17,7 @@
 - **A crashed worker is replaced.** The URL it was preparing gets `parse_error` = `worker_crashed`, a value `020` already lists, and the Crawl goes on.
 - **A deadline of 30 seconds per Page,** from the moment a worker takes it: a worker over it is killed and replaced, the URL gets `parse_error` = `parse_timeout`, a value `020` lists, and no other Page is charged. It is a constant, with no flag (the user's decision of 2026-10-14, over a depth pre-scan in `020`).
 - **Workers end with their Crawl,** after a normal end, a stop or an interrupt.
-- **Windows:** workers inherit their parent's console, so a Crawl started without a visible console, such as `060`'s CREATE_NO_WINDOW background process, opens no windows.
+- **Windows:** parse workers and their guardian start outside the Crawl's console. The foreground Crawl handles both forms of Ctrl+Break from the moment the children are created, and neither the workers nor their guardian open visible console windows.
 - **The benchmark is run again** with the pool, and its results are recorded next to the baseline. The re-run on the full v0.1 pipeline after `080` (ROADMAP, Build order) uses the same script to size the pool.
 - **Flags:** none new. **MCP tools:** none.
 
@@ -43,7 +43,7 @@
 - **Used by:**
   - `030-add-page-data`, whose Page extractor runs in the pool, and whose `links` layout this change's benchmark may settle (ROADMAP, 026).
   - `040-add-rules`, whose live Issues latency the 500k run measures (`040` D16).
-  - `060-add-crawl-control`, whose background process uses CREATE_NO_WINDOW so the workers inherit a hidden console.
+  - `060-add-crawl-control`, whose background process uses CREATE_NO_WINDOW for the Crawl itself.
 - **Code:** `scripts/crawl_500k.py` and its synthetic site, and `openlinx.crawl.parse_pool` with the pool executor and its workers behind `020`'s seam.
 - **New dependencies:** `psutil` becomes a runtime dependency (it is a test dependency today), to count physical cores; `openlinx.crawl.parse_pool` imports it, never the startup path.
 - **Docs:** the benchmark results in `docs/benchmarks.md`, and the parse pool in `docs/architecture.md`.

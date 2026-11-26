@@ -89,6 +89,7 @@ def _sockets() -> tuple[int, ...]:
 
 @contextmanager
 def _hold_spawn_handoff(folder: Path, *, retain_sockets: bool) -> Iterator[None]:
+    """Hold a real start before the pool can register the returned PID."""
     spawn = BaseProcess.start
 
     def start(process: BaseProcess) -> None:
@@ -105,7 +106,8 @@ def _hold_spawn_handoff(folder: Path, *, retain_sockets: bool) -> Iterator[None]
             )
             (folder / "retained").write_text(str(kept.pid), encoding="ascii")
         (folder / "spawned").write_text(str(process.pid), encoding="ascii")
-        threading.Event().wait(20)
+        # The second SIGINT must reach the owner while this handoff is still held.
+        threading.Event().wait(20 if retain_sockets else None)
 
     with patch.object(BaseProcess, "start", start):
         yield
@@ -113,8 +115,20 @@ def _hold_spawn_handoff(folder: Path, *, retain_sockets: bool) -> Iterator[None]
 
 def main(url: str, folder: Path, phase: str) -> int:
     os.environ["PARSE_OWNER_PID"] = str(os.getpid())
-    if sys.platform == "linux" and phase in {"pre_admission", "bootstrap_handoff"}:
-        with _hold_spawn_handoff(folder, retain_sockets=phase == "pre_admission"):
+    retain_sockets = sys.platform == "linux" and phase == "pre_admission"
+    hold_bootstrap = sys.platform in {"linux", "darwin"} and phase == "bootstrap_handoff"
+    if retain_sockets or hold_bootstrap:
+        with _hold_spawn_handoff(folder, retain_sockets=retain_sockets):
+            return _crawl(url, folder, phase)
+    if phase.startswith("windows_"):
+        # Label the real OS spawn so sitecustomize can hold a specific interpreter.
+        spawn = BaseProcess.start
+
+        def start(process: BaseProcess) -> None:
+            with patch.dict(os.environ, OPENLINX_TEST_SPAWN_NAME=process.name):
+                spawn(process)
+
+        with patch.object(BaseProcess, "start", start):
             return _crawl(url, folder, phase)
     return _crawl(url, folder, phase)
 
@@ -132,11 +146,13 @@ def _crawl(url: str, folder: Path, phase: str) -> int:
         _await_observer(folder / "allow_start")
     hooks = default_hooks()
     probe = extractor("probe", prepare, Probe(folder, phase))
+    settings: dict[str, Any] = {"concurrency": 1} if phase == "windows_replacement" else {}
     result = crawl_result(
         url,
         replace(hooks, extractors=(*hooks.extractors, probe)),
         pages=partial(PoolExecutor, workers=1),
         reporter=Notes(folder),
+        **settings,
     )
     if phase == "complete":
         (folder / "closed").write_text("closed", encoding="ascii")

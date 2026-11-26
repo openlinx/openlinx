@@ -39,7 +39,7 @@ See proposal.md (Why) for the motivation. The approach is shaped by these constr
   One thread waits for worker results using `multiprocessing.connection.wait` and hands them
   to the event loop, which tracks preparation and readiness deadlines through the real Clock.
   The engine and the extractors do not change.
-- **The settings snapshot (`PageSettings`) and the registered extractors** (by reference) are the arguments a worker starts with, so they reach each worker once. A work item is then only the fetched response, so the snapshot is never pickled once per response. The worker's loop keeps them in local variables for its life, so the worker module holds no state. Each worker sets SIGINT to ignored (SIGBREAK too, on Windows) when it starts.
+- **The settings snapshot (`PageSettings`) and the registered extractors** (by reference) are the arguments a worker starts with, so they reach each worker once. A work item is then only the fetched response, so the snapshot is never pickled once per response. The worker's loop keeps them in local variables for its life, so the worker module holds no state. On POSIX, each worker ignores SIGINT when its target starts. Windows children are isolated at creation (D5).
   - *Alternative:* `functools.partial(prepare, snapshot)` per submit. It pickles the snapshot, its compiled patterns and the extractor list with every response. Rejected.
 - **Why own workers rather than `concurrent.futures.ProcessPoolExecutor`:** the executor knows which worker holds which Page and since when, so it can end exactly the worker over its deadline (D8) and charge a crash to exactly one URL (D3).
   - *Alternative:* `ProcessPoolExecutor`, recreated after a crash or a deadline. It needs less code of ours, but it cannot end one worker (3.14's `kill_workers()` ends them all), so every timeout would end every worker and resubmit their Pages, paying about 1 second of `spawn` on Windows each time; it marks a future as running when the item enters its call queue, not when a worker takes it, so a deadline could not start at the take; and one dead worker fails every pending future, which needs a serial phase to find the culprit. Rejected: the code it saves moves into workarounds.
@@ -82,10 +82,25 @@ Each crash therefore costs one URL and one worker start.
   reports exit or stay open after exit when another process has inherited its writer.
 
 ### D5. Windows consoles
-`multiprocessing` creates its children with no creation flags, so they attach to their parent's console, and a console-less parent is the only way to get new windows.
-- **A console-less parent** is a DETACHED_PROCESS: each child would get a visible console window.
-- `060` therefore uses CREATE_NO_WINDOW, whose hidden console the workers inherit.
-- This change pins that behaviour with a Windows scenario, whose test starts the crawler under CREATE_NO_WINDOW itself.
+**In short:** The Windows guardian, workers and replacements start outside the Crawl's
+console, with no visible console window.
+
+Each child starts with `CREATE_NO_WINDOW`. A Ctrl+Break broadcast goes to every
+process group on the sender's console, so creation in a separate process group
+alone would protect only against an event addressed to the owner's group.
+`CREATE_NEW_CONSOLE` would allocate a separate console but could show a window.
+Each child keeps the console isolation it had at creation throughout bootstrap.
+
+The spawn launcher passes redirected file and pipe handles explicitly. If a
+standard stream points to the owner's console or has no handle, the launcher
+uses the null device for that stream. It inherits only those streams and the
+bootstrap handles. A temporary file carries the spawn payload, which may be
+larger than a pipe buffer. The owner publishes the file with a byte on a separate
+pipe, so it can finish tracking a child before that child's interpreter reads
+the payload. The usual spawn reducers still duplicate the work-channel handles.
+
+[`060` D4](../060-add-crawl-control/design.md#d4-windows-process-creation-approved)
+also uses `CREATE_NO_WINDOW` for the background Crawl itself.
 
 ### D6. The ~500k benchmark, first
 - **The script:** `scripts/crawl_500k.py`, next to `scripts/writer_throughput.py`, generates a synthetic site of 500,000 linked pages from a template served by the fixture harness, and crawls it with no `--max-urls` limit.

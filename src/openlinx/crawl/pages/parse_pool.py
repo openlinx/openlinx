@@ -45,10 +45,8 @@ class WorkerStartError(RuntimeError):
 
 
 def _work(channel: socket.socket, results: _PipeEnd, owner: Owner) -> None:
-    # Ctrl+C reaches every process of a console: the Crawl process ends workers in order.
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    if sys.platform == "win32":
-        signal.signal(signal.SIGBREAK, signal.SIG_IGN)
+    if sys.platform != "win32":
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
     with channel:
         if await_admission(channel, owner):
             with channel.makefile("rb") as tasks:

@@ -2,10 +2,13 @@
 
 import asyncio
 import os
+import sys
 import threading
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from time import monotonic
 
 import msgspec
@@ -76,6 +79,48 @@ async def test_a_blocked_work_transfer_does_not_hold_the_loop() -> None:
 
 
 async def test_a_worker_stalled_before_taking_a_page_is_replaced() -> None:
+    await _replace_stalled_worker()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="The Linux boot time comes from /proc/stat")
+async def test_replacement_reaches_ready_after_linux_boot_time_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    procfs = tmp_path / "proc"
+    procfs.mkdir()
+    owner = str(os.getpid())
+    (procfs / owner).symlink_to(Path("/proc") / owner, target_is_directory=True)
+    (tmp_path / "sitecustomize.py").write_text(
+        """
+import os
+from pathlib import Path
+
+procfs = Path(__file__).with_name("proc")
+if (procfs / "stat").exists():
+    import psutil
+
+    psutil.PROCFS_PATH = str(procfs)
+    (procfs / "observed").write_text(
+        f"{os.getpid()} {int(psutil.boot_time())}", encoding="ascii"
+    )
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path), prepend=os.pathsep)
+
+    shifted_boot = 0
+
+    def step_clock() -> None:
+        nonlocal shifted_boot
+        # Both workers look up the same real owner PID and unchanged start ticks.
+        shifted_boot = int(psutil.boot_time()) + 1
+        (procfs / "stat").write_text(f"btime {shifted_boot}\n", encoding="ascii")
+
+    replacement = await _replace_stalled_worker(step_clock)
+    assert (procfs / "observed").read_text(encoding="ascii") == f"{replacement} {shifted_boot}"
+
+
+async def _replace_stalled_worker(before_suspend: Callable[[], None] | None = None) -> int:
     hook = extractor("worker_id", _pid, None)
     pool = PoolExecutor(1, deadline=2)
     await pool.start(PageSettings(scope=scope_rules(_URL), extractors=(hook,), strip_params=None))
@@ -86,6 +131,8 @@ async def test_a_worker_stalled_before_taking_a_page_is_replaced() -> None:
         assert identity is not None
         worker = psutil.Process(identity.pid)
         worker.create_time()
+        if before_suspend is not None:
+            before_suspend()
         worker.suspend()
 
         undelivered = await asyncio.wait_for(pool.prepare(_URL, _RESPONSE), 5)
@@ -95,6 +142,7 @@ async def test_a_worker_stalled_before_taking_a_page_is_replaced() -> None:
         assert replacement is not None
         assert replacement.pid != identity.pid
         assert not worker.is_running()
+        return replacement.pid
     finally:
         if worker is not None:
             with suppress(psutil.NoSuchProcess):

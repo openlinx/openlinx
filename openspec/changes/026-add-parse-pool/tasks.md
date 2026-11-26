@@ -52,7 +52,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 ## 4. Shutdown and Windows consoles
 
 - [ ] 4.1 [Subprocess] Drive "No parse worker outlives a completed Crawl": each worker gets a stop message and is joined (design D4).
-- [ ] 4.2 [Subprocess] Drive "An interrupt ends the parse workers": workers ignore SIGINT and SIGBREAK, and a worker still preparing a Page when the grace period of `020`'s `StopSignal` ends is killed, its URL left `queued`.
+- [ ] 4.2 [Subprocess] Drive "An interrupt ends the parse workers" and "Ctrl+Break ends the parse tree during Windows bootstrap". Leave unfinished URLs `queued` at grace expiry. On native Windows use a private console, exercise targeted and broadcast delivery during guardian, initial worker and replacement startup, and verify raw exit status, window visibility and a subsequent Crawl in the Store.
 - [ ] 4.3 [Subprocess, Windows in CI] Drive "Parse workers open no console window (Windows)".
 - [x] 4.4 Docs: document shutdown and Windows console behaviour (why `060` uses CREATE_NO_WINDOW) in `docs/architecture.md`.
 - [ ] 4.5 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
@@ -62,9 +62,10 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
   Linux proof includes a Page blocked in native code and a pre-admission owner death with
   the work sockets retained by a separate process. It also covers one and two interrupts
   while a worker is blocked in native code before reaching its target, then a fresh Crawl
-  which stores both Pages. The executor tests cover cancellation during spawn, stalled work
-  delivery and a forked child holding the result pipe and the POSIX process sentinel. The
-  default CLI and native Windows and macOS acceptance remain open.
+  which stores both Pages. The Windows fixture holds children before they read the spawn
+  payload and verifies pending and recovered Pages. The executor tests cover cancellation
+  during spawn, stalled work delivery and a forked child holding the result pipe and the
+  POSIX process sentinel. Default CLI and native Windows and macOS acceptance remain open.
 
 ## 5. Change check
 

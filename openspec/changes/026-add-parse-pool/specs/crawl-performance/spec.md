@@ -65,18 +65,25 @@ When preparing one Page takes longer than 30 seconds from the moment a worker to
 - **THEN** each of `{site}/p1` to `{site}/p10` has `parsed` = 1 and no `parse_error`
 
 ### Requirement: Parse workers end with the Crawl
-Every worker process SHALL have ended within 10 seconds after the crawl process ends, whether the Crawl completed or was stopped by an interrupt. Workers SHALL ignore interrupts themselves, so that the crawl process shuts them down in order.
+Every worker process SHALL have ended within 10 seconds after the crawl process ends, whether the Crawl completed or was stopped by an interrupt. The crawl process SHALL handle the owner's interrupts and shut its workers down in order. On Windows the guardian and every worker, including replacements, SHALL be isolated from the Crawl's console beginning at process creation.
 
 #### Scenario: No parse worker outlives a completed Crawl
 - **WHEN** a `linx crawl {site}/` subprocess ends with the Crawl State `completed`
 - **THEN** 10 seconds later none of its child processes is still running
 
 #### Scenario: An interrupt ends the parse workers
-- **WHEN** a `linx crawl {site}/` subprocess is stopped by SIGINT (CTRL_BREAK_EVENT on Windows) while `/` links to 30 pages
+- **WHEN** a `linx crawl {site}/` subprocess is stopped by SIGINT on POSIX or by Ctrl+Break on Windows while `/` links to 30 Pages
 - **THEN** 10 seconds after it exits, none of its child processes is still running
+- **AND** a URL whose Page was still in preparation when the grace period ended remains `queued`
+
+#### Scenario: Ctrl+Break ends the parse tree during Windows bootstrap
+- **WHEN** the foreground Crawl receives a single Ctrl+Break targeted at its process group or broadcast across its console while the guardian, an initial worker or a replacement is still bootstrapping
+- **THEN** only the Crawl receives the event, reports `stopping` with reason `interrupt`, and exits with code 130 and Crawl State `stopped`
+- **AND** its guardian and workers are shut down by the Crawl, without a console termination and within 10 seconds of Crawl exit
+- **AND** an unfinished URL whose outcome was never submitted remains `queued`
 
 ### Requirement: No console windows on Windows
-On Windows, worker processes SHALL be created without a console window of their own, inheriting their parent's console. A Crawl running in a process that has no visible console, as `060-add-crawl-control`'s background process has, SHALL therefore open no window.
+On Windows, the guardian and worker processes SHALL start without a visible console window, including when the Crawl starts with no visible console. Redirected standard streams backed by a file or pipe SHALL remain usable in those children.
 
 #### Scenario: Parse workers open no console window (Windows)
 - **WHEN** `linx crawl {site}/` runs on Windows in a process created with CREATE_NO_WINDOW, and `/` links to 30 pages

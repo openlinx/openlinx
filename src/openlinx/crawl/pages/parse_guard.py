@@ -10,6 +10,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from multiprocessing.connection import _ConnectionBase, wait
 from multiprocessing.process import BaseProcess
+from pathlib import Path
 from time import monotonic
 from typing import Any
 
@@ -19,19 +20,37 @@ from openlinx.clock import SystemClock
 
 if sys.platform != "win32":
     from openlinx.crawl.pages.parse_launch import PosixWorker
+else:
+    from openlinx.crawl.pages.parse_launch import WindowsChild
 
 type _PipeEnd = _ConnectionBase[Any, Any]
 _POLL_SECONDS = 0.1
 _CONTROL_SECONDS = 5.0
 ADMISSION = b"\0"
 
-type Owner = tuple[int, float]
+type _StartTime = int | float
+type Owner = tuple[int, _StartTime]
 
 
-def _same_process(pid: int, created: float) -> psutil.Process | None:
+def _start_time(process: psutil.Process) -> _StartTime:
+    if sys.platform == "linux":
+        # Linux create_time() adds the current wall-clock boot time to these start
+        # ticks. A worker spawned after a clock adjustment must still see the same owner.
+        stat = Path(psutil.PROCFS_PATH) / str(process.pid) / "stat"
+        try:
+            raw = stat.read_bytes()
+        except (FileNotFoundError, ProcessLookupError) as error:
+            raise psutil.NoSuchProcess(process.pid) from error
+        # starttime is field 22. The parenthesized command can contain spaces and ')'.
+        return int(raw.rsplit(b")", 1)[1].split()[19])
+    else:
+        return process.create_time()
+
+
+def _same_process(pid: int, started: _StartTime) -> psutil.Process | None:
     with suppress(psutil.NoSuchProcess):
         process = psutil.Process(pid)
-        if process.create_time() == created:
+        if _start_time(process) == started:
             return process
     return None
 
@@ -104,10 +123,8 @@ def _end_posix_workers(lease: _PipeEnd) -> None:
 
 def _guard(commands: _PipeEnd, identity: Owner, lease: _PipeEnd | None) -> None:
     """End workers even if the owner leaves open, inherited pipe endpoints."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-    if sys.platform == "win32":
-        signal.signal(signal.SIGBREAK, signal.SIG_IGN)
-    else:
+    if sys.platform != "win32":
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         os.setpgid(0, 0)
 
     owner = _same_process(*identity)
@@ -145,7 +162,7 @@ class Guard:
 
     def __init__(self, clock: SystemClock) -> None:
         self._clock = clock
-        self.owner: Owner = (os.getpid(), psutil.Process().create_time())
+        self.owner: Owner = (os.getpid(), _start_time(psutil.Process()))
         self._process: BaseProcess | None = None
         self._commands: _PipeEnd | None = None
         self._lease: _PipeEnd | None = None
@@ -157,7 +174,10 @@ class Guard:
         lease_reader = None
         if sys.platform != "win32":
             lease_reader, self._lease = spawn.Pipe(duplex=False)
-        process = spawn.Process(
+            child = spawn.Process
+        else:
+            child = WindowsChild
+        process = child(
             target=_guard,
             args=(reader, self.owner, lease_reader),
             name="parse-worker-guard",
@@ -188,12 +208,11 @@ class Guard:
                 raise RuntimeError("The parse guard must have a group before launching a worker.")
             return PosixWorker(target, args, name, self._process.pid, self._lease.fileno())
         else:
-            spawn = multiprocessing.get_context("spawn")
-            return spawn.Process(target=target, args=args, name=name, daemon=True)
+            return WindowsChild(target=target, args=args, name=name, daemon=True)
 
     async def enroll(self, pid: int) -> None:
         try:
-            born = psutil.Process(pid).create_time()
+            born = _start_time(psutil.Process(pid))
         except psutil.NoSuchProcess:
             return
         await self._exchange("add", pid, born)
@@ -201,17 +220,17 @@ class Guard:
     async def remove(self, pid: int) -> None:
         await self._exchange("remove", pid, 0.0)
 
-    async def _exchange(self, action: str, pid: int, created: float) -> None:
+    async def _exchange(self, action: str, pid: int, started: _StartTime) -> None:
         async with self._transaction:
             with self._clock.off_loop():
-                await asyncio.to_thread(self._request, action, pid, created)
+                await asyncio.to_thread(self._request, action, pid, started)
 
-    def _request(self, action: str, pid: int, created: float) -> None:
+    def _request(self, action: str, pid: int, started: _StartTime) -> None:
         commands = self._commands
         process = self._process
         if commands is None or process is None:
             raise RuntimeError("The parse guard was not started.")
-        commands.send((action, pid, created))
+        commands.send((action, pid, started))
         ready = wait([commands, process.sentinel], _CONTROL_SECONDS)
         if commands not in ready or commands.recv_bytes() != b"ok":
             raise RuntimeError(f"The parse guard did not acknowledge {action}.")

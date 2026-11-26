@@ -110,16 +110,16 @@ shared grace period to exit, kills any that remain, then confirms exit and joins
 before joining the guardian. A replacement can start only after its predecessor has
 been reaped. [026 shutdown design](../openspec/changes/026-add-parse-pool/design.md#d4-shutdown).
 
-The first interrupt sets `StopSignal` in the Crawl process. Workers ignore `SIGINT`
-and, on Windows, `SIGBREAK` once their worker function starts. The engine stops
-dispatching and allows up to ten seconds for work in flight. It cancels remaining URL
+The first interrupt sets `StopSignal` in the Crawl process. On POSIX, workers ignore
+`SIGINT` once their worker function starts. The engine stops dispatching and allows
+up to ten seconds for work in flight. It cancels remaining URL
 tasks at the end of that grace period. An unfinished URL whose outcome was never
 submitted stays `queued`. At close, the pool kills workers holding cancelled work or
 still starting after the engine cancelled its wait for readiness.
 
 A second interrupt exits the Crawl process immediately with code 130, leaving the
 last committed Crawl State in the file. The guardian checks whether the Crawl is
-alive by PID and creation time, independently of the work sockets. It kills enrolled
+alive by PID and process start time, independently of the work sockets. It kills enrolled
 workers on owner death even if a worker is stuck in native code. Workers waiting
 for admission also check whether the owner is alive. On POSIX, workers join the
 guardian's process group at OS launch, so it can find them even before Python
@@ -127,11 +127,16 @@ reaches the worker function or the Crawl reports their PIDs. The ten-second work
 lifetime limit starts when the Crawl process exits.
 [Worker lifetime requirement](../openspec/changes/026-add-parse-pool/specs/crawl-performance/spec.md#requirement-parse-workers-end-with-the-crawl).
 
-Windows workers use the standard `multiprocessing` spawn path and inherit the
-Crawl's console. The `060` contract calls for `CREATE_NO_WINDOW` in a new process
-group. The design gives workers a hidden console to inherit, independent of the
-caller's terminal. A console-less parent launched with `DETACHED_PROCESS` can cause
-its spawned workers to get visible console windows of their own.
+On Linux the guardian and workers identify each process by PID and its kernel
+start ticks. Adjusting the wall clock leaves that identity stable for replacements.
+
+On Windows, the guardian and each worker start with `CREATE_NO_WINDOW`, including
+replacements. The Crawl handles both a keyboard Ctrl+Break broadcast and a Ctrl+Break
+addressed to its own group. Its children start outside that console, so the isolation
+applies even before Python runs. Redirected standard streams backed by files or pipes
+are preserved. A temporary file carries the spawn data, so a child's stalled interpreter
+cannot block the owner's launch while it writes the payload. The background Crawl in
+`060` also starts with `CREATE_NO_WINDOW`.
 [026 console design](../openspec/changes/026-add-parse-pool/design.md#d5-windows-consoles) ·
 [060 Windows process creation](../openspec/changes/060-add-crawl-control/design.md#d4-windows-process-creation-approved) ·
 [060 terminal contract](../openspec/changes/060-add-crawl-control/specs/crawl-control/spec.md#requirement-background-crawls-outlive-their-terminal).
