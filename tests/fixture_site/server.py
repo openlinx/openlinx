@@ -252,6 +252,11 @@ def _build_app(
             await asyncio.sleep(route.delay)
         if route.hang:
             await asyncio.Event().wait()
+        if route.reset_before_headers:
+            transport = request.transport
+            assert transport is not None
+            transport.abort()
+            return web.Response()
         response = _respond(site, route, base_url())
         if route.content_type is not None:
             response.headers["Content-Type"] = route.content_type
