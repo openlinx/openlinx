@@ -685,7 +685,13 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** `health_score` is 75
 
 ### Requirement: List Rules
-`linx rules` and `linx rules list` SHALL print the Rules as configured in the current Workspace, without reading any Crawl. The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
+**In short:** `linx rules list` pages through the Workspace's Rule catalogue. Bare `linx rules` runs the same Command.
+
+`linx rules list` SHALL print the Rules as configured in the current Workspace without reading any Crawl. `linx rules` with no arguments SHALL run `linx rules list`, and `linx rules --help` SHALL show group help.
+
+Any other option given after `linx rules` and before the Command name SHALL fail with `usage_error` (exit code 2). The hint SHALL place a Command option after the full Command name, defaulting to `linx rules list` when no Command is named. The hint for a root option SHALL place it before the group name, as in `linx --version`.
+
+The output SHALL follow the output contract of `010-add-workspace-and-cli-contract`: the paging envelope `{total, items, next_cursor}` and the `--fields`, `--limit`, `--cursor` and `--format` options. Items SHALL be in catalogue order: by category, in the order of the Rule model, then in the order the Rules appear in their category's table. Each item SHALL have these fields:
 
 - `id`, `category`, `issue_type`, `priority`, `applies_to` and `enabled`
 - `thresholds`: an object that maps each threshold name to `{value, default, unit}`, where the unit is `characters`, `pixels`, `words`, `kilobytes` or `hops`

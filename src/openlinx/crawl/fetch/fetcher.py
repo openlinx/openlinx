@@ -61,10 +61,10 @@ class FetchResult:
     # case, repeated names kept.
     headers: tuple[tuple[str, str], ...]
     body: bytes
-    # When the request was sent, and how long until the whole body arrived.
+    # Start time and elapsed time through the body reader, including a capped read.
     fetched_at: datetime
     response_time_ms: int
-    # Larger than the body cap, so read only up to it.
+    # The wire input or a decoding stage exceeded the body cap.
     body_truncated: bool = False
     # The bytes read before decoding; None from a fake Fetcher, which sends its body as is.
     transferred_bytes: int | None = None
@@ -274,6 +274,9 @@ async def aiohttp_fetcher(
                 auto_decompress=False,
             )
         )
+        # The Requester owns retries and counts each attempt. aiohttp has no public switch for
+        # its implicit retry after a disconnect, which can also occur on a fresh connection.
+        session._retry_connection = False
         yield AiohttpFetcher(
             session,
             clock,

@@ -42,6 +42,7 @@ class _ProbeRoute(AbstractResolver):
         self.lookups = 0
         self.dns_started: float | None = None
         self.dns_cancelled: float | None = None
+        self.cleanup_started_at: float | None = None
 
     async def resolve(
         self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
@@ -79,15 +80,22 @@ class _ProbeRoute(AbstractResolver):
             assert isinstance(warmup, FetchResult)
             assert warmup.status_code == 404
             self._primed = True
-            yield fetcher
+            try:
+                yield fetcher
+            finally:
+                self.cleanup_started_at = monotonic()
 
 
 class _StalledTunnel:
-    """Observe a client closing the socket while this loopback peer withholds a reply."""
+    """Withhold a reply at CONNECT or TLS and optionally observe the client's closure."""
 
-    def __init__(self, *, connect_delay: float | None, safety_timeout: float) -> None:
+    def __init__(
+        self, *, connect_delay: float | None, safety_timeout: float, observe_close: bool = True
+    ) -> None:
         self._connect_delay = connect_delay
         self._safety_timeout = safety_timeout
+        self._observe_close = observe_close
+        self._finished = asyncio.Event()
         self.connect_at: float | None = None
         self.tls_at: float | None = None
         self.client_closed_at: float | None = None
@@ -100,7 +108,10 @@ class _StalledTunnel:
                 handlers.create_task(self._serve(reader, writer))
 
             async with await asyncio.start_server(accept, "127.0.0.1", 0) as server:
-                yield int(server.sockets[0].getsockname()[1])
+                try:
+                    yield int(server.sockets[0].getsockname()[1])
+                finally:
+                    self._finished.set()
 
     async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -117,6 +128,10 @@ class _StalledTunnel:
                     tls_record_type = await reader.readexactly(1)
                     assert tls_record_type == b"\x16"
                     self.tls_at = monotonic()
+            if not self._observe_close:
+                # Keep the peer open through the probe so only the client can end it.
+                await self._finished.wait()
+                return
             try:
                 async with asyncio.timeout(self._safety_timeout):
                     # A connection reset and an orderly EOF both prove client closure.
@@ -135,15 +150,17 @@ class _StalledTunnel:
 
 
 class _DelayedConnect:
-    """Delay one address at asyncio's OS connect boundary, including on Windows."""
+    """Delay the probe at the OS connect boundary and time its socket closure."""
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch, route: _ProbeRoute, seconds: float) -> None:
         self.pending: socket.socket | None = None
         self.started: float | None = None
         self.cancelled: float | None = None
+        self.closed_at: float | None = None
         with closing(loop_factory()) as loop:
             loop_type = type(loop)
         actual_connect = loop_type.sock_connect
+        actual_close = socket.socket.close
 
         async def connect(
             event_loop: asyncio.AbstractEventLoop,
@@ -162,7 +179,13 @@ class _DelayedConnect:
                     raise
             await actual_connect(event_loop, sock, target)
 
+        def close(sock: socket.socket) -> None:
+            actual_close(sock)
+            if sock is self.pending and sock.fileno() == -1 and self.closed_at is None:
+                self.closed_at = monotonic()
+
         monkeypatch.setattr(loop_type, "sock_connect", connect)
+        monkeypatch.setattr(socket.socket, "close", close)
 
 
 @pytest.fixture
@@ -250,19 +273,24 @@ def test_capability_phases_spend_the_same_one_second_budget(
 ) -> None:
     probe_route.delay = 0.18
     tcp = _DelayedConnect(monkeypatch, probe_route, 0.10)
-    tunnel = _StalledTunnel(connect_delay=0.12, safety_timeout=0.42)
+    tunnel = _StalledTunnel(connect_delay=0.12, safety_timeout=0.42, observe_close=False)
     probe_route.tunnel = tunnel
 
     # The probe waits for the next 1/3 s host turn, then spends about 0.4 s in
-    # DNS, TCP and CONNECT. Give the TLS peer time to observe client closure,
-    # but cut it off before a timer starting after admission could fire.
+    # DNS, TCP and CONNECT. Time the actual socket close because the peer may
+    # process EOF later. A timer that starts after admission misses this bound.
     crawl_file = _crawl(probe_route, rate=3.0)
 
     assert probe_route.dns_started is not None
     assert tcp.started is not None
     assert tunnel.connect_at is not None
     assert tunnel.tls_at is not None
-    assert tunnel.client_closed_at is not None
+    assert tcp.pending is not None
+    assert tcp.pending.fileno() == -1
+    assert tcp.closed_at is not None
+    assert probe_route.cleanup_started_at is not None
+    assert tcp.closed_at < probe_route.cleanup_started_at
+    assert tcp.closed_at - tunnel.tls_at < 0.42
     assert tcp.started - probe_route.dns_started >= 0.15
     assert tunnel.connect_at - tcp.started >= 0.07
     assert tunnel.tls_at - tunnel.connect_at >= 0.09

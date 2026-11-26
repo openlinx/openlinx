@@ -19,6 +19,7 @@ class RouteOptions:
     content_type: str | None = None
     delay: float = 0.0
     hang: bool = False
+    reset_before_headers: bool = False
     # Send the headers and this many bytes of the body, then reset the connection.
     reset_after: int | None = None
     # Send the headers, then never the body.
