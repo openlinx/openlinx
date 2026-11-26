@@ -14,6 +14,7 @@ import pytest
 
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.server import ServerHandle
 from tests.support.cli import REPO_ROOT
 from tests.support.crawls import crawl_row, query
 from tests.support.processes import python_command
@@ -178,7 +179,7 @@ def _finished_tree(
     linked_pages: dict[str, Page] | None = None,
     flags: int = 0,
     visible_window_pids: Callable[[], set[int]] | None = None,
-) -> None:
+) -> tuple[Path, ServerHandle]:
     if linked_pages is None:
         linked_pages = {"/held": Page(body="Second Page", delay=2)}
     seed = Page(body="".join(f'<a href="{path}">Follow</a>' for path in linked_pages))
@@ -222,6 +223,7 @@ def _finished_tree(
             assert query(file, "SELECT url, parsed FROM urls ORDER BY url") == [
                 (server.url(path), 1) for path in sorted(("/", *linked_pages))
             ]
+            return file, server
         finally:
             if process.poll() is None:
                 with suppress(psutil.NoSuchProcess):
@@ -269,6 +271,41 @@ if sys.platform == "win32":
         return visible
 
 
+def _finished_linked_crawl(
+    site: StartSite,
+    folder: Path,
+    *,
+    flags: int = 0,
+    visible_window_pids: Callable[[], set[int]] | None = None,
+) -> None:
+    linked_pages = {f"/p{number}": Page(body=f"Page {number}") for number in range(1, 30)}
+    # Keep the Crawl active after the worker has prepared the Seed.
+    linked_pages["/p30"] = Page(body="Last Page", delay=2)
+    file, server = _finished_tree(
+        site,
+        folder,
+        linked_pages=linked_pages,
+        flags=flags,
+        visible_window_pids=visible_window_pids,
+    )
+    rows = query(
+        file,
+        "SELECT urls.url, urls.parsed FROM pages LEFT JOIN urls ON urls.id = pages.url_id "
+        "ORDER BY urls.url",
+    )
+    assert len(rows) == 31
+    # The scenario fixes the Seed and 30 targets independently of the fixture's Links.
+    expected_paths = sorted(("/", *(f"/p{number}" for number in range(1, 31))))
+    assert rows == [(server.url(path), 1) for path in expected_paths]
+
+
+@pytest.mark.slow
+def test_the_opt_in_crawl_stores_the_seed_and_all_thirty_linked_pages(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, tmp_path: Path
+) -> None:
+    _finished_linked_crawl(fixture_site, tmp_path)
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(sys.platform != "win32", reason="Console windows exist only on Windows")
 def test_parse_workers_open_no_console_window(
@@ -276,13 +313,9 @@ def test_parse_workers_open_no_console_window(
 ) -> None:
     """Qualify the opt-in pool until the installed CLI selects it by default."""
     if sys.platform == "win32":
-        linked_pages = {f"/p{number}": Page(body=f"Page {number}") for number in range(1, 31)}
-        # Keep the Crawl active after the worker has prepared the Seed.
-        linked_pages["/p30"] = Page(body="Last Page", delay=2)
-        _finished_tree(
+        _finished_linked_crawl(
             fixture_site,
             tmp_path,
-            linked_pages=linked_pages,
             flags=subprocess.CREATE_NO_WINDOW,
             visible_window_pids=_visible_windows,
         )
