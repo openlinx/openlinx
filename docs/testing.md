@@ -70,7 +70,11 @@ does not add it to the direct test seams.
 | `tests/` | the repository's own guards: dependencies, naming, line endings, docs links, isolation |
 
 The ALPN capability-probe tests in [tests/crawl/alpn/](../tests/crawl/alpn/)
-cover admission, deadlines, lifecycle and system DNS.
+cover admission, deadlines, lifecycle and system DNS, plus the
+[capability recorded for an origin](../tests/crawl/alpn/test_capability.py)
+and [probes through a proxy](../tests/crawl/alpn/test_proxy.py).
+See [proxy identity](../tests/crawl/test_proxy_identity.py) for ordinary
+CONNECT authority and origin identity checks.
 
 [tests/crawl/hooks/](../tests/crawl/hooks/) contains the tests for
 [post-Crawl Pass lifecycle](../tests/crawl/hooks/test_post_crawl_passes.py) and
