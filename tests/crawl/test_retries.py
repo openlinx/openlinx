@@ -17,6 +17,107 @@ from tests.support.workspace import TempWorkspace
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    ("retries", "expected_requests", "expected_url"),
+    [
+        ("0", [("GET", "/gone")], ("error", None, "connection_error", 1)),
+        ("1", [("GET", "/gone"), ("GET", "/gone")], ("fetched", 200, None, 2)),
+    ],
+    ids=["no-retry", "recovers-on-retry"],
+)
+def test_a_disconnect_before_page_headers_uses_the_crawls_retries(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    retries: str,
+    expected_requests: list[tuple[str, str]],
+    expected_url: tuple[str, int | None, str | None, int],
+) -> None:
+    drop = Status(200, reset_before_headers=True)
+    gone = Responses((drop, Page(body="<p>Report</p>"))) if retries == "1" else drop
+    server = fixture_site(
+        Site(
+            {
+                "/robots.txt": Robots("User-agent: *\nAllow: /\n"),
+                "/": Page(body='<a href="/gone">Report</a>'),
+                "/gone": gone,
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"), "--retries", retries)
+
+    assert (
+        [(request.method, request.path) for request in server.requests],
+        query(
+            crawl_file,
+            "SELECT fetch_state, status_code, fetch_error, attempt_count FROM urls WHERE url = ?",
+            [server.url("/gone")],
+        ),
+    ) == ([("GET", "/robots.txt"), ("GET", "/"), *expected_requests], [expected_url])
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("retries", "recover", "expected_requests", "expected_origin", "expected_url"),
+    [
+        (
+            "0",
+            False,
+            [("GET", "/robots.txt")],
+            ("unreachable", None, "connection_error"),
+            ("error", None, "connection_error", 0),
+        ),
+        (
+            "1",
+            False,
+            [("GET", "/robots.txt"), ("GET", "/robots.txt")],
+            ("unreachable", None, "connection_error"),
+            ("error", None, "connection_error", 0),
+        ),
+        (
+            "1",
+            True,
+            [("GET", "/robots.txt"), ("GET", "/robots.txt"), ("GET", "/target")],
+            ("ok", 200, None),
+            ("fetched", 200, None, 1),
+        ),
+    ],
+    ids=["no-retry", "retry-exhausted", "recovers-on-retry"],
+)
+def test_a_disconnect_before_robots_headers_uses_the_crawls_retries(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    retries: str,
+    recover: bool,
+    expected_requests: list[tuple[str, str]],
+    expected_origin: tuple[str, int | None, str | None],
+    expected_url: tuple[str, int | None, str | None, int],
+) -> None:
+    drop = Status(200, reset_before_headers=True)
+    robots = Responses((drop, Robots("User-agent: *\nAllow: /\n"))) if recover else drop
+    server = fixture_site(Site({"/robots.txt": robots, "/target": Page(body="<p>Report</p>")}))
+    target = server.url("/target")
+    seed = fixture_site(Site({"/": Page(body=f'<a href="{target}">Report</a>')}))
+
+    crawl_file = crawled(seed.url("/"), "--retries", retries)
+
+    assert (
+        [(request.method, request.path) for request in server.requests],
+        query(
+            crawl_file,
+            "SELECT robots_state, robots_status_code, robots_fetch_error FROM origins "
+            "WHERE origin = ?",
+            [server.base_url],
+        ),
+        query(
+            crawl_file,
+            "SELECT fetch_state, status_code, fetch_error, attempt_count FROM urls WHERE url = ?",
+            [target],
+        ),
+    ) == (expected_requests, [expected_origin], [expected_url])
+
+
+@pytest.mark.slow
 def test_a_temporary_503_is_retried(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
     # A shop whose application server restarts: one 503, then the page.
     server = fixture_site(
