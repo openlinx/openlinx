@@ -30,16 +30,18 @@ class UrlResponse:
     headers: tuple[tuple[str, str], ...]
     fetched_at: datetime
     response_time_ms: int
-    # Larger than the body cap, so read only up to it.
+    # Reading stopped because the transferred body or a decoding stage exceeded the cap.
     body_truncated: bool
-    # The Content-Encoding header as received; None without one.
+    # Content-Encoding field values joined in arrival order, or None if absent.
     content_encoding: str | None
-    # The body after decoding, and as transferred; None where not measured.
+    # Complete decoded body size, or None on truncation or unsupported coding.
     size_bytes: int | None
+    # Includes the full last chunk read. None when the Fetcher did not measure it.
     transferred_bytes: int | None
     # Page preparation's when the Page was parsed, else the X-Robots-Tag's alone.
     directives: RobotsDirectives
-    # Where a 301, 302, 303, 307 or 308 leads; None for any other response.
+    # For a 301, 302, 303, 307 or 308, the Location resolved to an HTTP(S) URL.
+    # None for other statuses or when Location gives no such URL.
     redirect_target: NormalizedUrl | None
 
 
@@ -102,8 +104,8 @@ def handler[R](
 
 
 class PassWriter(Protocol):
-    """The writer's calls a pass may make: inside a Crawl only the async calls commit on the
-    loop's clock, and the Crawl closes its writer itself (023-fix-code-audit D5)."""
+    """Async submission wakes the loop's commit timer, and a pass can flush without waiting
+    for that timer. The Crawl closes its writer (023-fix-code-audit D5)."""
 
     async def run_async[T](self, unit: Unit[T]) -> T: ...
 
@@ -122,7 +124,8 @@ class PassContext:
 
 @dataclass(frozen=True, slots=True)
 class Pass:
-    """A store function run once the last URL is recorded, before completed is written."""
+    """An async hook run after URL processing, before the Crawl records completed or stopped.
+    A continued run can execute the hook again (020-add-crawl-core D9)."""
 
     name: str
     run: Callable[[PassContext], Awaitable[None]]

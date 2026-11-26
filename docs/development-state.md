@@ -8,7 +8,8 @@ stream, read [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) an
 
 ## Main and active streams
 
-Public [main at `741b92f7`](https://github.com/openlinx/openlinx/tree/741b92f7f0d8b3f3e0bf868bb9d2cb7fa79412ce)
+At the 022 merge checkpoint, public
+[main at `62253122`](https://github.com/openlinx/openlinx/tree/62253122476f840e6ba15d3e2b0e1fd8404dab2c)
 contains the foreground Crawl, crawl store, fetch policy, completed code audit and
 Page data foundation. The integrated Crawl → Issues product path remains unfinished.
 A published branch or a local candidate does not establish feature acceptance or CI
@@ -20,7 +21,7 @@ These static targets do not establish runtime compatibility on those operating s
 
 | Stream | Verified checkpoint | Product state and canonical tasks |
 |---|---|---|
-| 022 fetching | [Draft PR #42](https://github.com/openlinx/openlinx/pull/42) | All 156 tasks complete and archived on the integration branch after Standards and Spec review. [Archived tasks](../openspec/changes/archive/2026-11-18-022-add-fetch-policy/tasks.md). |
+| 022 fetching | [PR #42](https://github.com/openlinx/openlinx/pull/42) merged at `62253122` | All 156 tasks complete and archived on main after Standards and Spec review. [Archived tasks](../openspec/changes/archive/2026-11-18-022-add-fetch-policy/tasks.md). |
 | 023 code audit | Merged `cc684d2d` | Complete and archived on main. [Archived tasks](../openspec/changes/archive/2026-11-04-023-fix-code-audit/tasks.md). |
 | 030 Page data | Public [86130ead](https://github.com/openlinx/openlinx/tree/86130ead1eca45f7e015a435220344109c42d9b4); local `c31c717e` | Foundation in main; local group 4b, Max-Age, Content Area, sentence-splitting and cookie Domain fixes complete; whole-change acceptance remains open. [Tasks](../openspec/changes/030-add-page-data/tasks.md). |
 | 060 Crawl control | Frozen local `5fcf25e2` | Ownership tasks 0.1–0.6 implemented locally and integrated with main; frozen after task 0.6; control Commands are not implemented. [Main draft](../openspec/changes/060-add-crawl-control/tasks.md) has no group 0; current tasks are on the local branch below. |
@@ -66,13 +67,21 @@ reconciliation with the implemented lifecycle before they are built.
 
 ### Archived fetching change
 
-The change is archived on `coord/022-fetch-v02-2026-11-15` with the
+The change was archived and merged in [PR #42](https://github.com/openlinx/openlinx/pull/42).
+The archive includes the synced
 [Fetching](../openspec/specs/fetching/spec.md) and
-[Crawling](../openspec/specs/crawling/spec.md) specifications synced. Groups
+[Crawling](../openspec/specs/crawling/spec.md) specifications. Groups
 11–14 cover per-hop Internal identity, explicit proxy routing and fresh credentials
-on continue, offered HTTP capability and bounded response decoding. Standards and
-Spec review closed on the code at `ee7ee390`. Its full CI matrix passed on
-Linux, macOS and Windows with Python 3.12, 3.13 and 3.14. [Reviewed code](https://github.com/openlinx/openlinx/tree/ee7ee390a67c57acd0b33e469c45940cceffabd4) · [CI run](https://github.com/openlinx/openlinx/actions/runs/44218956051).
+on continue, offered HTTP capability and bounded response decoding.
+
+Standards and Spec review closed on `ee7ee390`, whose matrix passed.
+[Reviewed code](https://github.com/openlinx/openlinx/tree/ee7ee390a67c57acd0b33e469c45940cceffabd4) · [Review CI](https://github.com/openlinx/openlinx/actions/runs/44218956051).
+
+The archived PR head `907f4079` passed all nine Linux, macOS and Windows jobs
+across Python 3.12–3.14. [PR matrix](https://github.com/openlinx/openlinx/actions/runs/44228108609).
+The main run at merge commit `62253122` passed eight of nine jobs. The macOS
+Python 3.12 job failed the ALPN shared-deadline test in `Tests and coverage`.
+[Main matrix](https://github.com/openlinx/openlinx/actions/runs/44229494663).
 
 ### Fetching implementation checkpoints
 
