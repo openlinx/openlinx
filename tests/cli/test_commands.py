@@ -35,6 +35,17 @@ def test_a_command_in_a_group_is_listed_by_its_full_path() -> None:
     assert [options["--limit"][key] for key in ("default", "min", "max")] == [50, 0, 1000]
 
 
+def test_rules_show_is_described_as_a_document_command() -> None:
+    entry = _entry(run_cli("commands").json(), "rules show")
+
+    assert (entry["output"], entry["formats"], entry["fields"]) == (
+        "document",
+        ["json", "table"],
+        None,
+    )
+    assert [option["name"] for option in entry["options"]] == ["--format"]
+
+
 def test_tool_version() -> None:
     tool = run_cli("commands").json()["tool"]
 
@@ -188,6 +199,17 @@ def test_store_codes_are_self_described() -> None:
     }
 
     assert {code: diagnostics[code]["exit_code"] for code in expected} == expected
+
+
+def test_rule_codes_are_self_described() -> None:
+    result = run_cli("commands")
+
+    assert result.exit_code == 0, result.stderr
+    assert [
+        (diagnostic["code"], diagnostic["level"], diagnostic["exit_code"])
+        for diagnostic in result.json()["diagnostics"]
+        if diagnostic["code"] == "rule_not_found"
+    ] == [("rule_not_found", "error", 4)]
 
 
 def test_warning_and_info_codes_of_this_change() -> None:

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 import typer
-from typer.core import TyperGroup
+from typer.core import TyperGroup, TyperOption
 
 from openlinx import __version__
 from openlinx.cli.click_compat import Context
@@ -101,7 +101,12 @@ def _group_app(group: CommandGroup) -> typer.Typer:
                         hint=f"Put {flag} before the Command name: {COMMAND_NAME} {flag}",
                     )
                 command = next((arg for arg in args if arg in names.values()), default)
-                raise option_before_the_command(flag, f"{group.name} {command}")
+                if any(
+                    flag in param.opts or flag in param.secondary_opts
+                    for param in self.commands[command].params
+                    if isinstance(param, TyperOption)
+                ):
+                    raise option_before_the_command(flag, f"{group.name} {command}")
             return super().parse_args(ctx, args)
 
     app = typer.Typer(cls=Group, help=group.summary, rich_markup_mode=None)
