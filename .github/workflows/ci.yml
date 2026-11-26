@@ -90,3 +90,16 @@ jobs:
 
       - name: Report script (seam 9)
         run: node --test "tests/js/**/*.test.mjs"
+
+      - name: Native Windows Ctrl+Break acceptance
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          && github.ref == 'refs/heads/ci/v01-windows-interrupt-nov27'
+          && matrix.os == 'windows-latest'
+        timeout-minutes: 8
+        env:
+          EXPECTED_PYTHON: ${{ matrix.python }}
+        run: |
+          if [[ "$GITHUB_REF" == 'refs/heads/ci/v01-windows-interrupt-nov27' ]]; then
+            uv run --locked --no-sync python scripts/windows_interrupt_proof.py
+          fi
