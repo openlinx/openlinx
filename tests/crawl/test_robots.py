@@ -78,14 +78,21 @@ def test_an_origin_s_parsed_rules_keep_no_copy_of_its_text() -> None:
 
 
 @pytest.mark.parametrize(
-    "body",
+    ("body", "expected"),
     [
-        b"# caf\xe9 \xff\nUser-agent: *\nDisallow: /a",
-        b"\xef\xbb\xbfUser-agent: *\nDisallow: /a",
-        b"User-agent: *\nDisallow: /\xe9\nDisallow: /a",
+        (
+            b"# caf\xe9 \xff\nUser-agent: *\nDisallow: /a",
+            "# caf\ufffd \ufffd\nUser-agent: *\nDisallow: /a",
+        ),
+        (b"\xef\xbb\xbfUser-agent: *\nDisallow: /a", "User-agent: *\nDisallow: /a"),
+        (
+            b"User-agent: *\nDisallow: /\xe9\nDisallow: /a",
+            "User-agent: *\nDisallow: /\ufffd\nDisallow: /a",
+        ),
     ],
 )
-def test_robots_txt_is_read_as_utf_8_with_replacement(body: bytes) -> None:
+def test_robots_txt_is_read_as_utf_8_with_replacement(body: bytes, expected: str) -> None:
+    assert robots_txt_text(body) == expected
     assert _read(body).allows("http://site.test/a") is False
 
 

@@ -152,7 +152,8 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
         while depth is not None:
             await _crawl_depth(run, depth)
             if run.seed_chain.is_open and _closes_the_seed_chain(run):
-                # No URL of the chain was decided, such as one the URL limit refused.
+                # Keep the existing Scope when the chain has no terminal outcome this run,
+                # for example when the URL limit refused its last request.
                 await end_seed_chain(context, run.seed_chain, responded=False)
             # The checked URLs in flight get the grace too; the sweep below would wait for them.
             if _stopping(run):
@@ -205,10 +206,10 @@ async def _crawl_depth(run: Run, depth: int) -> None:
     running: set[asyncio.Task[None]] = set()
     try:
         # A pass reads the depth from the top, so it also finds a queued URL that a redirect
-        # lowered to it below the last pass's cursor. Within a pass the cursor keeps a
-        # URL in flight from being read twice; across passes only the depth's
-        # checked URLs are still in flight, bounded by the task cap, and the URLs whose outcome
-        # is pending, bounded by the writer's batch.
+        # lowered to it below the last pass's cursor. Within a pass the cursor avoids duplicate
+        # reads. Across passes the task cap bounds in-flight Checked URLs, and the writer's
+        # submission window bounds units awaiting commit. The pending-outcome check also keeps
+        # a URL whose unit failed from being dispatched while its fallback is pending.
         checked_in_flight: set[int] = set()
         while True:
             dispatched = await _start_depth(run, depth, running, checked_in_flight)
@@ -234,8 +235,9 @@ async def _crawl_depth(run: Run, depth: int) -> None:
 async def _start_depth(
     run: Run, depth: int, running: set[asyncio.Task[None]], checked_in_flight: set[int]
 ) -> bool:
-    """Starts the depth's followed URLs until none is left, the URL limit refuses one, or the
-    Crawl stops; whether it started any."""
+    """Dispatches this depth's queued URLs, checks included, until the frontier runs out, the
+    URL limit refuses a request or the Crawl stops. Reports whether it attempted a dispatch
+    from the frontier in this pass."""
     context, limits = run.context, run.limits
     dispatched = False
     # The cursor of this pass: a URL in flight is never read twice.
@@ -368,8 +370,8 @@ async def _reserve_task(run: Run) -> bool:
 async def _cancel_all(tasks: set[asyncio.Task[None]]) -> None:
     for task in tasks:
         task.cancel()
-    # Only cancellation is swallowed here: any other exception has reached the run's
-    # TaskFailure through its task's done callback.
+    # Collect task exceptions so cleanup can finish. TaskFailure's done callbacks handle
+    # failures, including a task that raises while being cancelled.
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
