@@ -434,7 +434,7 @@ def record_fetched(fetched: FetchedUrl) -> UrlUnit:
                 row |= {"fetch_state": "skipped", "skip_reason": "max_redirects"}
             tally += _discovered(connection, [row])
             target_id: int = connection.execute(_URL_ID, {"url": row["url"]}).scalar_one()
-            link_redirect(connection, url_id, target_id, max_redirects)
+            link_redirect(connection, url_id, target_id)
         write_rows(connection, fetched.rows)
         return Recording(True, tally)
 

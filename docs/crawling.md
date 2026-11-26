@@ -685,7 +685,7 @@ FROM urls AS source JOIN urls AS target ON target.id = source.redirect_url_id
 
 ### Loops
 
-The Crawl requests each URL at most once in a run, so every redirect loop ends: a redirect back to a URL already requested records the hop and requests nothing. `in_redirect_loop` marks it:
+The Crawl requests each URL at most once in a run, so every redirect loop ends: a redirect back to a URL already requested records the hop and requests nothing. When a stored redirect closes a loop, the same write marks every member. This works even when the recorded loop has more hops than `--max-redirects`. The value of `in_redirect_loop` is:
 - 1 for every URL of the loop, a URL that redirects to itself included;
 - 0 for any other 3xx response;
 - NULL for a URL without a 3xx response.

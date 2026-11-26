@@ -670,7 +670,7 @@ def test_a_redirect_into_a_loop_that_does_not_run_through_it_ends_its_walk_at_on
     walks: list[str] = []
 
     def keep(_: Any, __: Any, sql: str, *args: Any) -> None:
-        if sql.startswith("SELECT urls.redirect_url_id"):
+        if sql.startswith("SELECT urls.redirect_url_id") or "WHERE urls.redirect_url_id =" in sql:
             walks.append(sql)
 
     with opening(crawl.path, role="write") as engine, engine.begin() as connection:
