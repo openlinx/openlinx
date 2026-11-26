@@ -54,7 +54,7 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 - [ ] 4.1 [Subprocess] Drive "No parse worker outlives a completed Crawl": each worker gets a stop message and is joined (design D4).
 - [ ] 4.2 [Subprocess] Drive "An interrupt ends the parse workers": workers ignore SIGINT and SIGBREAK, and a worker still preparing a Page when the grace period of `020`'s `StopSignal` ends is killed, its URL left `queued`.
 - [ ] 4.3 [Subprocess, Windows in CI] Drive "Parse workers open no console window (Windows)".
-- [ ] 4.4 Docs: document shutdown and Windows console behaviour (why `060` uses CREATE_NO_WINDOW) in `docs/architecture.md`.
+- [x] 4.4 Docs: document shutdown and Windows console behaviour (why `060` uses CREATE_NO_WINDOW) in `docs/architecture.md`.
 - [ ] 4.5 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
   The opt-in subprocess tests cover completion, a single interrupt and abrupt owner death

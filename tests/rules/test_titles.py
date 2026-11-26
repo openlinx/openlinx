@@ -1,19 +1,22 @@
-"""Verify title Rules over Pages written by a real Crawl."""
+"""Verify title Rules over Pages in a real crawl store."""
 
 import pytest
 from sqlalchemy import update
 
 from openlinx.clock import SystemClock
 from openlinx.rules.headings import H1_MISSING
-from openlinx.rules.titles import TITLE_MISSING
+from openlinx.rules.registry import RULES
+from openlinx.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
 from openlinx.store.issues import evaluate_rule
 from openlinx.store.records import AffectedUrl
 from openlinx.store.schema import pages
 from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
+from tests.support.crawl_store import crawl_store
 from tests.support.crawling import crawled
 from tests.support.crawls import query
+from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
 
 
@@ -96,3 +99,154 @@ def test_non_analysed_pages_are_skipped_by_page_rules(fixture_site: StartSite) -
     ) == [(0, 0, 0)]
     assert evaluate_rule(file, TITLE_MISSING) == expected
     assert evaluate_rule(file, H1_MISSING) == expected
+
+
+def test_duplicate_titles_among_indexable_pages(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/boots": "<title>Shoes</title>",
+            "https://example.com/trainers": "<title>Shoes</title>",
+            "https://example.com/sale": "<title>shoes</title>",
+            "https://example.com/empty-a": "<title></title>",
+            "https://example.com/empty-b": "<title></title>",
+        },
+        completed=False,
+    )
+    rows = query(
+        file, "SELECT url_path, url_id, title_1, indexability FROM pages ORDER BY url_path"
+    )
+    assert [(path, title, indexability) for path, _, title, indexability in rows] == [
+        ("/", "Home", "indexable"),
+        ("/boots", "Shoes", "indexable"),
+        ("/empty-a", "", "indexable"),
+        ("/empty-b", "", "indexable"),
+        ("/sale", "shoes", "indexable"),
+        ("/trainers", "Shoes", "indexable"),
+    ]
+    paths = {url_id: path for path, url_id, _, _ in rows}
+    rule = next((rule for rule in RULES if rule.id == "title-duplicate"), None)
+    assert rule is not None, "title-duplicate is missing from the Rule catalogue"
+
+    affected = [(paths[item.url_id], item.detail) for item in evaluate_rule(file, rule)]
+    assert sorted(affected, key=lambda item: item[0]) == [
+        ("/boots", {"title_1": "Shoes", "pages": 2}),
+        ("/trainers", {"title_1": "Shoes", "pages": 2}),
+    ]
+
+
+def test_non_indexable_pages_are_not_compared(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/boots": "<title>Shoes</title>",
+            "https://example.com/trainers": (
+                '<title>Shoes</title><meta name="robots" content="noindex">'
+            ),
+        },
+        completed=False,
+    )
+    assert query(
+        file,
+        "SELECT pages.url_path, pages.indexability, pages.indexability_status "
+        "FROM pages JOIN urls ON urls.id = pages.url_id "
+        "WHERE urls.parsed = 1 AND pages.title_1 = 'Shoes' ORDER BY pages.url_path",
+    ) == [("/boots", "indexable", None), ("/trainers", "non_indexable", "noindex")]
+
+    assert evaluate_rule(file, TITLE_DUPLICATE) == []
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_title_too_long_by_characters(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Home</title><a href="/long">Long title</a>'),
+                "/long": Page(body="<title>" + "я" * 61 + "</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    [(url_id, length, width)] = query(
+        file,
+        "SELECT url_id, title_1_length, title_1_width_px FROM pages WHERE address = ?",
+        (server.url("/long"),),
+    )
+    assert (length, width) == (61, None)
+    assert evaluate_rule(file, TITLE_TOO_LONG) == [
+        AffectedUrl(url_id=url_id, detail={"length": 61})
+    ]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_title_at_the_limit(fixture_site: StartSite) -> None:
+    server = fixture_site(Site({"/": Page(body="<title>" + "a" * 60 + "</title>")}))
+    file = crawled(server.url("/"))
+    assert query(file, "SELECT title_1_length FROM pages") == [(60,)]
+    assert evaluate_rule(file, TITLE_TOO_LONG) == []
+
+
+def test_raised_title_limit(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    settings = temp_workspace.root / "openlinx.toml"
+    settings.write_text("[rules.title-too-long]\nmax_chars = 70\n", encoding="utf-8")
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(
+                    body="<title>" + "a" * 65 + '</title><a href="/at-limit">At the limit</a>'
+                    '<a href="/long">Long title</a>'
+                ),
+                "/at-limit": Page(body="<title>" + "a" * 70 + "</title>"),
+                "/long": Page(body="<title>" + "b" * 71 + "</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    [(long_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/long"),))
+    assert query(file, "SELECT url_path, title_1_length FROM pages ORDER BY url_path") == [
+        ("/", 65),
+        ("/at-limit", 70),
+        ("/long", 71),
+    ]
+    settings.write_text("[rules.title-too-long]\nmax_chars = 85\n", encoding="utf-8")
+    assert evaluate_rule(file, TITLE_TOO_LONG) == [
+        AffectedUrl(url_id=long_id, detail={"length": 71})
+    ]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_long_title_requires_an_analysed_page(fixture_site: StartSite) -> None:
+    title = "a" * 61
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body=f'<title>{title}</title><a href="/not-found">Broken link</a>'),
+                "/not-found": Status(404, body=f"<title>{title}</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    analysed = server.url("/")
+    unanalysed = server.url("/not-found")
+    ids = dict(query(file, "SELECT url, id FROM urls WHERE url IN (?, ?)", (analysed, unanalysed)))
+
+    # An unanalysed Page normally has NULL title fields. Set them to values that
+    # satisfy the length predicate so only the parsed filter can exclude it.
+    with CrawlWriter(file, SystemClock()) as writer:
+        writer.run(
+            executing(
+                update(pages)
+                .where(pages.c.url_id == ids[unanalysed])
+                .values(title_count=1, title_1=title, title_1_length=61)
+            )
+        )
+
+    assert query(
+        file,
+        "SELECT urls.parsed, pages.title_1_length FROM urls "
+        "JOIN pages ON pages.url_id = urls.id WHERE urls.id = ?",
+        (ids[unanalysed],),
+    ) == [(0, 61)]
+    assert evaluate_rule(file, TITLE_TOO_LONG) == [
+        AffectedUrl(url_id=ids[analysed], detail={"length": 61})
+    ]

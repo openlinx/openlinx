@@ -15,7 +15,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **Release scope.** v0.1 ships the [15 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after release, within the existing ROADMAP milestones. Plan their Rule-specific work in 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9 for v0.2. The pixel threshold for `title-too-long` also waits for v0.2. For shared behaviour, use a v0.1 Rule to exercise snapshots, disabling, empty Issue results and resume. Keep the examples that depend on a deferred Rule, including the image Resource example in 10.4, for the post-release plan. Each group's documentation and review cover the Rules in that release.
 
-**Implementation through task 4.7.** The CLI lists nine Rules. The thin slice's five Rules have executable evaluation queries. The other four registrations still use no-row queries: `title-too-long` (`max_chars`, default 60), `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
+**Implementation through task 5.4.** The CLI lists nine Rules. Six have executable evaluation queries, including `title-too-long` with its recorded character limit (`max_chars`, default 60). Three registrations still use no-row queries: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
 
 ## 1. Rule model and the rules Command (slice)
 
@@ -75,19 +75,19 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 5. Title Rules and the post-crawl pass
 
-- [ ] 5.1 Drive "Title too long by characters" at seam 2.
-- [ ] 5.2 Drive "Title at the limit" at seam 2.
-- [ ] 5.3 Drive "Raised title limit" at seam 2, passing effective thresholds to the evaluation entry point.
-- [ ] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture page `/rules/long-title`.
+- [x] 5.1 Drive "Title too long by characters" at seam 2.
+- [x] 5.2 Drive "Title at the limit" at seam 2.
+- [x] 5.3 Drive "Raised title limit" at seam 2. The query reads the effective threshold from the Crawl's recorded Rule (design D15).
+- [x] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture Page `/long-title`.
 - [ ] 5.5 Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
 - [ ] 5.6 Drive "Multiple titles" at seam 2, and register `title-multiple`.
-- [ ] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
+- [x] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
 - [ ] 5.8 Drive "Title equals H1" and "Comparison with H1 is case-sensitive" at seam 2. This is a trivial pair: the same comparison. Register `title-same-as-h1`.
-- [ ] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
-- [ ] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.
-- [ ] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
-- [ ] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
-- [ ] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
+- [x] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
+- [x] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.
+- [x] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
+- [x] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
+- [x] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
 - [ ] 5.14 Docs: add the other 5 title Rules (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1.
 - [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
