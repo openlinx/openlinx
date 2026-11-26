@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Only pull requests: every run on main finishes, so each merge gets a full result.
+  # A new PR run cancels the active one. On main, the active run can finish.
+  # A newer pending run can still replace an older pending run on the same ref.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
