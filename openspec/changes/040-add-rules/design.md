@@ -170,6 +170,11 @@ Declared as `DiagnosticCode` constants in `openlinx.output.codes`, as `020` D17 
 
 `settings_invalid` (exit 3) comes from `010`, and the `record_failed` warning that the Rule queries leave out is `020`'s.
 
+### D18. Command groups
+**In short:** Use full paths for grouped Commands, with the bare group as a shortcut to its default Command.
+
+Each member has its own metadata under its full path. For example, `linx commands` lists `rules list` and `rules show`, and group help shows both. Keeping Command options after the full path makes it clear which Command they configure. Root options stay at the root. The same group mechanism supports `060`'s `crawls` Commands.
+
 ## Test seams
 
 The seams come from [docs/testing.md](../../../docs/testing.md). No new seam is introduced:

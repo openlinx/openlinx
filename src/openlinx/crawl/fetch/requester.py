@@ -358,8 +358,8 @@ def retry_after(response: FetchResult, ended: datetime) -> float | None:
     value = response.header("Retry-After")
     if value is None:
         return None
-    value = value.strip()
-    if value.isdigit():
+    value = value.strip(" \t")
+    if value.isascii() and value.isdigit():
         return float(value)
     try:
         date = parsedate_to_datetime(value)

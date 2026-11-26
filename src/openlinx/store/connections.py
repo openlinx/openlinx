@@ -147,7 +147,8 @@ def _in_wal(connection: sqlite3.Connection) -> bool:
 
 
 def _synchronous_for_the_journal(connection: sqlite3.Connection, _: Any) -> None:
-    # WAL stays durable at NORMAL; a rollback journal needs FULL for every commit.
+    # WAL/NORMAL survives a process crash, but a power loss can undo recent commits.
+    # Rollback journals use FULL to sync at commit.
     synchronous = "NORMAL" if _in_wal(connection) else "FULL"
     connection.execute(f"PRAGMA synchronous = {synchronous}")
 

@@ -61,7 +61,7 @@ does not add it to the direct test seams.
 | Folder | Seam |
 |---|---|
 | `tests/cli/` | 1, CLI |
-| `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API (including Writer [connection](../tests/store/writer/test_connections.py) and [unit result](../tests/store/writer/test_unit_results.py) tests); 4, the store's pure logic, such as crawl ids |
+| `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API (including Writer [connection](../tests/store/writer/test_connections.py), [unit result](../tests/store/writer/test_unit_results.py) and [loop commit deadline](../tests/store/writer/test_loop_deadline.py) tests); 4, the store's pure logic, such as crawl ids |
 | `tests/output/` | 4, the output layer's pure logic |
 | `tests/crawl/` | 4, the crawler's pure logic, such as URL normalisation; 3 and 3+6, Crawls of the fixture site; 2, the Crawl Service, and its reporter, the warning log (`test_warning_log.py`) |
 | `tests/extract/` | 4, the Page extractor and the Page handler; 3+6, Crawls of the fixture site read through the Page data tables |
@@ -70,7 +70,11 @@ does not add it to the direct test seams.
 | `tests/` | the repository's own guards: dependencies, naming, line endings, docs links, isolation |
 
 The ALPN capability-probe tests in [tests/crawl/alpn/](../tests/crawl/alpn/)
-cover admission, deadlines, lifecycle and system DNS.
+cover admission, deadlines, lifecycle and system DNS, plus the
+[capability recorded for an origin](../tests/crawl/alpn/test_capability.py)
+and [probes through a proxy](../tests/crawl/alpn/test_proxy.py).
+See [proxy identity](../tests/crawl/test_proxy_identity.py) for ordinary
+CONNECT authority and origin identity checks.
 
 [tests/crawl/hooks/](../tests/crawl/hooks/) contains the tests for
 [post-Crawl Pass lifecycle](../tests/crawl/hooks/test_post_crawl_passes.py) and

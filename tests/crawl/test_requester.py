@@ -95,6 +95,10 @@ def test_a_500_retry_after_pauses_the_host_without_replacing_its_backoff(
         (503, "0", (0.0, 0.0)),
         (500, "600", (4.0, 120.0)),
         (503, "600", (120.0, 120.0)),
+        pytest.param(503, "²", (4.0, None), id="503-superscript"),
+        pytest.param(429, "²", (10.0, 10.0), id="429-superscript-fallback"),
+        pytest.param(503, " \t7\t ", (7.0, 7.0), id="503-ascii-ows"),
+        pytest.param(503, "\xa07\xa0", (4.0, None), id="503-nbsp-padding"),
     ],
 )
 def test_retry_wait_and_host_pause_keep_their_header_rules(

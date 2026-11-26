@@ -12,7 +12,7 @@ from tests.support.crawling import crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
-# All four frames end with one raw block containing "hello". The window descriptor
+# Each frame below ends with one raw block containing "hello". The window descriptor
 # is independent of the optional four-byte content size (RFC 8878 section 3.1.1.1).
 WINDOW_8_MIB = bytes.fromhex("28b52ffd 00 68 290000 68656c6c6f")
 WINDOW_16_MIB = bytes.fromhex("28b52ffd 00 70 290000 68656c6c6f")

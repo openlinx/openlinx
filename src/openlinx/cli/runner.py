@@ -2,15 +2,15 @@
 
 import sys
 import traceback
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
 import typer
 from typer.core import TyperGroup
 
+from openlinx.cli.click_compat import Command, MissingParameter
 from openlinx.cli.click_compat import Context as ClickContext
-from openlinx.cli.click_compat import MissingParameter
 from openlinx.cli.click_compat import UsageError as ClickUsageError
 from openlinx.cli.meta import formats_hint, meta_of
 from openlinx.cli.options import FORMAT_PARAMETER, options_with_meta
@@ -114,10 +114,24 @@ class OpenLinxGroup(TyperGroup):
             raise _interrupted() from error
 
 
+def commands_by_path(
+    group: TyperGroup, *, include_hidden: bool = False, prefix: str = ""
+) -> Iterator[tuple[str, Command]]:
+    """Find leaf Commands by full path, including hidden ones when checking their options."""
+    for name, command in group.commands.items():
+        if command.hidden and not include_hidden:
+            continue
+        path = f"{prefix}{name}"
+        if isinstance(command, TyperGroup):
+            yield from commands_by_path(command, include_hidden=include_hidden, prefix=f"{path} ")
+        else:
+            yield path, command
+
+
 def _global_flags(group: TyperGroup) -> set[str]:
     return {
         opt
-        for command in group.commands.values()
+        for _, command in commands_by_path(group, include_hidden=True)
         for param, extra in options_with_meta(command)
         if extra.is_global
         for opt in param.opts
@@ -125,17 +139,21 @@ def _global_flags(group: TyperGroup) -> set[str]:
 
 
 def _check_global_flags_follow_the_command(args: Sequence[str], global_flags: set[str]) -> None:
-    # Click would only say "No such option", which does not tell an agent where the flag goes.
     for arg in args:
         if not arg.startswith("-") or arg == "--":
             return
         flag = arg.partition("=")[0]
         if flag in global_flags:
-            raise OpenLinxError(
-                USAGE_ERROR,
-                f"{flag} is given before the Command name.",
-                hint=f"Put {flag} after the Command name: {COMMAND_NAME} <Command> {flag} ...",
-            )
+            raise option_before_the_command(flag, "<Command>")
+
+
+def option_before_the_command(flag: str, command: str) -> OpenLinxError:
+    # Click's unknown-option error does not tell an agent where the flag belongs.
+    return OpenLinxError(
+        USAGE_ERROR,
+        f"{flag} is given before the Command name.",
+        hint=f"Put {flag} after the Command name: {COMMAND_NAME} {command} {flag} ...",
+    )
 
 
 def _interrupted() -> OpenLinxError:
