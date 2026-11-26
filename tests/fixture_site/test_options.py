@@ -2,12 +2,14 @@
 
 import asyncio
 import time
+from contextlib import closing
+from http.client import HTTPConnection, RemoteDisconnected
 
 import aiohttp
 import pytest
 
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Responses, Site, Status
 from tests.fixture_site.server import RunningServer
 from tests.fixture_site.sites.exact import site as exact
 
@@ -69,6 +71,26 @@ async def test_hang_never_answers_and_the_server_still_stops_quickly() -> None:
     assert stopped_in < 2
 
 
+def test_reset_before_headers_drops_the_response_then_uses_the_next_answer(
+    fixture_site: StartSite,
+) -> None:
+    drop = Status(200, reset_before_headers=True)
+    server = fixture_site(Site({"/drop": Responses((drop, Page(body="recovered")))}))
+
+    with closing(HTTPConnection(server.base_url.removeprefix("http://"), timeout=5)) as client:
+        client.request("GET", "/drop")
+        with pytest.raises((RemoteDisconnected, ConnectionResetError)):
+            client.getresponse()
+        client.request("GET", "/drop")
+        with client.getresponse() as response:
+            received = response.status, response.read()
+
+    assert (
+        [(request.method, request.path) for request in server.requests],
+        received,
+    ) == ([("GET", "/drop"), ("GET", "/drop")], (200, b"recovered"))
+
+
 async def test_reset_after_resets_the_connection_inside_the_body(fixture_site: StartSite) -> None:
     server = fixture_site(Site(routes={"/reset": Page(body="x" * 100_000, reset_after=100)}))
 
@@ -95,11 +117,12 @@ async def test_trickle_sends_the_body_byte_by_byte_without_end(fixture_site: Sta
     server = fixture_site(Site(routes={"/trickle": Page(body="never", trickle=True)}))
 
     async with aiohttp.ClientSession() as session, session.get(server.url("/trickle")) as response:
-        first = await asyncio.wait_for(response.content.read(1), timeout=2)
+        # A single byte followed by a stall does not exercise a trickling response.
+        await asyncio.wait_for(response.content.readexactly(2), timeout=2)
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(response.read(), timeout=0.5)
 
-    assert (response.status, len(first)) == (200, 1)
+    assert response.status == 200
 
 
 async def test_after_holds_the_response_until_the_site_receives_the_other_path(

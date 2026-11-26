@@ -13,7 +13,7 @@ from openlinx import __version__
 from openlinx.cli.click_compat import Command, Parameter
 from openlinx.cli.meta import CommandMeta, Example, command_meta, meta_of
 from openlinx.cli.options import FORMAT_PARAMETER, FormatOpt, is_secret_option, options_with_meta
-from openlinx.cli.runner import Invocation
+from openlinx.cli.runner import Invocation, commands_by_path
 from openlinx.naming import COMMAND_NAME, PACKAGE_NAME
 from openlinx.output.codes import DECLARED, ExitCode
 from openlinx.output.writer import Format
@@ -57,9 +57,7 @@ def commands(ctx: typer.Context, output_format: FormatOpt = Format.JSON) -> dict
         "tool": {"name": PACKAGE_NAME, "version": __version__},
         "commands": [
             _entry(name, command, invocation.settings_tables)
-            for name, command in sorted(root.commands.items())
-            # Hidden Commands are not part of the contract: --help does not show them either.
-            if not command.hidden
+            for name, command in sorted(commands_by_path(root))
         ],
         "exit_codes": [
             {"code": code.value, "name": code.name.lower(), "description": code.description}

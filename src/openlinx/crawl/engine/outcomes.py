@@ -27,8 +27,9 @@ class RecordingFailedError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class Recorded:
-    """A URL's final state, the unit that records it, and its handlers' failure, which counts
-    once the unit has recorded the URL: a skip it overtook leaves the URL to be decided again."""
+    """A URL result, its recording unit, and any Handler failure. The warning counts when the
+    unit records the result or its Future fails. If a skip no longer applies when its unit
+    runs, the URL stays queued and the warning does not count."""
 
     result: UrlResult
     unit: UrlUnit
@@ -62,9 +63,9 @@ class Outcomes:
     async def settled(self) -> None:
         """Waits for every outcome, fallback units included."""
         while self._pending:
-            # The writer commits on its own only every 500 units or second of clock time.
+            # Flush a partial batch now so settling need not wait for the loop's commit timer.
             with suppress(CrawlWriterClosedError):
-                # An ended writer has already failed every Future it held.
+                # A closed writer settles its outstanding Futures without this flush.
                 await self._writer.flush_async()
             # Outcomes that the flush resolved have already left the set.
             if self._pending:

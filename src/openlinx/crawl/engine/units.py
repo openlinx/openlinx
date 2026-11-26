@@ -389,7 +389,7 @@ def _dispatched(queued: QueuedUrl, decision: ScopeDecision) -> UrlResult:
 def _handler_rows(
     context: CrawlContext, result: UrlResult
 ) -> tuple[tuple[HandlerRows[Any], ...], Diagnostic | None]:
-    """The handlers' rows, and their failure, which counts once the unit records it."""
+    """Keep successful handlers' rows and combine failures into one diagnostic per URL."""
     rows: list[HandlerRows[Any]] = []
     failed: list[HookFailure] = []
     for handler in context.hooks.handlers:

@@ -49,6 +49,7 @@ Every route takes these as keyword arguments:
 - `content_type="..."`: replaces the route's own `Content-Type`.
 - `delay=0.5`: seconds to wait before the response headers.
 - `hang=True`: never answer.
+- `reset_before_headers=True`: drop the connection after receiving the request, before sending any response bytes.
 - `reset_after=100`: send the headers, with the whole body's `Content-Length`, and that many bytes of the body, then reset the connection (TCP RST).
 - `stall_body=True`: send the headers, then never the body.
 - `trickle=True`: send the headers, then the body one byte every 100 ms, never ending, which no per-read timeout ever ends.

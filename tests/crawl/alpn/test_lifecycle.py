@@ -63,7 +63,9 @@ class _ObservedClock:
         return self._clock.off_loop()
 
     async def sleep(self, seconds: float) -> None:
-        deadline = 20 < seconds <= 30
+        # Subtracting monotonic timestamps can round the 30-second budget slightly up.
+        # Progress and stop grace use at most 10 seconds, the request watchdog at least 120.
+        deadline = 20 < seconds < 40
         if deadline:
             self.deadline_started.set()
         try:
@@ -178,14 +180,17 @@ def test_stop_cancels_the_capability_probe_while_it_waits_for_admission(
 ) -> None:
     hosts = fixture_tls_hosts(Site({"/": Page(body="<p>Seed</p>")}), Site({}), alpn=("h2",))
     stop, clock = StopSignal(), _ObservedClock()
-    while_robots_held: list[tuple[bool, bool]] = []
+    cancelled_while_robots_held = False
 
     async def hold_robots(lookup: int, addresses: list[ResolveResult]) -> list[ResolveResult]:
+        nonlocal cancelled_while_robots_held
         if lookup == 1:
-            scheduled = await _seen(clock.deadline_started, 3)
-            stop.set("requested")
-            cancelled = await _seen(clock.deadline_cancelled, 2)
-            while_robots_held.append((scheduled, cancelled))
+            # Keep the only host slot occupied until the probe is armed and then cancelled.
+            async with asyncio.timeout(10):
+                await clock.deadline_started.wait()
+                stop.set("requested")
+                await clock.deadline_cancelled.wait()
+            cancelled_while_robots_held = True
         return addresses
 
     resolver = _ObservedResolver(hosts.resolver, hold_robots)
@@ -202,7 +207,7 @@ def test_stop_cancels_the_capability_probe_while_it_waits_for_admission(
     )
 
     assert (result.summary.state, result.summary.stop_reason) == ("stopped", "requested")
-    assert while_robots_held == [(True, True)]
+    assert cancelled_while_robots_held
     assert resolver.count == 1
     assert [request.path for request in hosts.secure_site.requests] == ["/robots.txt"]
     assert query(result.crawl_file, "SELECT origin, http_version FROM origins") == [
