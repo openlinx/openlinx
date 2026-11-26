@@ -463,7 +463,7 @@ def test_issue_visible_before_the_crawl_ends(
             for item in affected
         ]
         assert (issues, urls) == (
-            [("title-missing", 1), ("h1-missing", 2)],
+            [("title-missing", 1), ("meta-description-missing", 2), ("h1-missing", 2)],
             [server.url("/notitle")],
         )
     finally:

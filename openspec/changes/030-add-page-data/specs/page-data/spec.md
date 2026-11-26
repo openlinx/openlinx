@@ -923,7 +923,7 @@ The link count columns SHALL count only `hyperlink` Links whose source is a Page
 - `unique_inlinks`: the distinct source Pages of those Links
 - `linking_pages_pct`: 100 × (the number of distinct source Pages with status 200 that link to this Page) ÷ (the number of Pages with status 200 in the Crawl), rounded to 2 decimals, or NULL when there are no Pages with status 200
 
-**The post-crawl passes.** The inlink counts are computed in the post-crawl passes that `020-add-crawl-core` runs when a Crawl ends as `completed` or `stopped`. They run again when a resumed Crawl ends, and each run SHALL replace the earlier results; until they have, a resumed Crawl keeps the counts of its last run. They run before the post-crawl passes of `040-add-rules`.
+**The post-crawl passes.** The inlink counts are computed in the post-crawl passes that `020-add-crawl-core` runs when a Crawl ends as `completed` or `stopped`. When a resumed Crawl ends, its pass SHALL publish the three inlink columns for all Pages together. Until publication a reader SHALL see the previous complete result, with NULL in all three columns for a Page first stored after resume. If the Crawl exits before publication, the previous result SHALL remain readable. After publication a new read transaction SHALL see the complete replacement. They run before the post-crawl passes of `040-add-rules`.
 
 `unique_js_inlinks` and `unique_js_outlinks` SHALL be NULL, because they are measured from v1.1.
 
@@ -940,6 +940,13 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 #### Scenario: Inlinks are NULL while the Crawl runs
 - **WHEN** a Crawl's post-crawl passes have not run yet
 - **THEN** every stored Page has `inlinks` NULL
+
+#### Scenario: Readers see one complete inlink result after resume
+- **GIVEN** a stopped Crawl has two Pages with status 200, A and B. A links to B and the queued URL C. B links to A.
+- **WHEN** the resumed Crawl stores C with status 200 and Links to both A and B, and starts recalculating the counts
+- **THEN** a read transaction opened during the calculation sees `(inlinks, unique_inlinks, linking_pages_pct)` as `(1, 1, 50.00)` for both A and B, and `(NULL, NULL, NULL)` for C
+- **AND** if the process exits before publication, reopening the Store yields those same three rows
+- **AND** after the pass runs to completion, a new read transaction sees `(2, 2, 66.67)` for both A and B and `(1, 1, 33.33)` for C
 
 #### Scenario: Inlink columns are derived
 - **WHEN** `linx schema pages` runs

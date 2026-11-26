@@ -39,6 +39,7 @@ unchanged.
 | `title-missing` | `issue` | `high` | An analysed Page has no `<title>` or its first `<title>` is empty. | SQL `NULL` |
 | `title-duplicate` | `warning` | `medium` | An analysed, Indexable Page shares its non-empty first title with another analysed, Indexable Page. The comparison is case-sensitive. | JSON object with `title_1` and `pages`, the number of Pages sharing the title |
 | `title-too-long` | `opportunity` | `medium` | An analysed Page's first title exceeds its recorded `max_chars` limit (default 60). | JSON object with `length`, the measured character count |
+| `meta-description-missing` | `opportunity` | `medium` | An analysed Page has no meta description or its first meta description is empty. | SQL `NULL` |
 | `h1-missing` | `warning` | `medium` | An analysed Page has no `<h1>` or its first `<h1>` is empty. | SQL `NULL` |
 
 The response-code Rules use the recorded outcome for each Internal URL, including those
@@ -47,9 +48,9 @@ a fetch error for an Internal URL before the Crawl requests that URL. When the
 Crawl receives a response but cannot record it, the `record_failed` warning reports the
 write failure. The `internal-no-response` Rule excludes that case.
 
-The title and heading Rules apply to analysed Pages (`urls.parsed = 1`). Missing measurements
-from a failed extractor do not trigger these Rules on their own. Read a Rule's guidance
-and reproducing SQL with [`linx rules show`](#read-one-rule).
+The title, meta description and heading Rules apply to analysed Pages (`urls.parsed = 1`).
+Missing measurements from a failed extractor do not trigger these Rules on their own.
+Read a Rule's guidance and reproducing SQL with [`linx rules show`](#read-one-rule).
 
 ## Browse the catalogue
 
@@ -63,7 +64,7 @@ This example replaces the returned cursor with a placeholder.
 
 ```json
 {
-  "total": 10,
+  "total": 11,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "<opaque cursor>"
 }
