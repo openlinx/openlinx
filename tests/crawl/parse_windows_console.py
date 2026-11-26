@@ -33,10 +33,21 @@ if sys.platform == "win32":
     _window_visible.restype = wintypes.BOOL
 
 
+def _ready_marker(path: Path) -> Path:
+    return path.with_name(f"{path.name}.ready")
+
+
 def _record(path: Path, value: object) -> None:
-    staging = path.with_suffix(".tmp")
-    staging.write_text(json.dumps(value), encoding="ascii")
-    staging.replace(path)
+    # Windows can expose a renamed file before the rename handle has closed.
+    # Publish readiness after closing the data file and keep it stable for readers.
+    path.write_text(json.dumps(value), encoding="ascii")
+    _ready_marker(path).touch()
+
+
+def read_record(path: Path, seconds: float = 20) -> str:
+    """Read a console observation whose writer has closed its data file."""
+    _await_file(_ready_marker(path), seconds)
+    return path.read_text(encoding="ascii")
 
 
 def _console_pids() -> list[int]:
@@ -180,9 +191,7 @@ def private_console(
         ):
             broker_identity = psutil.Process(broker.pid)
             try:
-                marker = folder / "owner_pid"
-                _await_file(marker, 20)
-                owner = int(marker.read_text(encoding="ascii"))
+                owner = int(read_record(folder / "owner_pid"))
                 children.add(psutil.Process(owner))
                 with ExitStack() as handles:
                     handle = _open_process(owner)

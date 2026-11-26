@@ -6,7 +6,7 @@ import os
 import signal
 import socket
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import suppress
 from multiprocessing.connection import _ConnectionBase, wait
 from multiprocessing.process import BaseProcess
@@ -97,6 +97,11 @@ def await_admission(channel: socket.socket, identity: Owner) -> bool:
     return False
 
 
+def _worker_candidates(pids: Iterable[int], leader: int) -> Iterator[int]:
+    # macOS lists kernel_task as PID 0. getpgid(0) asks for the guardian's own group.
+    return (pid for pid in pids if pid > 0 and pid != leader)
+
+
 def _end_posix_workers(lease: _PipeEnd) -> None:
     """Catch children that enter the private group while the owner is dying."""
     if sys.platform != "win32":
@@ -104,9 +109,7 @@ def _end_posix_workers(lease: _PipeEnd) -> None:
         expires = monotonic() + _CONTROL_SECONDS
 
         def kill_group_members() -> None:
-            for pid in psutil.pids():
-                if pid == leader:
-                    continue
+            for pid in _worker_candidates(psutil.pids(), leader):
                 with suppress(ProcessLookupError, psutil.NoSuchProcess):
                     worker = psutil.Process(pid)
                     if os.getpgid(pid) == leader:

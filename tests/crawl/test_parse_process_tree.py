@@ -14,6 +14,7 @@ from time import monotonic, monotonic_ns, sleep
 import psutil
 import pytest
 
+from openlinx.crawl.pages.parse_guard import _worker_candidates
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import ServerHandle
@@ -425,6 +426,17 @@ def _assert_recovery_pages(fixture_site: StartSite, folder: Path) -> Path:
     return file
 
 
+def test_the_console_observer_waits_for_a_closed_record(tmp_path: Path) -> None:
+    from tests.crawl.parse_windows_console import _record, read_record
+
+    marker = tmp_path / "parse-worker-0"
+    marker.write_text('{ "pid":', encoding="ascii")
+    with pytest.raises(RuntimeError, match=r"Missing parse-worker-0\.ready"):
+        read_record(marker, seconds=0)
+    _record(marker, {"pid": 71})
+    assert json.loads(read_record(marker, seconds=0)) == {"pid": 71}
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(sys.platform != "win32", reason="Ctrl+Break is a Windows console event")
 @pytest.mark.parametrize("delivery", ["targeted", "broadcast"])
@@ -443,7 +455,7 @@ def test_ctrl_break_ends_the_parse_tree_during_windows_bootstrap(
 
 def _windows_bootstrap_case(site: StartSite, folder: Path, phase: str, delivery: str) -> None:
     if sys.platform == "win32":
-        from tests.crawl.parse_windows_console import bootstrap_probe, private_console
+        from tests.crawl.parse_windows_console import bootstrap_probe, private_console, read_record
 
         seed = '<a href="/die">Crash</a><a href="/held">Pending</a>'
         server = site(
@@ -461,8 +473,8 @@ def _windows_bootstrap_case(site: StartSite, folder: Path, phase: str, delivery:
         bootstrap_probe(folder, env, blocked, guardian if phase == "guardian" else "")
         with private_console(folder, argv, env, delivery) as console:
             file = Path(_observed(folder / "crawl_file"))
-            guard_probe = json.loads(_observed(folder / guardian))
-            work_probe = json.loads(_observed(folder / blocked))
+            guard_probe = json.loads(read_record(folder / guardian))
+            work_probe = json.loads(read_record(folder / blocked))
             probes = [guard_probe, work_probe]
             assert guard_probe["pid"] != work_probe["pid"]
             guard_handle = console.watch(guard_probe["pid"])
@@ -471,7 +483,7 @@ def _windows_bootstrap_case(site: StartSite, folder: Path, phase: str, delivery:
             assert _winapi.WaitForSingleObject(worker_handle, 0) == _winapi.WAIT_TIMEOUT
             urls = "SELECT url, fetch_state, parsed, parse_error FROM urls ORDER BY url"
             if phase == "replacement":
-                first_probe = json.loads(_observed(folder / first_worker))
+                first_probe = json.loads(read_record(folder / first_worker))
                 probes.append(first_probe)
                 assert int(_observed(folder / "prepared")) == first_probe["pid"]
                 assert first_probe["pid"] != work_probe["pid"]
@@ -500,7 +512,7 @@ def _windows_bootstrap_case(site: StartSite, folder: Path, phase: str, delivery:
                 f"worker exited with {worker_status:#x}"
             )
             assert guard_status == 0, f"guardian exited with {guard_status:#x}"
-            members = set(json.loads(_observed(folder / "console_pids")))
+            members = set(json.loads(read_record(folder / "console_pids")))
             assert members == {console.owner_pid, console.broker.pid}
             assert console.broker.wait(timeout=5) == 130
             streams = {
@@ -553,6 +565,10 @@ def _await_windows_interrupt(folder: Path, owner: int, worker: int, worker_pid: 
                         deadline = stopping_observed_ns + shutdown_budget_ns
                         (folder / "release_guardian").touch()
             sleep(0.01)
+
+
+def test_a_group_sweep_excludes_pid_zero_and_its_guardian() -> None:
+    assert list(_worker_candidates([0, 21, 25, 39], leader=21)) == [25, 39]
 
 
 @pytest.mark.slow
@@ -647,7 +663,14 @@ if "--multiprocessing-fork" in sys.argv:
                 process.send_signal(signal.SIGINT)
             assert process.wait(timeout=deadline - monotonic()) == 130
             assert monotonic() < deadline
-            _ended(children, 10)
+            try:
+                _ended(children, 10)
+            except AssertionError as error:
+                other_pids = [child.pid for child in children if child not in (worker, guard)]
+                error.add_note(f"worker={worker.pid}, guardian={guard.pid}, other={other_pids}")
+                stderr_text = (tmp_path / "stderr").read_text(encoding="utf-8", errors="replace")
+                error.add_note(f"Process stderr:\n{stderr_text[-8192:]}")
+                raise
             record = crawl_row(file)
             if second_interrupt:
                 assert (record["state"], record["stop_reason"]) == ("running", None)
