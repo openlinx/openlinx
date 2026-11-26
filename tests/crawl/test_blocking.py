@@ -6,6 +6,7 @@ from openlinx.crawl.engine.blocking import BlockingRuns
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result
+from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 
 A, B = "a.test", "b.test"
@@ -48,4 +49,8 @@ def test_403_responses_of_an_external_host_raise_no_warning(
 
     result = crawl_result("http://site.test/", resolver=hosts.resolver)
 
+    assert query(
+        result.crawl_file,
+        "SELECT status_code, count(*) FROM urls WHERE is_internal = 0 GROUP BY status_code",
+    ) == [(403, 12)]
     assert [warning.code for warning in result.warnings] == []

@@ -27,3 +27,5 @@ def test_the_writer_throughput_check_runs_on_the_declared_schema() -> None:
         report.get("atomicity", {}).get("ok"),
         report.get("reader", {}).get("exit_code"),
     ) == (None, True, 0)
+    assert report["atomicity"]["pages_stored"] == 105
+    assert report["atomicity"]["link_rows"] > 0
