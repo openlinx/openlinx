@@ -164,6 +164,7 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 - [x] 11.7 Add `links.followed` at seam 4, after `rel_sponsored`, `NOT NULL`: `020`'s `DiscoveredLink.requests_target`, whose description says it is 1 when the Crawl requests the target through the Link, a Resource included (design D18). Its test, named after the column's row of the spec's Link table and listed in design Risks, has a nofollow hyperlink not followed and an image followed, red first. It changes the Link row, the `links` table, the `links` handler and `docs/schema.md` for this column only.
 - [x] 11.5 Docs: add the link count definitions, the self-link rule, `linking_pages_pct`, that Crawl Depth is the crawl engine's, that a URL skipped at `--max-depth` is the target of `links` rows but has no `pages` row, and that the post-crawl passes run after the last URL is recorded, before `completed` or `stopped` is written, and again after a continue, to `docs/page-data.md`.
 - [x] 11.6 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
+- [ ] 11.8 Drive "Readers see one complete inlink result after resume" at the Store and subprocess seams. Read all three columns across at least two calculation ranges from a separate connection, during recalculation, after a process exit before publication, and after a successful rerun. Verify the previous and replacement values for every Page against the scenario.
 
 ## 12. Later columns, the empty HTML table and cross-platform
 
