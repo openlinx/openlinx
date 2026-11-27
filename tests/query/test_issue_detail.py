@@ -1,6 +1,7 @@
 """Read recorded Rule metadata and Affected URLs through the Query Service."""
 
 import sqlite3
+import sys
 from contextlib import closing
 from dataclasses import replace
 from datetime import timedelta
@@ -12,8 +13,9 @@ from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.rules.response_codes import INTERNAL_4XX
 from openlinx.services import query
+from openlinx.store.crawls import record_state
 from openlinx.store.issues import affected_urls_unit
-from openlinx.store.records import FetchedUrl, JournalSetting, Provenance
+from openlinx.store.records import FetchedUrl, JournalSetting, Provenance, RuleRow
 from openlinx.store.urls import record_fetched, record_seed
 from openlinx.store.writer import CrawlWriter
 from tests.support.clock import FakeClock
@@ -31,6 +33,41 @@ def test_a_rule_that_did_not_fire(temp_workspace: TempWorkspace) -> None:
     assert (found.total, found.items, found.next_cursor) == (0, [], None)
     assert found.header["rule"]["rule_id"] == "h1-missing"
     assert found.header["rule"]["category"] == "headings"
+
+
+@pytest.mark.parametrize(
+    "max_hops", [pytest.param(3, id="three"), pytest.param(10**700 + 7, id="wide-integer")]
+)
+def test_thresholds_recorded_for_the_crawl(temp_workspace: TempWorkspace, max_hops: int) -> None:
+    snapshot = RuleRow(
+        id="redirect-chain",
+        category="response_codes",
+        issue_type="warning",
+        priority="medium",
+        applies_to="internal_urls",
+        enabled=True,
+        thresholds={"max_hops": max_hops},
+        description="An Internal URL has a Redirect Chain longer than max_hops.",
+        why_it_matters="Each redirect adds a request.",
+        how_to_fix="Link directly to the destination.",
+        reproduce_sql="SELECT id AS url_id, NULL AS detail FROM urls WHERE 0",
+    )
+    file = create_any_crawl(temp_workspace, rules=[snapshot]).path
+    with CrawlWriter(file, FakeClock()) as writer:
+        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=1)))
+    request = query.QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file))
+
+    # The reader can run under a lower decimal conversion limit than the Crawl did.
+    previous_limit = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(sys.int_info.str_digits_check_threshold)
+    try:
+        found = query.issue_detail(request, "redirect-chain")
+    finally:
+        sys.set_int_max_str_digits(previous_limit)
+
+    thresholds = found.header["rule"]["thresholds"]
+    assert thresholds == {"max_hops": max_hops}
+    assert type(thresholds["max_hops"]) is int
 
 
 def test_pages_stored_affected_urls_in_url_order(temp_workspace: TempWorkspace) -> None:
