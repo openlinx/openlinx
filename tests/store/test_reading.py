@@ -30,9 +30,11 @@ from tests.support.workspace import TempWorkspace
 
 def test_a_copied_file_opens_by_its_path(temp_workspace: TempWorkspace) -> None:
     workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-    crawl = create_crawl(
+    with create_crawl(
         new_crawl(workspace), FakeClock(start=STARTED_AT), Collected(), scripted_choice("k3f9")
-    )
+    ) as crawl:
+        pass
+
     copy = temp_workspace.root / "copy" / "c.sqlite"
     copy.parent.mkdir()
     shutil.copyfile(crawl.path, copy)

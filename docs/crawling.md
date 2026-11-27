@@ -215,6 +215,16 @@ is planned in `060` and is not implemented yet. A continue:
 2. in one unit, sets `crawl.state` back to `running` with `stop_reason` NULL, writes the settings it runs with into `crawl.config`, and queues again every `error` URL and every URL skipped as `robots_unreachable`, since those outcomes are usually transient
 3. runs as a new Crawl would: it requests only `queued` URLs, so no URL fetched before is requested again, and it runs the post-crawl passes again when it ends
 
+The service takes the Crawl's [writer claim](crawl-store.md#writer-ownership)
+before it reads the recorded settings or opens a writer. The following
+diagnostics include the selected path in `details.file`.
+
+| Exit code | Error code | When |
+|---|---|---|
+| 5 | `crawl_locked` | another process holds the claim; the hint names `linx status --crawl <id>` |
+| 6 | `crawl_file_invalid` | the stored Crawl id differs from the one selected |
+| 7 | `crawl_not_writable` | the selected file or symlink target changed or became unavailable, the file has multiple hard links, or a filesystem error prevents the service from taking the claim |
+
 Of the settings on this page, a continue may change the URL limit, to a higher one or none,
 concurrency and rate through `CrawlOverrides`. The URL limit counts over the Crawl's whole
 life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see

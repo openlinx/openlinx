@@ -218,7 +218,8 @@ def test_fixed_subtable_secrets_are_redacted_in_the_recorded_config(
         b'label = "keep this label"\n',
     )
 
-    created = create_crawl(plan.new_crawl, FakeClock(), Collected())
+    with create_crawl(plan.new_crawl, FakeClock(), Collected()) as created:
+        pass
     config = json.loads(crawl_row(created.path)["config"])
 
     assert config["example"] == {

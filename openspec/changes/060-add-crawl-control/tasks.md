@@ -1,4 +1,4 @@
-> **Draft** — re-grounded against the code with `/opsx:update` before this change starts; `Green:` names are hints, not requirements.
+> Group 0 covers writer ownership in the existing Crawl Service. Groups 1–11 are Draft. `Green:` names are hints.
 
 Each task below is one vertical TDD slice and one commit. It is done when:
 1. the test for the named scenario, or trivial pair of scenarios, written first at the named seam, fails for the right reason
@@ -8,7 +8,7 @@ Each task below is one vertical TDD slice and one commit. It is done when:
 
 A slice that needs a new table or column adds it through `018`'s `public_table()`, with its description, and updates `docs/schema.md` in the same commit, so the contract test never goes red. "The slow fixture site" is the one defined in the spec, built with the fixture site's `delay` option.
 
-**Releases:** groups 1–6 are 060-min and `resume`, in v0.1 (ROADMAP). Group 7 is v0.1.1, and groups 8–11 are v0.2; each is marked in its heading, as the spec marks each requirement.
+**Releases:** groups 0–6 are 060-min and `resume`, in v0.1 (ROADMAP). Group 7 is v0.1.1, and groups 8–11 are v0.2; each is marked in its heading, as the spec marks each requirement.
 
 **Order against `020`:** this change starts once `020`'s first pull request (its groups 1–6) is on main, and needs only `015` and `020` (`022` only for task 4.11). A task that needs a later part of `020` says "after `020` task N", and waits until that task is on main. The claim, the control table, dead-process detection and detaching a Crawl that completes need nothing later.
 
@@ -21,6 +21,20 @@ Seams (docs/testing.md):
 - **[Pure]**: seam 4
 - **[Fake clock]**: the injectable clock, for time-based rules only
 - **[Spawn double]**: the OS process-spawn call replaced by a double, never our own launcher
+
+## 0. Writer ownership before control Commands (v0.1)
+
+- [x] 0.1 [Subprocess + HTTP] Drive "A running Crawl keeps its writer claim": a real foreground Crawl holds its claim while an independent OS-lock probe is refused. Acquire before creating the SQLite file, and hold through the full start operation, post-crawl passes, failure recording and writer closure. Use context-managed creation; `CrawlFile` carries selection data (design D12). Adapt direct create callers without weakening their assertions.
+- [x] 0.2 [Services + Subprocess] Drive "A completed Crawl releases its writer claim": keep the process that called the service alive after it returns, and prove another process can acquire the claim.
+- [x] 0.3 [Services + Subprocess] Drive "A failed Crawl releases its writer claim": the same live-owner proof after a failed Crawl, including the fallback failure writer. A run failure preserves the crawl file.
+- [x] 0.4 [Services + Subprocess] Drive "A failed creation releases its writer claim": a real filesystem or SQLite failure leaves no incomplete crawl file and releases the claim; the lock file may remain.
+- [x] 0.5 [Subprocess] Drive "A killed Crawl releases its writer claim" with SIGKILL on POSIX and TerminateProcess on Windows. Prove release through a different process; this does not yet implement interrupted recovery or resume.
+- [x] 0.6 [Services] Drive "An id with a writer claim file is drawn again", preserving exclusive creation and the existing id collision scenarios. Reserved logs and chosen ids stay in group 5.
+- [x] 0.7 [Services + Subprocess] Drive "Creation holds its writer claim before writing the schema": observe a real SQLite initialization operation at the connection boundary and probe the OS claim before the schema becomes visible. No replacement of our own creation modules.
+- [x] 0.8 [Services + Subprocess] Drive "Post-crawl passes keep the writer claim": hold a registered pass with a bounded handshake and prove another process cannot acquire the claim.
+- [x] 0.9 [Services + Subprocess] Drive "Failure recording keeps the writer claim": trigger a real SQLite failure through the approved full-disk boundary and observe the fallback writer while a separate process probes the claim. Prove no ownership gap when writers change.
+- [x] 0.10 [Services + Subprocess] Drive "A continuing Crawl keeps its writer claim": the existing continue service acquires before reading recorded state and holds through return and writer closure. Use a Crawl created by this build. Include a file symlink, refusal of a replaced selection with the same Crawl id, and refusal of both names of a hard-linked crawl file.
+- [ ] 0.11 Review: Standards and Spec review of group 0, mutation proof for guards that were immediately green, then the full suite and actual Windows/macOS/Linux CI. Do not claim CLI resume complete: public admission, run history and interrupted recovery remain in groups 3–4.
 
 ## 1. Stop requests through the crawl store
 
@@ -59,7 +73,7 @@ Seams (docs/testing.md):
 
 ## 3. Dead processes
 
-- [ ] 3.1 [Subprocess] Drive "A killed Crawl is reported as interrupted". Add the writer claim in `openlinx.store.claim`, taken where `create_crawl` claims the id, before `<id>.sqlite` is created, and `check_writer`, which records `interrupted` under the claim through `020`'s `set_state` with `running` → `interrupted` added to `TRANSITIONS` (design D12).
+- [ ] 3.1 [Subprocess] Drive "A killed Crawl is reported as interrupted". Reuse group 0's writer claim and add `check_writer`, which records `interrupted` under the claim through `020`'s `set_state` with `running` → `interrupted` added to `TRANSITIONS` (design D12).
 - [ ] 3.2 [Subprocess, Windows in CI] Drive "A Crawl ended with TerminateProcess is reported as interrupted (Windows)".
 - [ ] 3.3 [3+6] Drive "The interrupted state is recorded": the `crawl_runs.end_state` column.
 - [ ] 3.4 [Services + Fake clock] Drive "A stale heartbeat is reported as a warning", with the test process holding the claim through `openlinx.store.claim`.

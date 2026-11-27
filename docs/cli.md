@@ -185,6 +185,11 @@ linx schema seeds --fields name
 
 Every Command that reads a Crawl takes the global flag `--crawl latest|<id>|<path>`, with the default `latest`. `linx commands` describes it with `"global":true` and `"default":"latest"`. What each value selects, and its errors (`no_crawls`, `crawl_not_found`, `crawl_file_invalid` and `invalid_value`), are in [crawl-store.md](crawl-store.md). The first Commands that read a Crawl arrive with `050-add-query-and-segments`.
 
+If the file becomes unreadable during selection, the diagnostic is
+`crawl_file_invalid` (exit 6), with the selected path in `details.file`. A schema
+from a newer version has its own `crawl_schema_too_new` diagnostic. For diagnostics
+after selection when continuing a Crawl, see [Writer ownership](crawl-store.md#writer-ownership).
+
 ## Exit codes
 
 The meaning of a code never changes. Codes 9 to 63 are reserved.

@@ -215,9 +215,19 @@ class NewCrawl:
 
 
 @dataclass(frozen=True)
+class CrawlFileIdentity:
+    """A resolved filename and the filesystem identity observed there."""
+
+    path: Path
+    device: int
+    inode: int
+
+
+@dataclass(frozen=True)
 class CrawlFile:
     id: str
     path: Path
+    identity: CrawlFileIdentity | None = field(default=None, compare=False, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

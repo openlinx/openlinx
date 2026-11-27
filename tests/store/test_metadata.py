@@ -45,7 +45,10 @@ def test_metadata_of_a_new_crawl(temp_workspace: TempWorkspace) -> None:
         section_crawl=False,
     )
 
-    crawl = create_crawl(request, FakeClock(start=STARTED_AT), Collected(), scripted_choice("k3f9"))
+    with create_crawl(
+        request, FakeClock(start=STARTED_AT), Collected(), scripted_choice("k3f9")
+    ) as crawl:
+        pass
 
     row = crawl_row(crawl.path)
     decoded = {
@@ -161,7 +164,8 @@ def test_crawl_on_a_unc_path_on_windows(temp_workspace: TempWorkspace) -> None:
     reporter = Collected()
     request = replace(new_crawl(workspace), cwd=unc_root)
 
-    crawl = create_crawl(request, FakeClock(start=STARTED_AT), reporter)
+    with create_crawl(request, FakeClock(start=STARTED_AT), reporter) as crawl:
+        pass
 
     assert (
         crawl_row(crawl.path)["journal_mode"],

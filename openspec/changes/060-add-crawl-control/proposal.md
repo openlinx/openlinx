@@ -15,6 +15,8 @@ Both need five things:
 
 ## What Changes
 
+The v0.1 writer ownership slice takes the OS claim before creating a crawl file and keeps it through the end of the start or continue Service, including post-crawl passes and failure recording. Continuation uses the same verified file for the claim, admission read and every writer (D12).
+
 > **Scope (2026-10-05, see ROADMAP.md):** **v0.1** ships 060-min and `resume`: `crawl --detach`, `status` (with dead-process detection) and `stop` (`--wait`), for Spider mode only, with the recorded runs and the control requests. **v0.1.1:** the command recorded for Crawls started through MCP. **Deferred to v0.2:** `resume`'s credential overrides (`022`'s flags), `crawl --dry-run` with its URL estimate and equivalent command, `crawls list|show|rm`, and detached List mode (`024` is v0.2). Each requirement in the spec is marked with its release.
 >
 > **Moved from 015 (2026-10-05):** the writer claim (`crawl_locked`), control writes by processes without the claim, recording a dead Crawl as `interrupted`, and reserved and chosen crawl ids (`crawl_id_taken`). `015` did not build them, so this change does (design D12).

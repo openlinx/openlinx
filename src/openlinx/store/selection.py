@@ -2,13 +2,21 @@
 
 import os
 from pathlib import Path
+from stat import S_ISREG
 from typing import Any
 
 from sqlalchemy.exc import DBAPIError, MultipleResultsFound, NoResultFound
 
 from openlinx.naming import COMMAND_NAME
-from openlinx.output.codes import CRAWL_FILE_INVALID, CRAWL_NOT_FOUND, INVALID_VALUE, NO_CRAWLS
+from openlinx.output.codes import (
+    CRAWL_FILE_INVALID,
+    CRAWL_NOT_FOUND,
+    CRAWL_NOT_WRITABLE,
+    INVALID_VALUE,
+    NO_CRAWLS,
+)
 from openlinx.output.diagnostics import OpenLinxError
+from openlinx.store.identity import check_crawl_id, identify_file
 from openlinx.store.ids import CRAWL_FILE_SUFFIX, crawl_path, is_crawl_id, start_second
 from openlinx.store.reading import read_metadata
 from openlinx.store.records import LATEST, CrawlFile
@@ -19,7 +27,7 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
     if _is_path(reference):
         path = cwd / reference
         # Checked first: a read-only open of a missing file fails like a broken one.
-        if not path.is_file():
+        if not _is_crawl_file(path):
             raise OpenLinxError(
                 CRAWL_NOT_FOUND,
                 f"No crawl file exists at {path}.",
@@ -27,7 +35,7 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
                 details={"file": str(path)},
             )
         # Copied and renamed files are allowed: the row, not the name, says which Crawl it is.
-        return CrawlFile(_metadata(path)["id"], path)
+        return _selected(path)[0]
     if reference == LATEST:
         crawl_id = _latest(workspace)
     elif is_crawl_id(reference):
@@ -40,14 +48,13 @@ def resolve_crawl(reference: str, *, workspace: Workspace, cwd: Path) -> CrawlFi
             f"or a path ending in {CRAWL_FILE_SUFFIX}.",
         )
     path = crawl_path(workspace.crawls_dir, crawl_id)
-    if not path.is_file():
+    if not _is_crawl_file(path):
         raise OpenLinxError(
             CRAWL_NOT_FOUND,
             f"No Crawl in the Workspace {workspace.root} has the id {crawl_id}.",
             hint=f"Leave out --crawl to read the {LATEST} Crawl, or give the path of a crawl file.",
         )
-    _metadata_of(path, crawl_id)
-    return CrawlFile(crawl_id, path)
+    return _selected(path, crawl_id)[0]
 
 
 def _is_path(reference: str) -> bool:
@@ -56,30 +63,41 @@ def _is_path(reference: str) -> bool:
     return reference.endswith(CRAWL_FILE_SUFFIX) or any(s in reference for s in separators)
 
 
-def _metadata_of(path: Path, crawl_id: str) -> dict[str, Any]:
-    """The metadata of a file named after `crawl_id`, which must hold that Crawl."""
-    metadata = _metadata(path)
-    if metadata["id"] != crawl_id:
-        raise OpenLinxError(
-            CRAWL_FILE_INVALID,
-            f"The crawl file {path} holds the Crawl {metadata['id']}, not {crawl_id}.",
-            hint=f"Give its path to read it as {metadata['id']}.",
-            details={"file": str(path), "expected_id": crawl_id, "found_id": metadata["id"]},
-        )
-    return metadata
-
-
-def _metadata(path: Path) -> dict[str, Any]:
+def _selected(path: Path, crawl_id: str | None = None) -> tuple[CrawlFile, dict[str, Any]]:
+    """Read the Crawl's metadata through the same resolved identity the writer will verify."""
     try:
-        return read_metadata(path)
-    # Not a SQLite file, no crawl table, or not exactly one crawl row.
-    except (DBAPIError, NoResultFound, MultipleResultsFound) as error:
-        raise OpenLinxError(
-            CRAWL_FILE_INVALID,
-            f"{path} is not a readable crawl file.",
-            hint=f"Give another crawl file, or crawl again with: {COMMAND_NAME} crawl <url>",
-            details={"file": str(path)},
-        ) from error
+        identity = identify_file(path)
+        metadata = read_metadata(path, identity=identity)
+    except OpenLinxError as error:
+        # Keep the reader's schema and busy diagnostics. Only identity loss is stage-specific.
+        if error.code != CRAWL_NOT_WRITABLE.code:
+            raise
+        raise _unreadable(path) from error
+    except (OSError, DBAPIError, NoResultFound, MultipleResultsFound) as error:
+        raise _unreadable(path) from error
+    found_id: str = metadata["id"]
+    if crawl_id is not None:
+        check_crawl_id(path, crawl_id, found_id)
+    return CrawlFile(found_id, path, identity=identity), metadata
+
+
+def _is_crawl_file(path: Path) -> bool:
+    # Path.is_file can hide permission errors and make an unreadable file look missing.
+    try:
+        return S_ISREG(path.stat().st_mode)
+    except (FileNotFoundError, NotADirectoryError, ValueError):
+        return False
+    except OSError as error:
+        raise _unreadable(path) from error
+
+
+def _unreadable(path: Path) -> OpenLinxError:
+    return OpenLinxError(
+        CRAWL_FILE_INVALID,
+        f"{path} is not a readable crawl file.",
+        hint=f"Give another crawl file, or crawl again with: {COMMAND_NAME} crawl <url>",
+        details={"file": str(path)},
+    )
 
 
 def _latest(workspace: Workspace) -> str:
@@ -99,7 +117,7 @@ def _latest(workspace: Workspace) -> str:
     return max(
         candidates,
         key=lambda crawl_id: (
-            _metadata_of(crawl_path(crawls_dir, crawl_id), crawl_id)["started_at"],
+            _selected(crawl_path(crawls_dir, crawl_id), crawl_id)[1]["started_at"],
             crawl_id,
         ),
     )

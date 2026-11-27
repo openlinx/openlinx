@@ -12,13 +12,17 @@ from openlinx.naming import PRODUCT_NAME
 from openlinx.output.codes import CRAWL_SCHEMA_TOO_NEW
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import READER_BUSY_SECONDS, busy_error, is_busy, opening
+from openlinx.store.records import CrawlFileIdentity
 from openlinx.store.schema import SCHEMA_VERSION, crawl
 
 
 @contextmanager
-def reading(path: Path) -> Iterator[Connection]:
+def reading(path: Path, *, identity: CrawlFileIdentity | None = None) -> Iterator[Connection]:
     try:
-        with opening(path, role="read") as engine, engine.connect() as connection:
+        with (
+            opening(path, role="read", identity=identity) as engine,
+            engine.connect() as connection,
+        ):
             _check_schema_version(connection, path)
             yield connection
     except DBAPIError as error:
@@ -40,6 +44,6 @@ def _check_schema_version(connection: Connection, path: Path) -> None:
         )
 
 
-def read_metadata(path: Path) -> dict[str, Any]:
-    with reading(path) as connection:
+def read_metadata(path: Path, *, identity: CrawlFileIdentity | None = None) -> dict[str, Any]:
+    with reading(path, identity=identity) as connection:
         return dict(connection.execute(select(crawl)).mappings().one())

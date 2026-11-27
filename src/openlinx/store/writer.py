@@ -26,6 +26,8 @@ from openlinx.store.connections import (
     not_writable_name,
     opening,
 )
+from openlinx.store.identity import check_crawl_id
+from openlinx.store.records import CrawlFile
 from openlinx.store.schema import crawl
 
 QUEUE_SIZE = 50_000
@@ -85,10 +87,12 @@ class CrawlWriter:
         busy_seconds: float = WRITER_BUSY_SECONDS,
         *,
         disk_temp_store: bool = False,
+        selected: CrawlFile | None = None,
     ) -> None:
         self._path = path
         self._busy_seconds = busy_seconds
         self._disk_temp_store = disk_temp_store
+        self._selected = selected
         self._clock = clock
         self._on_commit = on_commit
         self._queue: Queue[_Job] = Queue(maxsize=QUEUE_SIZE)
@@ -277,6 +281,7 @@ class CrawlWriter:
             raise CrawlWriterClosedError(CLOSED) from self._failure
 
     def _serve(self, started: Future[None]) -> None:
+        selected = self._selected
         try:
             with (
                 opening(
@@ -284,9 +289,14 @@ class CrawlWriter:
                     role="write",
                     busy_seconds=self._busy_seconds,
                     disk_temp_store=self._disk_temp_store,
+                    identity=selected.identity if selected is not None else None,
                 ) as engine,
                 engine.connect() as connection,
             ):
+                if selected is not None:
+                    # Using the driver keeps SQLAlchemy from starting a write transaction.
+                    (row,) = _driver(connection).execute("SELECT id FROM crawl").fetchall()
+                    check_crawl_id(selected.path, selected.id, row[0])
                 _check_writable(connection)
                 event.listen(connection, "commit", self._seen_commit)
                 event.listen(connection, "rollback", self._seen_rollback)

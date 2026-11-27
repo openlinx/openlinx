@@ -93,6 +93,7 @@ These fakes stand in for things outside our code. They are the only test doubles
 - **DNS:** a DNS resolver hook
 - **Proxy:** a real local forward proxy with HTTP relay, CONNECT tunnels, optional tunnel Basic authentication and separate CONNECT target/header logs; see the [fixture README](../tests/fixture_site/README.md#fixtures) for ownership and teardown
 - **TLS trust:** a test CA (trustme) passed into the crawler's TLS setup, so no test installs a CA into the OS trust store; and truststore's import made to fail, for the certifi fallback
+- **File system:** inject OS errors at the `stat` or file-locking call, using real files and SQLite without replacing any OpenLinx modules.
 - **Processes:** the OS process-spawn call (not our own launcher function)
 - **`doctor`:** network and trust-store probes
 - **SQLite's report of a held `-shm` file:** `SQLITE_IOERR_TRUNCATE`, which a killed writer whose process is still exiting causes on Windows only at random
