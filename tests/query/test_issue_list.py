@@ -118,6 +118,22 @@ def test_issue_list_item_fields(temp_workspace: TempWorkspace) -> None:
     ]
 
 
+def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={"https://example.com/a": "<h1>Welcome</h1><h2>First section</h2>"},
+        completed=False,
+    )
+    assert query(file, "SELECT state FROM crawl") == [("running",)]
+    assert query(file, "SELECT count(*) FROM affected_urls") == [(0,)]
+
+    result = issue_list(QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home))
+
+    assert [(item["rule_id"], item["affected_count"]) for item in result.items] == [
+        ("title-missing", 1)
+    ]
+
+
 @pytest.mark.parametrize("journal_mode", ["wal", "delete"])
 def test_issue_list_refuses_another_crawl_id_in_the_selected_file(
     temp_workspace: TempWorkspace, journal_mode: JournalSetting

@@ -1,4 +1,4 @@
-"""Build completed Crawls through Store units for the Query Service."""
+"""Build running or completed Crawls through Store units for the Query Service."""
 
 from collections.abc import Mapping
 from dataclasses import replace
@@ -86,8 +86,9 @@ def crawl_store(
     *,
     pages: Mapping[str, str] | None = None,
     journal_setting: JournalSetting = "wal",
+    completed: bool = True,
 ) -> Path:
-    """Record a completed Crawl with the given linked HTML Pages and the installed Rules.
+    """Record linked HTML Pages with the installed Rules, completing the Crawl by default.
 
     Without explicit Pages, record non-HTML 404s for the ordering scenario's later Rules.
     """
@@ -173,9 +174,10 @@ def crawl_store(
                     )
                 )
             )
-        for rule in rules:
-            writer.run(affected_urls_unit(rule))
-        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=len(queued) + 2)))
+        if completed:
+            for rule in rules:
+                writer.run(affected_urls_unit(rule))
+            writer.run(record_state("completed", STARTED_AT + timedelta(seconds=len(queued) + 2)))
     return crawl_file.path
 
 
