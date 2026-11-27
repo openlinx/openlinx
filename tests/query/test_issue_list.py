@@ -17,6 +17,8 @@ from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.rules.titles import TITLE_MISSING
 from openlinx.services.query import QueryRequest, issue_list
+from openlinx.services.rules import RulesRequest, rule_item
+from openlinx.services.settings import default_tables
 from openlinx.store.crawls import record_state
 from openlinx.store.issues import affected_urls_unit
 from openlinx.store.pages import write_pages
@@ -83,6 +85,37 @@ def test_issue_list_refuses_a_completed_crawl_from_before_rules(
         {"file": str(file)},
     )
     assert sha256_of(file) == before
+
+
+def test_issue_list_item_fields(temp_workspace: TempWorkspace) -> None:
+    html = "<h1>Welcome</h1><h2>First section</h2>"
+    crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/a": html,
+            "https://example.com/b": html,
+            "https://example.com/c": html,
+            "https://example.com/d": html,
+        },
+    )
+    cwd, home = temp_workspace.root, temp_workspace.home
+
+    result = issue_list(QueryRequest(cwd=cwd, home=home))
+    shown = rule_item(
+        RulesRequest(cwd=cwd, home=home, workspace=None), default_tables(), "title-missing"
+    )
+
+    assert (result.total, result.next_cursor) == (1, None)
+    assert result.items == [
+        {
+            "rule_id": "title-missing",
+            "category": "titles",
+            "issue_type": "issue",
+            "priority": "high",
+            "affected_count": 4,
+            "description": shown["description"],
+        },
+    ]
 
 
 def test_issue_list_detects_replacement_after_crawl_selection(

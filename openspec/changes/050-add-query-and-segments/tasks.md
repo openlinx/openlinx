@@ -15,7 +15,7 @@ Every group ends with a docs task and a review task.
 ## 1. `issues` and `issues <rule-id>` for the thin slice (slice; seams 2: Services, 1: CLI, 3+6)
 
 - [x] 1.1 Drive `Issue list › Order` (Services), after `040`'s group 3. Start the `crawl_store` factory with the documented `crawl`, `seeds`, `urls`, `pages`, `rules` and `affected_urls` tables, each written by its owner's store code (design, Test seams), and a `completed` Crawl carrying its `affected_urls` rows. The Query Service's `issue_list` in `openlinx.services.query` resolves the Crawl with `015`'s `resolve_crawl` and returns a `Page` in contract order. It reads through `040`'s `issues_in` and joins the Crawl's own `rules` table for `description`. Pass the selected file identity to `reading` and request one snapshot in WAL and rollback-journal mode (design D14). Verify: red → green; one commit.
-- [ ] 1.2 Drive `Issue list › Item fields` (Services). Verify: red → green; one commit.
+- [x] 1.2 Drive `Issue list › Item fields` (Services). Verify: red → green; one commit.
 - [ ] 1.3 Drive `Issue list › Issues of a running Crawl are computed live` (Services): a `running` Crawl from the factory, with no `affected_urls` rows, read through the reader's live path (`040` task 3.14). Verify: red → green; one commit.
 - [ ] 1.4 Drive `Issue list › Filters combine` (CLI). Register `linx issues` with `@command_meta(output="list")` and return a `Page` via `paginate()`, binding the cursor to the resolved Crawl ID and normalised filters (design D14). Filter values are comma-separated, repeatable and case-insensitive. Verify: red → green; one commit.
 - [ ] 1.5 Drive `Issue list › Filter by category` (CLI). Verify: red → green; one commit.

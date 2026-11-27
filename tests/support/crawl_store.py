@@ -1,15 +1,19 @@
-"""Build a completed Crawl with independently ordered Issues for the Query Service."""
+"""Build completed Crawls through Store units for the Query Service."""
 
-from datetime import timedelta
+from collections.abc import Mapping
+from dataclasses import replace
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import text
 
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.rules.model import Rule
+from openlinx.rules.registry import RULES
 from openlinx.store.crawls import record_state
 from openlinx.store.issues import affected_urls_unit
 from openlinx.store.links import write_links
+from openlinx.store.page_records import PageRow
 from openlinx.store.pages import write_pages
 from openlinx.store.records import FetchedUrl, IssueType, NewUrl, Priority, Provenance, RuleRow
 from openlinx.store.rows import HandlerRows
@@ -69,18 +73,28 @@ def _rules() -> tuple[tuple[Rule, ...], tuple[RuleRow, ...]]:
     return rules, snapshots
 
 
-def crawl_store(temp_workspace: TempWorkspace) -> Path:
-    """Record a completed Crawl with later Rules and return its file."""
-    rules, snapshots = _rules()
-    crawl_file = create_any_crawl(temp_workspace, rules=snapshots, journal_setting="wal")
+def crawl_store(temp_workspace: TempWorkspace, *, pages: Mapping[str, str] | None = None) -> Path:
+    """Record a completed Crawl with the given linked HTML Pages and the installed Rules.
+
+    Without explicit Pages, record non-HTML 404s for the ordering scenario's later Rules.
+    """
+    responses: Mapping[str, str | None]
+    if pages is None:
+        rules, snapshots = _rules()
+        crawl_file = create_any_crawl(temp_workspace, rules=snapshots, journal_setting="wal")
+        responses = {
+            f"https://example.com/{rule.id}/{index}": None
+            for rule, count in zip(rules, (50, 3, 1, 9, 9, 10, 1), strict=True)
+            for index in range(count)
+        }
+    else:
+        rules = RULES
+        crawl_file = create_any_crawl(temp_workspace, journal_setting="wal")
+        responses = pages
+
     root = NormalizedUrl("https://example.com/")
-    child_urls = [
-        f"https://example.com/{rule.id}/{index}"
-        for rule, count in zip(rules, (50, 3, 1, 9, 9, 10, 1), strict=True)
-        for index in range(count)
-    ]
-    body = "<title>Home</title><h1>Home</h1>" + "".join(
-        f'<a href="/{url.removeprefix("https://example.com/")}">Page</a>' for url in child_urls
+    body = "<title>Home</title><h1>Home</h1><h2>Pages</h2>" + "".join(
+        f'<a href="/{url.removeprefix("https://example.com/")}">Page</a>' for url in responses
     )
 
     with CrawlWriter(crawl_file.path, FakeClock()) as writer:
@@ -92,8 +106,9 @@ def crawl_store(temp_workspace: TempWorkspace) -> Path:
                 is_internal=True,
                 in_scope=True,
             )
-            for url in child_urls
+            for url in responses
         )
+        seed_at = STARTED_AT + timedelta(seconds=1)
         writer.run(
             record_fetched(
                 FetchedUrl(
@@ -103,21 +118,24 @@ def crawl_store(temp_workspace: TempWorkspace) -> Path:
                     ),
                     status_code=200,
                     content_type="text/html",
-                    fetched_at=STARTED_AT + timedelta(seconds=1),
+                    fetched_at=seed_at,
                     response_time_ms=10,
                     parsed=True,
                     attempt_count=1,
                     redirect=None,
                     discovered=links,
                     rows=(
-                        HandlerRows(write_pages, (page_row(body, url=str(root)),)),
+                        _page_rows(body, root, seed_id, seed_at),
                         HandlerRows(write_links, page_link_rows(body, url=str(root))),
                     ),
                 )
             )
         )
-        queued = writer.run(queued_batch(1, 0, 100, 10))
+        queued = writer.run(queued_batch(1, 0, len(responses), 10))
+        assert len(queued) == len(responses)
         for index, url in enumerate(queued):
+            html = responses[url.url]
+            fetched_at = STARTED_AT + timedelta(seconds=index + 2)
             writer.run(
                 record_fetched(
                     FetchedUrl(
@@ -127,17 +145,31 @@ def crawl_store(temp_workspace: TempWorkspace) -> Path:
                             discovered_via=url.discovered_via,
                             found_on_url_id=url.found_on_url_id,
                         ),
-                        status_code=404,
-                        content_type="text/plain",
-                        fetched_at=STARTED_AT + timedelta(seconds=index + 2),
+                        status_code=404 if html is None else 200,
+                        content_type="text/plain" if html is None else "text/html",
+                        fetched_at=fetched_at,
                         response_time_ms=10,
-                        parsed=False,
+                        parsed=html is not None,
                         attempt_count=1,
                         redirect=None,
+                        rows=(
+                            () if html is None else (_page_rows(html, url.url, url.id, fetched_at),)
+                        ),
                     )
                 )
             )
         for rule in rules:
             writer.run(affected_urls_unit(rule))
-        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=100)))
+        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=len(queued) + 2)))
     return crawl_file.path
+
+
+def _page_rows(html: str, url: NormalizedUrl, url_id: int, at: datetime) -> HandlerRows[PageRow]:
+    # The extractor test helper supplies a stand-alone URL id and clock.
+    row = replace(
+        page_row(html, content_type="text/html", url=url),
+        url_id=url_id,
+        crawl_timestamp=at,
+        response_time_ms=10,
+    )
+    return HandlerRows(write_pages, (row,))
