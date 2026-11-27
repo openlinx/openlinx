@@ -15,7 +15,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **Release scope.** v0.1 ships the [15 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after release, within the existing ROADMAP milestones. Plan their Rule-specific work in 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9 for v0.2. The pixel threshold for `title-too-long` also waits for v0.2. For shared behaviour, use a v0.1 Rule to exercise snapshots, disabling, empty Issue results and resume. Keep the examples that depend on a deferred Rule, including the image Resource example in 10.4, for the post-release plan. Each group's documentation and review cover the Rules in that release.
 
-**Implemented registration and settings (groups 1–2).** The CLI lists seven Rules. Four are in the v0.1 set: `internal-4xx`, `internal-5xx`, `title-missing` and `title-too-long` (`max_chars`, default 60). Three already registered for the settings scenarios belong to the later set: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each accepts `enabled`, defaulting to true. The registered Rules still use no-row queries. URL evaluation, public reproducing queries and Issues remain open in the tasks below.
+**Implemented v0.1 Rules through group 7.** The CLI lists 16 Rules. Thirteen have executable evaluation queries. Three registrations still use no-row queries: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
 
 ## 1. Rule model and the rules Command (slice)
 
@@ -75,25 +75,25 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 5. Title Rules and the post-crawl pass
 
-- [ ] 5.1 Drive "Title too long by characters" at seam 2.
-- [ ] 5.2 Drive "Title at the limit" at seam 2.
-- [ ] 5.3 Drive "Raised title limit" at seam 2, passing effective thresholds to the evaluation entry point.
-- [ ] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture page `/rules/long-title`.
+- [x] 5.1 Drive "Title too long by characters" at seam 2.
+- [x] 5.2 Drive "Title at the limit" at seam 2.
+- [x] 5.3 Drive "Raised title limit" at seam 2. The query reads the effective threshold from the Crawl's recorded Rule (design D15).
+- [x] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture Page `/long-title`.
 - [ ] 5.5 Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
 - [ ] 5.6 Drive "Multiple titles" at seam 2, and register `title-multiple`.
-- [ ] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
+- [x] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
 - [ ] 5.8 Drive "Title equals H1" and "Comparison with H1 is case-sensitive" at seam 2. This is a trivial pair: the same comparison. Register `title-same-as-h1`.
-- [ ] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
-- [ ] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.
-- [ ] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
-- [ ] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
-- [ ] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
+- [x] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
+- [x] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.
+- [x] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
+- [x] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
+- [x] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
 - [ ] 5.14 Docs: add the other 5 title Rules (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1.
 - [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Meta description and heading Rules
 
-- [ ] 6.1 Drive "Missing meta description" at seam 2, and register `meta-description-missing`.
+- [x] 6.1 Drive "Missing meta description" at seam 2, and register `meta-description-missing`.
 - [ ] 6.2 Drive "Meta description too long" and "Meta description at both limits" at seam 2. This is a trivial pair: one boundary. Register `meta-description-too-long`.
 - [ ] 6.3 Drive "Meta description too short" at seam 2, and register `meta-description-too-short`.
 - [ ] 6.4 Drive "Multiple meta descriptions" at seam 2, and register `meta-description-multiple`.
@@ -106,13 +106,13 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 7. Response code and security Rules
 
-- [ ] 7.1 Drive "Blocked even when crawled anyway" at seam 2, after `020` task 10.5, and register `internal-blocked-by-robots-txt`; the `internal_urls` population gains `blocked_by_robots_txt` = 1 here (design D2).
-- [ ] 7.2 Drive "Internal redirect" at seam 2, and register `internal-3xx`.
-- [ ] 7.3 Drive "Two-hop chain" and "One hop is not a chain" at seam 2. This is a trivial pair: the walk along `redirect_url_id` and its boundary. Register `redirect-chain`.
-- [ ] 7.4 Drive "Loop" at seam 2, using `in_redirect_loop`. Register `redirect-loop`.
-- [ ] 7.5 Drive "Content served over HTTP" and "HTTP URL that redirects to HTTPS" at seam 2. This is a trivial pair. Register `http-url` as Warning/High.
-- [ ] 7.6 Docs: add the other 4 response code Rules and `http-url` to the catalogue in `docs/rules.md`.
-- [ ] 7.7 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
+- [x] 7.1 Drive "Blocked even when crawled anyway" at seam 2, after `020` task 10.5, and register `internal-blocked-by-robots-txt`; the `internal_urls` population gains `blocked_by_robots_txt` = 1 here (design D2).
+- [x] 7.2 Drive "Internal redirect" at seam 2, and register `internal-3xx`.
+- [x] 7.3 Drive "Two-hop chain" and "One hop is not a chain" at seam 2. This is a trivial pair: the walk along `redirect_url_id` and its boundary. Register `redirect-chain`.
+- [x] 7.4 Drive "Loop" at seam 2, using `in_redirect_loop`. Register `redirect-loop`.
+- [x] 7.5 Drive "Content served over HTTP" and "HTTP URL that redirects to HTTPS" at seam 2. This is a trivial pair. Register `http-url` as Warning/High.
+- [x] 7.6 Docs: add the other 4 response code Rules and `http-url` to the catalogue in `docs/rules.md`.
+- [x] 7.7 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green.
 
 ## 8. Canonical and directive Rules
 

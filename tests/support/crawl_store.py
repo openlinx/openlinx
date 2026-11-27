@@ -113,7 +113,9 @@ def crawl_store(
         responses = pages
 
     root = NormalizedUrl("https://example.com/")
-    body = "<title>Home</title><h1>Home</h1><h2>Pages</h2>" + "".join(
+    body = (
+        '<title>Home</title><meta name="description" content="Home"><h1>Home</h1><h2>Pages</h2>'
+    ) + "".join(
         f'<a href="/{url.removeprefix("https://example.com/")}">Page</a>' for url in responses
     )
 

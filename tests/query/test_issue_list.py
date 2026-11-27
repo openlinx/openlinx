@@ -38,6 +38,10 @@ from tests.support.page_data import page_row
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
 
+_TITLE_MISSING_HTML = (
+    '<meta name="description" content="Welcome"><h1>Welcome</h1><h2>First section</h2>'
+)
+
 
 def test_order(temp_workspace: TempWorkspace) -> None:
     crawl_store(temp_workspace)
@@ -88,14 +92,13 @@ def test_issue_list_refuses_a_completed_crawl_from_before_rules(
 
 
 def test_issue_list_item_fields(temp_workspace: TempWorkspace) -> None:
-    html = "<h1>Welcome</h1><h2>First section</h2>"
     crawl_store(
         temp_workspace,
         pages={
-            "https://example.com/a": html,
-            "https://example.com/b": html,
-            "https://example.com/c": html,
-            "https://example.com/d": html,
+            "https://example.com/a": _TITLE_MISSING_HTML,
+            "https://example.com/b": _TITLE_MISSING_HTML,
+            "https://example.com/c": _TITLE_MISSING_HTML,
+            "https://example.com/d": _TITLE_MISSING_HTML,
         },
     )
     cwd, home = temp_workspace.root, temp_workspace.home
@@ -121,7 +124,7 @@ def test_issue_list_item_fields(temp_workspace: TempWorkspace) -> None:
 def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspace) -> None:
     file = crawl_store(
         temp_workspace,
-        pages={"https://example.com/a": "<h1>Welcome</h1><h2>First section</h2>"},
+        pages={"https://example.com/a": _TITLE_MISSING_HTML},
         completed=False,
     )
     assert query(file, "SELECT state FROM crawl") == [("running",)]

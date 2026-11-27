@@ -14,7 +14,11 @@ from urllib.parse import urlsplit
 import pytest
 from sqlalchemy import Connection, Engine, event
 
+from openlinx.crawl.engine.hooks import Pass, PassContext
+from openlinx.output.reporter import Collected
+from openlinx.rules.registry import RULES
 from openlinx.rules.titles import TITLE_MISSING, TITLE_TOO_LONG
+from openlinx.services.hooks import default_hooks
 from openlinx.store.issues import affected_urls_unit, evaluate_rule, read_issues
 from openlinx.store.records import AffectedUrl
 from openlinx.store.writer import CrawlWriter
@@ -22,7 +26,7 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.cli import await_event, start_cli_process
 from tests.support.clock import FakeClock
-from tests.support.crawling import crawled
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import replay_now
@@ -35,6 +39,12 @@ RULE_PAGES = Site(
         ),
         "/rules/untitled": Page(body="<p>Missing title</p>"),
         "/rules/gone": Status(404, body="Not found", content_type="text/plain"),
+    }
+)
+DUPLICATE_TITLE_PAGES = Site(
+    {
+        "/rules/": Page(body='<title>Shoes</title><a href="/rules/trainers">Trainers</a>'),
+        "/rules/trainers": Page(body='<title>Shoes</title><a href="/rules/">Shoes</a>'),
     }
 )
 
@@ -74,6 +84,170 @@ def test_issue_row_counts_its_affected_urls(issue_crawl: tuple[Path, str]) -> No
     assert query(file, "SELECT state FROM crawl") == [("completed",)]
     assert stored_missing_titles(file) == [(root, None), (root + "second", None)]
     assert missing_title_issue(file) == [("titles", "issue", "high", 2)]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_detail_is_stored_as_json(fixture_site: StartSite) -> None:
+    title = "Buy running shoes, trail boots and sandals online at low cost"
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<a href="/long-title">Shoes</a>'),
+                "/long-title": Page(body=f"<title>{title}</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    [(url_id, address, detail)] = query(
+        file,
+        "SELECT affected_urls.url_id, urls.url, affected_urls.detail FROM affected_urls "
+        "JOIN urls ON urls.id = affected_urls.url_id WHERE rule_id = 'title-too-long'",
+    )
+    assert address == server.url("/long-title")
+    assert isinstance(detail, str)
+    assert json.loads(detail) == {"length": 61}
+    [(sql,)] = query(file, "SELECT reproduce_sql FROM rules WHERE id = 'title-too-long'")
+    assert _decoded_details(query(file, sql)) == _decoded_details([(url_id, detail)])
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_rule_that_did_not_fire_has_no_issue(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/rules/": Page(
+                    body='<title>Shop</title><h1>Shop</h1><a href="/rules/shoes">Shoes</a>',
+                ),
+                "/rules/shoes": Page(body="<title>Shoes</title><p>Running shoes</p>"),
+            }
+        )
+    )
+    file = crawled(server.url("/rules/"))
+
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    assert query(
+        file,
+        "SELECT pages.url_path, pages.title_1 FROM pages JOIN urls ON urls.id = pages.url_id "
+        "WHERE urls.parsed = 1 ORDER BY pages.url_path",
+    ) == [("/rules/", "Shop"), ("/rules/shoes", "Shoes")]
+    assert query(file, "SELECT enabled FROM rules WHERE id = 'title-missing'") == [(1,)]
+    assert query(
+        file,
+        "SELECT rule_id, affected_count FROM issues "
+        "WHERE rule_id IN ('h1-missing', 'title-missing') ORDER BY rule_id",
+    ) == [("h1-missing", 1)]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_duplicates_found_by_the_post_crawl_passes(fixture_site: StartSite) -> None:
+    server = fixture_site(DUPLICATE_TITLE_PAGES)
+    reporter = Collected()
+    inlinks_before_issues: list[list[tuple[Any, ...]]] = []
+
+    async def record_inlinks(_context: PassContext) -> None:
+        (started,) = (data for name, data in reporter.events if name == "crawl_started")
+        inlinks_before_issues.append(
+            query(
+                Path(started["crawl_file"]), "SELECT url_path, inlinks FROM pages ORDER BY url_path"
+            )
+        )
+
+    defaults = default_hooks()
+    # Both passes leave stored results, so observe the counts just before Issues runs.
+    passes: list[Pass] = []
+    for crawl_pass in defaults.passes:
+        if crawl_pass.name == "issues":
+            passes.append(Pass("record-inlinks-before-issues", record_inlinks))
+        passes.append(crawl_pass)
+    hooks = replace(defaults, passes=tuple(passes))
+    file = crawl_result(server.url("/rules/"), hooks, reporter=reporter).crawl_file
+
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    stored = query(
+        file,
+        "SELECT urls.url, affected_urls.detail FROM affected_urls "
+        "JOIN urls ON urls.id = affected_urls.url_id "
+        "WHERE affected_urls.rule_id = 'title-duplicate' ORDER BY urls.url",
+    )
+    assert [(url, json.loads(detail)) for url, detail in stored] == [
+        (server.url("/rules/"), {"title_1": "Shoes", "pages": 2}),
+        (server.url("/rules/trainers"), {"title_1": "Shoes", "pages": 2}),
+    ]
+    assert inlinks_before_issues == [[("/rules/", 1), ("/rules/trainers", 1)]]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_a_running_crawl_writes_no_affected_url(fixture_site: StartSite) -> None:
+    server = fixture_site(DUPLICATE_TITLE_PAGES)
+    reporter = Collected()
+    live_counts: list[int] = []
+
+    async def observe_running_crawl(_context: PassContext) -> None:
+        (started,) = (data for name, data in reporter.events if name == "crawl_started")
+        file = Path(started["crawl_file"])
+        assert query(file, "SELECT state FROM crawl") == [("running",)]
+        assert query(file, "SELECT url_path, title_1 FROM pages ORDER BY url_path") == [
+            ("/rules/", "Shoes"),
+            ("/rules/trainers", "Shoes"),
+        ]
+        live_counts.extend(
+            issue.affected_count
+            for issue in read_issues(file, RULES)
+            if issue.rule_id == "title-duplicate"
+        )
+        assert query(file, "SELECT rule_id, url_id FROM affected_urls") == []
+
+    defaults = default_hooks()
+    # Read committed Pages before any built-in pass can write Affected URLs.
+    probe = Pass("observe-running-crawl", observe_running_crawl)
+    hooks = replace(defaults, passes=(probe, *defaults.passes))
+    result = crawl_result(server.url("/rules/"), hooks, reporter=reporter)
+
+    assert live_counts == [2]
+    assert result.summary.state == "completed"
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_a_second_pass_does_not_duplicate_rows(fixture_site: StartSite) -> None:
+    server = fixture_site(DUPLICATE_TITLE_PAGES)
+    reporter = Collected()
+    defaults = default_hooks()
+    (issues_pass,) = (crawl_pass for crawl_pass in defaults.passes if crawl_pass.name == "issues")
+    expected = [
+        (server.url("/rules/"), {"title_1": "Shoes", "pages": 2}),
+        (server.url("/rules/trainers"), {"title_1": "Shoes", "pages": 2}),
+    ]
+    sql = (
+        "SELECT urls.url, affected_urls.detail FROM affected_urls "
+        "JOIN urls ON urls.id = affected_urls.url_id "
+        "WHERE affected_urls.rule_id = 'title-duplicate' ORDER BY urls.url"
+    )
+    passes_observed = []
+
+    async def run_issues_twice(context: PassContext) -> None:
+        (started,) = (data for name, data in reporter.events if name == "crawl_started")
+        file = Path(started["crawl_file"])
+        assert query(file, sql) == []
+
+        for pass_number in (1, 2):
+            await issues_pass.run(context)
+            await context.writer.flush_async()
+            stored = query(file, sql)
+            assert [(url, json.loads(detail)) for url, detail in stored] == expected, (
+                f"after Issues pass {pass_number}"
+            )
+            passes_observed.append(pass_number)
+
+    repeated_issues = Pass("repeat-issues", run_issues_twice)
+    hooks = replace(
+        defaults,
+        passes=tuple(repeated_issues if item is issues_pass else item for item in defaults.passes),
+    )
+    result = crawl_result(server.url("/rules/"), hooks, reporter=reporter)
+
+    assert result.summary.state == "completed"
+    assert passes_observed == [1, 2]
 
 
 def test_replay_replaces_only_the_affected_urls_of_one_rule(
@@ -286,8 +460,7 @@ def test_issue_visible_before_the_crawl_ends(
         )
         assert evaluate_rule(file, TITLE_MISSING) == [AffectedUrl(url_id=url_id, detail=None)]
 
-        from openlinx.rules.registry import RULES
-        from openlinx.store.issues import read_affected_urls, read_issues
+        from openlinx.store.issues import read_affected_urls
 
         issues = [(issue.rule_id, issue.affected_count) for issue in read_issues(file, RULES)]
         affected = read_affected_urls(file, "title-missing", RULES)
@@ -296,7 +469,12 @@ def test_issue_visible_before_the_crawl_ends(
             for item in affected
         ]
         assert (issues, urls) == (
-            [("title-missing", 1), ("h1-missing", 2)],
+            [
+                ("http-url", 2),
+                ("title-missing", 1),
+                ("meta-description-missing", 2),
+                ("h1-missing", 2),
+            ],
             [server.url("/notitle")],
         )
     finally:

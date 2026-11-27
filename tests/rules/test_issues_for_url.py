@@ -31,8 +31,13 @@ def test_one_url_reads_stored_then_live_issues(
     server = fixture_site(
         Site(
             {
-                "/": Page(body='<a href="/present">Present</a>'),
-                "/present": Page(body='<title>Present</title><a href="/future">Future</a>'),
+                "/": Page(
+                    body='<meta name="description" content="Home"><a href="/present">Present</a>'
+                ),
+                "/present": Page(
+                    body='<title>Present</title><meta name="description" content="Present">'
+                    '<a href="/future">Future</a>'
+                ),
                 "/future": Page(body="<p>Not fetched yet</p>"),
             }
         )
@@ -68,9 +73,11 @@ def test_one_url_reads_stored_then_live_issues(
     assert read_url_issues(file, root_id, _CATALOGUE) == [
         UrlIssue(rule_id="title-missing", url_id=root_id, detail=None),
         UrlIssue(rule_id="h1-missing", url_id=root_id, detail=None),
+        UrlIssue(rule_id="http-url", url_id=root_id, detail={"status_code": 200}),
     ]
     assert read_url_issues(file, present_id, _CATALOGUE) == [
-        UrlIssue(rule_id="h1-missing", url_id=present_id, detail=None)
+        UrlIssue(rule_id="h1-missing", url_id=present_id, detail=None),
+        UrlIssue(rule_id="http-url", url_id=present_id, detail={"status_code": 200}),
     ]
 
     with CrawlWriter(file, SystemClock()) as writer:
@@ -94,7 +101,9 @@ def test_live_url_issues_share_one_result_snapshot(
         Site(
             {
                 "/": Page(body='<title>Seed</title><h1>Seed</h1><a href="/other">Other</a>'),
-                "/other": Page(body='<a href="/future">Future</a>'),
+                "/other": Page(
+                    body='<meta name="description" content="Other"><a href="/future">Future</a>'
+                ),
                 "/future": Page(body="<p>Not fetched yet</p>"),
             }
         )
@@ -114,7 +123,10 @@ def test_live_url_issues_share_one_result_snapshot(
         UrlIssue(rule_id="h1-missing", url_id=other_id, detail=None),
         UrlIssue(rule_id="title-missing", url_id=other_id, detail=None),
     ]
-    assert read_url_issues(file, other_id, catalogue) == other_issues
+    assert read_url_issues(file, other_id, catalogue) == [
+        *other_issues,
+        UrlIssue(rule_id="http-url", url_id=other_id, detail={"status_code": 200}),
+    ]
     reader_thread = threading.get_ident()
     result_statements = 0
 

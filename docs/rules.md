@@ -24,10 +24,50 @@ Priority is the urgency of the fix, expressed as `high`, `medium` or `low`. In t
 Health Score, an Internal Page counts against the score only if it is an Affected URL of at
 least one Rule of type `issue`. Priority carries no weight in the calculation.
 
-The planned `http-url` Rule is a Warning with High Priority. It flags Internal URLs that serve
-successful responses over plain HTTP so maintainers can prioritise moving them to HTTPS. A
-redirect from HTTP to HTTPS does not trigger this Rule. The Warning leaves the Health Score
-unchanged.
+## Rules evaluated by a Crawl
+
+The response-code Rules belong to `response_codes`, and the `http-url` Rule belongs to
+`security`. Rules in both categories use the `internal_urls` population.
+
+| Rule id | Issue Type | Priority | Fires when | `detail` |
+|---|---|---|---|---|
+| `internal-4xx` | `issue` | `high` | An Internal URL has a recorded HTTP status from 400 through 499. | JSON object with `status_code` |
+| `internal-5xx` | `issue` | `high` | An Internal URL has a recorded HTTP status from 500 through 599. | JSON object with `status_code` |
+| `internal-no-response` | `issue` | `high` | An Internal URL has `fetch_state = 'error'` and a recorded `fetch_error` other than `record_failed`. | JSON object with `error`, the recorded `fetch_error` |
+| `internal-blocked-by-robots-txt` | `warning` | `medium` | An Internal URL has `blocked_by_robots_txt` set to 1 because robots.txt disallows it for the Crawl's robots user-agent token, including with `--ignore-robots`. | SQL `NULL` |
+| `internal-3xx` | `warning` | `low` | An Internal URL has a recorded HTTP status from 300 through 399. | JSON object with `status_code` and `redirect_url`, the absolute Internal or External URL referenced by `redirect_url_id` or JSON `null` when no target was recorded. |
+| `redirect-chain` | `warning` | `medium` | An Internal URL's Redirect Chain exceeds its recorded `max_hops` threshold (default 1 hop). | JSON object with `hops` and the absolute `final_url` where the walk stopped |
+| `redirect-loop` | `issue` | `high` | An Internal URL has `in_redirect_loop` set to 1. | JSON object with `hops`, the number of distinct URLs in that loop, including any External URLs. A self-redirect counts as one URL. |
+| `http-url` | `warning` | `high` | An Internal URL with scheme `http` has a recorded response status from 200 through 299. A redirect from HTTP to HTTPS falls outside that range. | JSON object with `status_code` |
+| `title-missing` | `issue` | `high` | An analysed Page has no `<title>` or its first `<title>` is empty. | SQL `NULL` |
+| `title-duplicate` | `warning` | `medium` | An analysed, Indexable Page shares its non-empty first title with another analysed, Indexable Page. The comparison is case-sensitive. | JSON object with `title_1` and `pages`, the number of Pages sharing the title |
+| `title-too-long` | `opportunity` | `medium` | An analysed Page's first title exceeds its recorded `max_chars` limit (default 60). | JSON object with `length`, the measured character count |
+| `meta-description-missing` | `opportunity` | `medium` | An analysed Page has no meta description or its first meta description is empty. | SQL `NULL` |
+| `h1-missing` | `warning` | `medium` | An analysed Page has no `<h1>` or its first `<h1>` is empty. | SQL `NULL` |
+
+The `internal_urls` population includes Internal URLs with `fetch_state` `fetched` or `error`,
+or with `blocked_by_robots_txt = 1`, including URLs outside a Section Crawl's Scope. A
+robots.txt timeout can record a fetch error for an Internal URL before the Crawl requests it.
+When the Crawl receives a response but cannot record it, the `record_failed` warning reports
+the write failure. The `internal-no-response` Rule excludes that case.
+
+The Redirect Chain walk follows recorded targets, including External URLs. It counts each
+recorded 3xx response once, including a terminal 3xx without a target, and stops at the first
+non-3xx or unrequested URL, a 3xx without a target, or the first repeated URL.
+`--max-redirects` limits how many consecutive redirects the Crawl follows. For example,
+with `--max-redirects 1`, the Crawl can record two consecutive 301 responses and skip the
+second response's target with `max_redirects`. The walk counts both responses (`hops = 2`)
+and ends at the skipped target (`final_url`). It can also follow targets that the Crawl
+requested separately. `redirect-chain` fires when `hops` exceeds the recorded Rule threshold
+`max_hops`.
+[Crawl hop limit](crawling.md#the-hop-limit)
+
+The `redirect-loop` Rule requires a recorded `in_redirect_loop = 1` for each Affected URL,
+even when the recorded targets form a closed loop.
+
+The title, meta description and heading Rules apply to analysed Pages (`urls.parsed = 1`).
+Missing measurements from a failed extractor do not trigger these Rules on their own.
+Read a Rule's guidance and reproducing SQL with [`linx rules show`](#read-one-rule).
 
 ## Browse the catalogue
 
@@ -41,7 +81,7 @@ This example replaces the returned cursor with a placeholder.
 
 ```json
 {
-  "total": 9,
+  "total": 16,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "<opaque cursor>"
 }
@@ -79,12 +119,12 @@ the same fields in each item by default.
   "description": "A Page's first title is longer than max_chars characters.",
   "why_it_matters": "Search engines cut a long title short in their results, so its end, often the brand or what sets the Page apart, is not shown.",
   "how_to_fix": "Shorten the title to the limit, with the words that describe the Page first.",
-  "reproduce_sql": "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
+  "reproduce_sql": "SELECT pages.url_id, json_object('length', pages.title_1_length) AS detail\nFROM pages\nJOIN urls ON urls.id = pages.url_id\nWHERE urls.parsed = 1 AND pages.title_1_length > (\n    SELECT json_extract(thresholds, '$.max_chars') FROM rules WHERE id = 'title-too-long'\n)"
 }
 ```
 
-Registered Rules whose conditions are still pending return no rows, as shown by the
-`title-too-long` query in this example.
+The query reads the effective character limit recorded in the Crawl. The `length`
+in each Affected URL's detail is the measured length of the first title.
 
 `applies_to` names the Rule's intended population, such as `internal_pages` for title Rules or
 `internal_urls` for response-code Rules. The model also allows `resources` for Rules about
@@ -137,10 +177,6 @@ If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, runnin
 `linx rules list` exits with code 3. The `settings_invalid` diagnostic on stderr identifies
 `rules.title-to-long` in `details.errors[0].key`. Its hint reads
 `Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
-
-The response-code Rules report Internal HTTP client errors (400–499), server errors
-(500–599) and requests that received no response. Their Affected URLs record the
-status code or fetch error in `detail`.
 
 ## Read Issues from a crawl file
 
