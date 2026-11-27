@@ -59,6 +59,20 @@ def test_a_negative_network_wait_in_the_settings_file_is_refused(
     ) == (3, [("settings_invalid", "crawl.network_wait")])
 
 
+def test_negative_threshold(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>A Page.</p>")}))
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(b"[rules.low-word-count]\nmin_words = -5\n")
+
+    result = run_cli("crawl", server.url("/"))
+
+    assert server.requests == ()
+    assert result.exit_code == 3
+    (error,) = result.errors()
+    assert error["code"] == "settings_invalid"
+    assert error["details"]["errors"][0]["key"] == "rules.low-word-count.min_words"
+
+
 def test_a_seed_with_userinfo_is_rejected_with_a_hint_about_auth(
     temp_workspace: TempWorkspace,
 ) -> None:
@@ -281,6 +295,17 @@ def test_openlinx_toml_sets_a_crawl_setting(
     config = json.loads(crawl_row(crawled(server.url("/")))["config"])
 
     assert config["crawl"]["concurrency"] == 2
+
+
+def test_a_rule_setting_is_recorded_by_its_rule_id(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(SMALL_SITE)
+    (temp_workspace.root / "openlinx.toml").write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+
+    config = json.loads(crawl_row(crawled(server.url("/")))["config"])
+
+    assert config["rules"]["title-too-long"] == {"max_chars": 70, "enabled": True}
 
 
 def test_a_flag_overrides_openlinx_toml(

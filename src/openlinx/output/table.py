@@ -4,7 +4,7 @@ import io
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import orjson
+from openlinx.json_numbers import encode_json
 
 
 def render_table(document: Mapping[str, Any], width: int) -> str:
@@ -32,4 +32,4 @@ def _render(columns: Sequence[str], rows: Sequence[Sequence[Any]], width: int) -
 
 
 def _cell(value: Any) -> str:
-    return value if isinstance(value, str) else orjson.dumps(value).decode()
+    return value if isinstance(value, str) else encode_json(value).decode()

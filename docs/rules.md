@@ -4,9 +4,9 @@ A Rule defines a deterministic condition on Crawl data and provides fixed guidan
 means, why it matters and how to fix it. When a Rule fires in a Crawl, it produces an Issue with
 the URLs it affects. Each of those URLs is an Affected URL. [Glossary](../CONTEXT.md#analysis)
 
-`linx rules list` and `linx rules show` currently describe the built-in catalogue. They work
-without a Workspace or Crawl and show catalogue defaults. Reading the catalogue does not run
-the Rules or tell you which URLs are affected.
+`linx rules list` and `linx rules show` describe the built-in catalogue with the thresholds
+and enabled state configured in the current Workspace. They work without a Crawl. Reading the
+catalogue does not run the Rules or tell you which URLs are affected.
 
 ## Issue Type and Priority
 
@@ -37,17 +37,17 @@ linx rules list --limit 1 --fields id,category
 
 ```json
 {
-  "total": 4,
+  "total": 7,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "eyJ2IjoxLCJxIjoiNTAzZmFkY2E1NzU2NzNkOSIsImsiOjF9"
 }
 ```
 
 `total` counts the entire catalogue. `items` contains the current page in catalogue order,
-grouped by category. To see the next page, pass the returned `next_cursor` to `--cursor` and
-continue until it is `null`. Treat the cursor as an opaque value. `--format jsonl` prints one
-JSON object per item. `--format table` produces a table for people. With either format, an
-available next page is reported as `more_items` on stderr.
+grouped by category. To see the next page in the same Workspace, pass the returned `next_cursor`
+to `--cursor` and continue until it is `null`. Treat the cursor as an opaque value.
+`--format jsonl` prints one JSON object per item. `--format table` produces a table for people.
+With either format, an available next page is reported as `more_items` on stderr.
 [CLI paging and fields](cli.md#lists-paging-fields-and-cursors)
 
 ## Read one Rule
@@ -70,6 +70,7 @@ the same fields in each item by default.
   "issue_type": "opportunity",
   "priority": "medium",
   "applies_to": "internal_pages",
+  "enabled": true,
   "thresholds": {"max_chars": {"value": 60, "default": 60, "unit": "characters"}},
   "description": "A Page's first title is longer than max_chars characters.",
   "why_it_matters": "Search engines cut a long title short in their results, so its end, often the brand or what sets the Page apart, is not shown.",
@@ -81,8 +82,18 @@ the same fields in each item by default.
 `internal_urls` for response-code Rules. The model also allows `resources` for Rules about
 image Resources.
 
+`enabled` is `true` by default. Set `enabled = false` in the Rule's table in the Workspace
+settings to turn it off. Both Commands still show the Rule, with `"enabled": false`.
+
+For example, to disable `url-parameters`, add this table to the Workspace's `openlinx.toml`.
+
+```toml
+[rules.url-parameters]
+enabled = false
+```
+
 `thresholds` maps each threshold name to its integer `value`, catalogue `default` and `unit`.
-Here `max_chars` is 60 characters. `value` currently equals `default`. A Rule without
+Here `max_chars` is 60 characters, the default when the Workspace has no override. A Rule without
 thresholds, such as `title-missing`, returns `{}`. `description`, `why_it_matters` and
 `how_to_fix` carry the Rule's guidance.
 
@@ -90,10 +101,38 @@ Use `--format table` after the id to read the result as a table. An unknown id r
 code 4 with `rule_not_found` on stderr and a hint to run `linx rules list`.
 [CLI diagnostics](cli.md#diagnostics)
 
+## Override a threshold
+
+In the Workspace's `openlinx.toml`, name the Rule by its id and set its threshold to a
+non-negative integer of at most 4300 decimal digits. The limit applies to the numeric value,
+regardless of TOML notation or digit separators. A larger value raises `settings_invalid`
+(exit code 3) when a Command reads the Workspace, with the settings file and full threshold key.
+
+```toml
+[rules.title-too-long]
+max_chars = 70
+```
+
+Both Commands show `{"value": 70, "default": 60, "unit": "characters"}` for `max_chars`.
+For `low-word-count`, set `min_words` under `[rules.low-word-count]`. The catalogue default
+is 200 words.
+
+Use [Workspace discovery](workspace.md#finding-the-workspace) or select a Workspace explicitly.
+
+```sh
+linx rules show title-too-long --workspace ./site
+```
+
+## Diagnose a misspelt Rule id
+
+If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, running
+`linx rules list` exits with code 3. The `settings_invalid` diagnostic on stderr identifies
+`rules.title-to-long` in `details.errors[0].key`. Its hint reads
+`Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
+
 ## Planned evaluation and configuration
 
 The planned evaluation uses a SQL query per Rule over stored Crawl data. The query identifies
-Affected URLs. Workspace Rule overrides, the recorded Rule configuration, Issue evaluation and
-the Health Score are planned separately from the catalogue Commands described above. The
-catalogue output will expose effective settings and the reproducing query when those features
-are implemented. [Planned v0.1 catalogue](../ROADMAP.md#the-v01-rules)
+Affected URLs. Per-Crawl Rule records, Issue evaluation and the Health Score are planned.
+The catalogue output will also expose the reproducing query.
+[Planned v0.1 catalogue](../ROADMAP.md#the-v01-rules)

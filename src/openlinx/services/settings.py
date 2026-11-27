@@ -10,4 +10,5 @@ def default_tables() -> SettingsTables:
     tables.register("crawl", "openlinx.crawl.settings:CrawlSettings")
     tables.register("store", "openlinx.store.settings:StoreSettings")
     tables.register("content_area", "openlinx.extract.settings:ContentAreaSettings")
+    tables.register("rules", "openlinx.rules.settings:RulesSettings")
     return tables

@@ -1,7 +1,7 @@
 """Redact secret settings and credentials before recording Crawl data."""
 
 from base64 import b64encode
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -10,7 +10,7 @@ from yarl import URL
 
 from openlinx.proxy_urls import proxy_url, split_absolute_url
 from openlinx.store.records import SecretNames
-from openlinx.workspace.tables import SecretPolicy
+from openlinx.workspace.tables import SecretPolicy, SecretSettings
 
 REDACTED = "***"
 
@@ -82,12 +82,11 @@ def _redact_spans(text: str, spans: list[tuple[int, int]]) -> str:
     return "".join(pieces)
 
 
-def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy]) -> SecretValues:
+def secret_values(config: Mapping[str, Any], settings: SecretSettings) -> SecretValues:
     """From the config that the recorded one redacts, so both hide the same secrets."""
     found: set[str] = set()
-    for setting, policy in settings.items():
-        table, _, key = setting.partition(".")
-        value = config.get(table, {}).get(key)
+    for path, policy in _setting_paths(settings):
+        value = _setting_value(config, path)
         if policy == "header":
             entries = value if isinstance(value, list) else [value]
             for entry in entries:
@@ -99,17 +98,21 @@ def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy
                 secret = content.strip(" \t") if colon else entry
                 if secret:
                     found.add(secret)
+        elif isinstance(value, list):
+            # The config hides the whole list. A diagnostic may quote just one element.
+            found.update(item for item in value if isinstance(item, str) and item)
         elif isinstance(value, str) and value:
             url = _secret_url(value, policy)
             found.update((value, url))
-            password = value.partition(":")[2] if setting == "crawl.auth" else _password(url)
+            auth = path == ("crawl", "auth")
+            password = value.partition(":")[2] if auth else _password(url)
             if password:
                 found.add(password)
                 if (policy is True or policy in ("url", "proxy")) and (
                     decoded := _decoded_url_password(url)
                 ):
                     found.add(decoded)
-            if setting == "crawl.auth":
+            if auth:
                 # Match the exact UTF-8 wire bytes without re-raising invalid-input errors.
                 try:
                     encoded = b64encode(value.encode("utf-8")).decode("ascii")
@@ -117,6 +120,26 @@ def secret_values(config: Mapping[str, Any], settings: Mapping[str, SecretPolicy
                     continue
                 found.update((encoded, f"Basic {encoded}"))
     return SecretValues(tuple(sorted(found, key=len, reverse=True)))
+
+
+def _setting_paths(
+    settings: SecretSettings, prefix: tuple[str, ...] = ()
+) -> Iterator[tuple[tuple[str, ...], SecretPolicy]]:
+    for key, policy in settings.items():
+        if isinstance(policy, Mapping):
+            yield from _setting_paths(policy, (*prefix, key))
+        elif policy:
+            # Callers can still supply flat policies as table.key. Nested keys can contain dots.
+            yield (*prefix, key) if prefix else tuple(key.split(".", 1)), policy
+
+
+def _setting_value(config: Mapping[str, Any], path: tuple[str, ...]) -> Any:
+    value: Any = config
+    for key in path:
+        if not isinstance(value, Mapping):
+            return None
+        value = value.get(key)
+    return value
 
 
 def _secret_url(value: str, policy: SecretPolicy) -> str:
@@ -142,7 +165,10 @@ def _decoded_url_password(value: str) -> str | None:
 
 
 def redact(argv: Sequence[str], config: Mapping[str, Any], secrets: SecretNames) -> Redacted:
-    return Redacted(_redact_argv(argv, secrets.flags), _redact_config(config, secrets.settings))
+    return Redacted(
+        _redact_argv(argv, secrets.flags),
+        _redact_config(config, dict(_setting_paths(secrets.settings))),
+    )
 
 
 def _redact_argv(argv: Sequence[str], flags: Mapping[str, SecretPolicy]) -> list[str]:
@@ -163,15 +189,19 @@ def _redact_argv(argv: Sequence[str], flags: Mapping[str, SecretPolicy]) -> list
 
 
 def _redact_config(
-    config: Mapping[str, Any], settings: Mapping[str, SecretPolicy]
+    config: Mapping[str, Any],
+    settings: Mapping[tuple[str, ...], SecretPolicy],
+    prefix: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    return {
-        table: {
-            key: _redact_setting(value, settings.get(f"{table}.{key}", False))
-            for key, value in values.items()
-        }
-        for table, values in config.items()
-    }
+    redacted = {}
+    for key, value in config.items():
+        path = (*prefix, key)
+        if policy := settings.get(path):
+            value = _redact_setting(value, policy)
+        elif isinstance(value, Mapping):
+            value = _redact_config(value, settings, path)
+        redacted[key] = value
+    return redacted
 
 
 def _redact_setting(value: Any, policy: SecretPolicy) -> Any:
