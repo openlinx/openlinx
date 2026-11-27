@@ -62,7 +62,7 @@ def test_a_negative_network_wait_in_the_settings_file_is_refused(
 def test_negative_threshold(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
     server = fixture_site(Site(routes={"/": Page(body="<p>A Page.</p>")}))
     settings_file = temp_workspace.root / "openlinx.toml"
-    settings_file.write_bytes(b"[rules.low-word-count]\nmin_words = -5\n")
+    settings_file.write_bytes(b"[rules.title-too-long]\nmax_chars = -5\n")
 
     result = run_cli("crawl", server.url("/"))
 
@@ -70,7 +70,45 @@ def test_negative_threshold(temp_workspace: TempWorkspace, fixture_site: StartSi
     assert result.exit_code == 3
     (error,) = result.errors()
     assert error["code"] == "settings_invalid"
-    assert error["details"]["errors"][0]["key"] == "rules.low-word-count.min_words"
+    assert error["details"]["errors"][0]["key"] == "rules.title-too-long.max_chars"
+
+
+@pytest.mark.parametrize(
+    ("source", "key"),
+    [
+        pytest.param(
+            "[rules.h2-missing]\nenabled = true\n", "rules.h2-missing.enabled", id="default"
+        ),
+        pytest.param(
+            "rules.low-word-count.min_words = 300\n", "rules.low-word-count.min_words", id="dotted"
+        ),
+        pytest.param(
+            "rules.url-parameters = {enabled = false}\n",
+            "rules.url-parameters.enabled",
+            id="inline",
+        ),
+        pytest.param("rules.url-parameters = []\n", "rules.url-parameters", id="wrong-type"),
+        pytest.param("[rules.h2-missing.nested]\n", "rules.h2-missing.nested", id="nested-empty"),
+    ],
+)
+def test_an_explicit_preview_rule_setting_is_refused_before_http(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, source: str, key: str
+) -> None:
+    server = fixture_site(Site({"/": Page(body="<p>A Page.</p>")}))
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(source.encode("utf-8"))
+
+    result = run_cli("crawl", server.url("/"))
+
+    assert (result.exit_code, server.requests) == (3, ())
+    (error,) = result.errors()
+    assert error["code"] == "settings_invalid"
+    assert error["details"]["file"] == str(settings_file.resolve())
+    (problem,) = error["details"]["errors"]
+    assert problem == {
+        "key": key,
+        "message": f"Remove {key} from the settings file. This Rule is deferred to v0.2.",
+    }
 
 
 def test_a_seed_with_userinfo_is_rejected_with_a_hint_about_auth(

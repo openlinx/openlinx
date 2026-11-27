@@ -8,6 +8,7 @@ import pytest
 
 from tests.support.app import example_app
 from tests.support.cli import run_cli
+from tests.support.rules import V01_RULE_IDS
 from tests.support.workspace import TempWorkspace
 
 
@@ -201,7 +202,9 @@ def test_a_table_of_named_tables_in_the_template(shop: Path) -> None:
     assert description.startswith("# ")
     assert "characters" in description
     assert default == "# max_chars = 60"
-    assert all(settings == {} for settings in tomllib.loads(template)["rules"].values())
+    tables = tomllib.loads(template)["rules"]
+    assert tables.keys() == V01_RULE_IDS
+    assert all(settings == {} for settings in tables.values())
 
 
 def test_editing_a_generated_rule_threshold(shop: Path) -> None:

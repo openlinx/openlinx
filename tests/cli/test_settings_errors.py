@@ -6,6 +6,7 @@ import pytest
 
 from tests.support.app import example_app
 from tests.support.cli import run_cli
+from tests.support.workspace import TempWorkspace
 
 
 def test_invalid_value(shop: Path) -> None:
@@ -126,7 +127,7 @@ def test_interleaved_rule_settings_keep_their_file_order(shop: Path) -> None:
     (shop / "openlinx.toml").write_text(
         """[rules]
 "title-too-long".max_chars = -1
-'h2-missing' . enabled = "off"
+'h1-missing' . enabled = "off"
 title-too-long."enabled" = 0
 """,
         encoding="utf-8",
@@ -138,7 +139,7 @@ title-too-long."enabled" = 0
     assert (result.exit_code, error["code"]) == (3, "settings_invalid")
     assert [problem["key"] for problem in error["details"]["errors"]] == [
         "rules.title-too-long.max_chars",
-        "rules.h2-missing.enabled",
+        "rules.h1-missing.enabled",
         "rules.title-too-long.enabled",
     ]
 
@@ -173,8 +174,8 @@ def test_inline_rule_keys_keep_their_order_around_a_multiline_string(shop: Path)
     (shop / "openlinx.toml").write_text(
         '''example.token = """Text resembling settings:
 [rules]
-h2-missing.enabled = true # part of the string"""
-rules = {title-too-long.enabled = 1, 'h2-missing'.enabled = 1, title-too-long.max_chars = -1}
+h1-missing.enabled = true # part of the string"""
+rules = {title-too-long.enabled = 1, 'h1-missing'.enabled = 1, title-too-long.max_chars = -1}
 ''',
         encoding="utf-8",
     )
@@ -185,7 +186,7 @@ rules = {title-too-long.enabled = 1, 'h2-missing'.enabled = 1, title-too-long.ma
     assert (result.exit_code, error["code"]) == (3, "settings_invalid")
     assert [problem["key"] for problem in error["details"]["errors"]] == [
         "rules.title-too-long.enabled",
-        "rules.h2-missing.enabled",
+        "rules.h1-missing.enabled",
         "rules.title-too-long.max_chars",
     ]
 
@@ -259,7 +260,7 @@ def test_threshold_overflow_is_listed_with_other_settings_errors(shop: Path) -> 
         ),
         pytest.param("rules.title-too-long.max_chars = {value}\n= 1", 2, id="missing-key"),
         pytest.param(
-            "rules = {{title-too-long.max_chars = {value} h2-missing.enabled=false}}",
+            "rules = {{title-too-long.max_chars = {value} h1-missing.enabled=false}}",
             1,
             id="missing-comma",
         ),
@@ -280,3 +281,99 @@ def test_toml_syntax_error_after_an_overflowing_threshold(
         assert error["details"]["file"] == str(settings_file.resolve())
         (problem,) = error["details"]["errors"]
         assert (problem["key"], problem["line"]) == (None, line)
+
+
+def test_preview_and_active_rule_errors_keep_toml_order(temp_workspace: TempWorkspace) -> None:
+    settings_file = temp_workspace.root / "openlinx.toml"
+    source = (
+        "rules.title-missing.enabled = 1\n"
+        "rules.low-word-count.enabled = false\n"
+        "rules.h1-missing.max_chars = 10\n"
+        f"rules.title-too-long.max_chars = {10**4300:#x}\n"
+        "rules.title-to-long.max_chars = 10\n"
+    )
+    settings_file.write_text(source, encoding="utf-8")
+    both = run_cli("rules", "list")
+    settings_file.write_text(
+        source.replace("rules.low-word-count.enabled = false\n", ""), encoding="utf-8"
+    )
+    active = run_cli("rules", "list")
+
+    assert both.exit_code == active.exit_code == 3
+    (error,) = both.errors()
+    assert error["code"] == "settings_invalid"
+    errors = error["details"]["errors"]
+    assert [problem["key"] for problem in errors] == [
+        "rules.title-missing.enabled",
+        "rules.low-word-count.enabled",
+        "rules.h1-missing.max_chars",
+        "rules.title-too-long.max_chars",
+        "rules.title-to-long",
+    ]
+    (active_error,) = active.errors()
+    assert errors[:1] + errors[2:] == active_error["details"]["errors"]
+    assert error["hint"] == active_error["hint"]
+
+
+@pytest.mark.parametrize(
+    ("source", "keys"),
+    [
+        pytest.param(
+            '[rules.low-word-count]\n"min.words" = 30\nmin.words = 31\n',
+            ['rules.low-word-count."min.words"', "rules.low-word-count.min.words"],
+            id="literal-dot-and-dotted-key",
+        ),
+        pytest.param(
+            r"""rules.low-word-count = { nested = { "min\u002Ewords" = 30, '' = 31, """
+            r"""'with space' = 32, "say\"\\\u007F😀" = 33 } }""",
+            [
+                'rules.low-word-count.nested."min.words"',
+                'rules.low-word-count.nested.""',
+                'rules.low-word-count.nested."with space"',
+                r'rules.low-word-count.nested."say\"\\\u007f😀"',
+            ],
+            id="nested-inline-keys",
+        ),
+    ],
+)
+def test_preview_error_paths_identify_exact_toml_keys(
+    temp_workspace: TempWorkspace, source: str, keys: list[str]
+) -> None:
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_text(source + "\n", encoding="utf-8")
+
+    result = run_cli("rules", "list")
+
+    (error,) = result.errors()
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert error["details"]["file"] == str(settings_file)
+    assert error["details"]["errors"] == [
+        {
+            "key": key,
+            "message": f"Remove {key} from the settings file. This Rule is deferred to v0.2.",
+        }
+        for key in keys
+    ]
+
+
+def test_deeply_nested_preview_setting_returns_its_full_path(
+    temp_workspace: TempWorkspace,
+) -> None:
+    key = "rules.low-word-count." + "nested." * 980 + '"literal.dot"'
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_text(
+        f"{key} = 30\nrules.low-word-count.enabled = false\n", encoding="utf-8"
+    )
+
+    result = run_cli("rules", "list")
+
+    (error,) = result.errors()
+    assert (result.exit_code, error["code"]) == (3, "settings_invalid")
+    assert error["details"]["file"] == str(settings_file)
+    assert error["details"]["errors"] == [
+        {
+            "key": path,
+            "message": f"Remove {path} from the settings file. This Rule is deferred to v0.2.",
+        }
+        for path in (key, "rules.low-word-count.enabled")
+    ]

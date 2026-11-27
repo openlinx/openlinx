@@ -20,15 +20,16 @@
   - thresholds with defaults
   - three guidance texts: `description`, `why_it_matters` and `how_to_fix`
 - **The full catalogue of 42 Rules** spans v0.1 (15 evaluated Rules) and v0.2 (the remaining 27), in 10 categories: `response_codes`, `security`, `titles`, `meta_descriptions`, `headings`, `canonicals`, `directives`, `content`, `urls` and `images`.
-  - The maintainer approved keeping all 42 Rules on 2026-09-27.
+  - The maintainer approved keeping all 42 Rules on 2026-09-27. Only the 15 evaluated Rules appear in the v0.1 catalogue, generated Workspace settings and new Crawl snapshots.
   - `http-url` is a Warning with High Priority, so it never lowers the Health Score.
   - Categories are snake_case enumeration values; Rule ids stay kebab-case.
 - **Configuration in `openlinx.toml`.** `[rules.<id>]` tables override thresholds (for example `max_chars = 70`) and disable Rules (`enabled = false`). An unknown Rule id, an unknown key or an invalid value is a `settings_invalid` error of `010-add-workspace-and-cli-contract` (exit code 3), checked when the settings load and reported with its dotted key.
+  - v0.1 accepts empty preview tables for `h2-missing`, `low-word-count` and `url-parameters` without rewriting the file. An explicit entry in those tables gets the same settings error with its exact key and instructions to remove it.
 - **Evaluation.**
   - Every Rule is evaluated by its query; no Rule runs while a URL is recorded.
   - While a Crawl has no final pass (it is `running`, `failed` or `interrupted`), the Issues reader runs the queries live, read-only, and returns the shape of the stored Issues.
   - When a Crawl ends as `completed` or `stopped`, the post-crawl pass, after `030`'s link counts, writes each Rule's rows into `affected_urls` and then the Health Score. It runs again when a resumed Crawl ends.
-  - The Rule configuration is fixed when a Crawl starts and recorded in the Crawl.
+  - The Rule configuration is fixed when a Crawl starts and recorded in the Crawl. Continuing a preview Crawl preserves that snapshot.
 - **New crawl-store tables and a view,** each with column descriptions shown by `linx schema` and documented in `docs/schema.md`:
   - `rules`: the Rules as configured for this Crawl, including their guidance and reproducing queries, so a crawl file stays self-contained
   - `affected_urls`: one row per Rule and URL, with a JSON `detail` of the measured values

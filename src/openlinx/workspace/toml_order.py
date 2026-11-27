@@ -1,5 +1,6 @@
-"""Locate settings and scalar literals in TOML source for diagnostics."""
+"""Locate and format TOML settings and scalar literals for diagnostics."""
 
+import json
 import re
 import tomllib
 from collections import deque
@@ -16,8 +17,20 @@ _TOKEN = re.compile(
     r'|"(?:[^"\\]++|\\.)*+"'
     r"|'[^']*'|\#[^\n]*|[\[\]{},=.\n]|[^\s\[\]{},=.\"'\#]+"
 )
+_BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 _DECIMAL_INTEGER = re.compile(r"[+-]?[1-9](?:[0-9]++|_[0-9])*+")
 _FLOAT_SUFFIX = re.compile(r"\.[0-9]|[eE][+-]?[0-9]")
+
+
+def format_toml_key(key: tuple[str, ...]) -> str:
+    """Quote literal segments that would otherwise change the meaning of a dotted path."""
+    # JSON's basic string escapes work in TOML. TOML also requires escaping DEL.
+    return ".".join(
+        part
+        if _BARE_KEY.fullmatch(part)
+        else json.dumps(part, ensure_ascii=False).replace("\x7f", r"\u007f")
+        for part in key
+    )
 
 
 def oversized_decimals(source: str, maximum: int) -> Iterator[re.Match[str]]:

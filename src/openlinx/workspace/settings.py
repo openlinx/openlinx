@@ -92,6 +92,7 @@ def load_settings(
         raise _invalid(settings_file, "is not valid TOML", [problem]) from error
     root_model = create_model("OpenLinxSettings", __base__=_sources(file_values), **fields)
     problems: list[tuple[Key, str]] = []
+    toml_keys: dict[Key, str] = {}
     validation_error = None
     hint = None
     try:
@@ -102,7 +103,11 @@ def load_settings(
             raise refused from error
         settings = None
         validation_error = error
-        problems = [(problem["loc"], problem["msg"]) for problem in error.errors()]
+        for detail in error.errors():
+            location = detail["loc"]
+            problems.append((location, detail["msg"]))
+            if isinstance(toml_key := detail.get("ctx", {}).get("toml_key"), str):
+                toml_keys[location] = toml_key
         hint = _suggestion(error, root_model)
     if len(problems) > 1 or unrecovered:
         # Use the same normalization and table choice as the settings source.
@@ -123,7 +128,10 @@ def load_settings(
         raise _invalid(
             settings_file,
             "is invalid",
-            [{"key": ".".join(map(str, key)), "message": message} for key, message in problems],
+            [
+                {"key": toml_keys.get(key, ".".join(map(str, key))), "message": message}
+                for key, message in problems
+            ],
             hint=hint,
         ) from validation_error
     if settings is None:

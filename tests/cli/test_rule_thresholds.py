@@ -122,14 +122,14 @@ def test_first_threshold_above_the_limit(
             id="unknown-rule",
         ),
         pytest.param(
-            "rules.h2-missing.max_chars = <value>",
-            "rules.h2-missing.max_chars",
+            "rules.h1-missing.max_chars = <value>",
+            "rules.h1-missing.max_chars",
             None,
             id="unknown-key",
         ),
         pytest.param(
-            "rules.url-parameters.enabled = <value>",
-            "rules.url-parameters.enabled",
+            "rules.title-missing.enabled = <value>",
+            "rules.title-missing.enabled",
             None,
             id="numeric-enabled",
         ),
@@ -146,8 +146,8 @@ def test_first_threshold_above_the_limit(
             id="inline-table",
         ),
         pytest.param(
-            "rules.url-parameters.enabled = [<value>]",
-            "rules.url-parameters.enabled",
+            "rules.title-missing.enabled = [<value>]",
+            "rules.title-missing.enabled",
             None,
             id="array-enabled",
         ),
@@ -231,7 +231,7 @@ def test_a_boolean_setting_keeps_the_diagnostic_beyond_the_recovery_bound(
     env = {**os.environ, "PYTHONINTMAXSTRDIGITS": "640"}
     diagnostics = []
     for numeral in ("9" * 4301, f"{10**4301 - 1:#x}"):
-        settings.write_text(f"rules.url-parameters.enabled = {numeral}\n", encoding="utf-8")
+        settings.write_text(f"rules.title-missing.enabled = {numeral}\n", encoding="utf-8")
         result = run_cli_process("rules", "list", env=env)
 
         assert result.exit_code == 3
@@ -250,7 +250,7 @@ def test_an_oversized_negative_threshold_keeps_the_negative_diagnostic(
     reasons = []
     for threshold in ("-5", "-1" + "0" * 4300):
         settings_file.write_text(
-            f"[rules.low-word-count]\nmin_words = {threshold}\n", encoding="utf-8"
+            f"[rules.title-too-long]\nmax_chars = {threshold}\n", encoding="utf-8"
         )
         result = run_cli("crawl", server.url("/"))
 
@@ -258,7 +258,7 @@ def test_an_oversized_negative_threshold_keeps_the_negative_diagnostic(
         assert (result.exit_code, error["code"]) == (3, "settings_invalid")
         assert error["details"]["file"] == str(settings_file.resolve())
         (problem,) = error["details"]["errors"]
-        assert problem["key"] == "rules.low-word-count.min_words"
+        assert problem["key"] == "rules.title-too-long.max_chars"
         reasons.append(problem["message"])
 
     assert reasons[1] == reasons[0]

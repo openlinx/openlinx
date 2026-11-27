@@ -11,11 +11,11 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **The thin slice** (ROADMAP, Build order) is groups 1–4: the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and the slice's five Rules, `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`, which `050`'s group 1 (`issues` and `issues <rule-id>`) reads. They need no redirects. Groups 5–10 widen.
 
-**Order against `020` and `030`:** the slice starts once `020`'s first pull request (its groups 1–6: `urls` with `is_internal`, `in_scope`, `fetch_state`, `status_code`, `fetch_error`, `parsed` and `parse_error`) and `030`'s slice (its groups 1–3: `pages` with the title and heading columns) are on main. A Rule whose columns come later (`020`'s `blocked_by_robots_txt` in task 10.5; `022`-min's redirect and size columns; `030`'s Indexability, canonical, directive, link and content columns) is registered with a query that returns no rows until its own task, which names what it waits for where it is not obvious.
+**Order against `020` and `030`:** the slice starts once `020`'s first pull request (its groups 1–6: `urls` with `is_internal`, `in_scope`, `fetch_state`, `status_code`, `fetch_error`, `parsed` and `parse_error`) and `030`'s slice (its groups 1–3: `pages` with the title and heading columns) are on main. A Rule whose columns come later (`020`'s `blocked_by_robots_txt` in task 10.5; `022`-min's redirect and size columns; `030`'s Indexability, canonical, directive, link and content columns) joins the v0.1 catalogue when its own task delivers an executable query. Each task names its dependencies where they are not obvious.
 
 **Release scope.** v0.1 ships the [15 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after release, within the existing ROADMAP milestones. Plan their Rule-specific work in 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9 for v0.2. The pixel threshold for `title-too-long` also waits for v0.2. For shared behaviour, use a v0.1 Rule to exercise snapshots, disabling, empty Issue results and resume. Keep the examples that depend on a deferred Rule, including the image Resource example in 10.4, for the post-release plan. Each group's documentation and review cover the Rules in that release.
 
-**Implemented v0.1 Rules through group 8.** The CLI lists 18 Rules. Fifteen have executable evaluation queries. Three registrations still use no-row queries: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
+**Implemented v0.1 Rules through group 8.** The CLI, generated Workspace settings and new Crawl snapshots include exactly the 15 Rules with executable evaluation queries. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
 
 ## 1. Rule model and the rules Command (slice)
 
@@ -31,18 +31,20 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 ## 2. Configuration in openlinx.toml (slice)
 
 - [x] 2.1 Drive "Override shown by the rules Command" at seam 1, and add `[rules.<id>]` thresholds to `010`'s settings model.
-- [x] 2.2 Drive "Disabled Rule is listed" at seam 1 and register `url-parameters`. Add `enabled` to list and show from Workspace Rule settings, defaulting to `true` unless the Rule is disabled.
+- [x] 2.2 Drive "Disabled Rule is listed" at seam 1 using `title-missing`. Add `enabled` to list and show from Workspace Rule settings, defaulting to `true` unless the Rule is disabled.
 - [x] 2.3 Drive "Misspelt Rule id" at seam 1: `settings_invalid` with a dotted key and a closest-id hint.
-- [x] 2.4 Drive "Unknown key" at seam 1, and register `h2-missing`.
-- [x] 2.5 Drive "Negative threshold" at seam 1. `linx crawl` exits 3, and the fixture site receives 0 requests. Register `low-word-count`.
+- [x] 2.4 Drive "Unknown key" at seam 1 using `h1-missing`.
+- [x] 2.5 Drive "Negative threshold" at seam 1 using `title-too-long.max_chars`. `linx crawl` exits 3, and the fixture site receives 0 requests.
 - [x] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id. Document `enabled` in the Command output.
 - [x] 2.7 Drive “Largest supported threshold” and “First threshold above the limit” at seam 1 using decimal and hexadecimal TOML integers. Check exact JSON at 4300 digits and the keyed `settings_invalid` diagnostic at 4301 on Workspace load, including zero fixture requests on Crawl. Document the limit in `docs/rules.md`. Review group 2's commits with the code-review skill and run the whole suite on the final composition.
+
+- [x] 2.8 Enforce the exact v0.1 catalogue on the CLI, generated settings and new Crawl snapshots. Accept only empty tables from the three preview Rules and reject explicit settings before HTTP at seam 1. Check at seams 2 and 3+6 that Continue retains a preview snapshot and applies an installed Rule with its recorded threshold.
 
 ## 3. Rules as queries, stored Issues and live Issues (slice)
 
 - [x] 3.1 Drive "Crawl records the thresholds it used" at seam 3+6. Declare `rules` in `openlinx.store.schema` through `018`'s `public_table()` (ordinary `STRICT` rowid table with a TEXT primary key), and write the configuration snapshot in the transaction that creates the `crawl` row, through a new `NewCrawl.rules` (design D14).
 - [x] 3.2 Drive "Categories are an enumeration" at seam 6 (`values` on `rules.category`).
-- [x] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Expose the Rule model's `reproduce_sql` in list and show and store it in the Crawl's `rules` table (D15). Keep the no-row query for any Rule whose condition is still pending.
+- [x] 3.3 Drive "The rules Command prints the reproducing query" at seam 1, with a Crawl started in the same Workspace. Expose the Rule model's `reproduce_sql` in list and show and store it in the Crawl's `rules` table (D15).
 - [x] 3.4 Drive "Missing title produces an Affected URL" at seam 2, through the evaluation entry point, which runs one Rule's query over a crawl file. Crawl the fixture site so `020` records the URLs and `030` records the Pages. The query reads `pages.title_count` and joins `urls` for `parsed` = 1 (design D2).
 - [x] 3.5 Drive "Empty title counts as missing" at seam 2.
 - [x] 3.6 Drive "Non-analysed Pages are skipped by Page Rules" at seam 2.

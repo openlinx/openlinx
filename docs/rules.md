@@ -124,16 +124,16 @@ This example replaces the returned cursor with a placeholder.
 
 ```json
 {
-  "total": 18,
+  "total": 15,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "<opaque cursor>"
 }
 ```
 
-`total` counts the entire catalogue, including entries for later releases. The 15 v0.1
-Rules have runnable evaluation queries. `items` contains the current page in catalogue
-order, grouped by category. To see the next page in the same Workspace, pass the returned
-`next_cursor` to `--cursor` and continue until it is `null`. Treat the cursor as an opaque value.
+`total` counts all 15 Rules evaluated in v0.1. `items` contains the current page in
+catalogue order, grouped by category. To see the next page in the same Workspace,
+pass the returned `next_cursor` to `--cursor` and continue until it is `null`.
+Treat the cursor as an opaque value.
 `--format jsonl` prints one JSON object per item. `--format table` produces a table for people.
 With either format, an available next page is reported as `more_items` on stderr.
 [CLI paging and fields](cli.md#lists-paging-fields-and-cursors)
@@ -177,10 +177,10 @@ image Resources.
 `enabled` is `true` by default. Set `enabled = false` in the Rule's table in the Workspace
 settings to turn it off. Both Commands still show the Rule, with `"enabled": false`.
 
-For example, to disable `url-parameters`, add this table to the Workspace's `openlinx.toml`.
+For example, to disable `title-missing`, add this table to the Workspace's `openlinx.toml`.
 
 ```toml
-[rules.url-parameters]
+[rules.title-missing]
 enabled = false
 ```
 
@@ -206,8 +206,6 @@ max_chars = 70
 ```
 
 Both Commands show `{"value": 70, "default": 60, "unit": "characters"}` for `max_chars`.
-For `low-word-count`, set `min_words` under `[rules.low-word-count]`. The catalogue default
-is 200 words.
 
 Use [Workspace discovery](workspace.md#finding-the-workspace) or select a Workspace explicitly.
 
@@ -221,6 +219,20 @@ If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, runnin
 `linx rules list` exits with code 3. The `settings_invalid` diagnostic on stderr identifies
 `rules.title-to-long` in `details.errors[0].key`. Its hint reads
 `Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
+
+## Settings from preview Workspaces
+
+`h2-missing`, `low-word-count` and `url-parameters` are planned for v0.2. In v0.1,
+`linx rules show` reports those ids as unknown. Commands accept the empty tables that
+preview versions of `linx init` generated for those ids and leave the file as it was.
+
+If an old table contains an explicit setting, remove that entry or the whole table.
+The Command exits with code 3 and reports `settings_invalid` with the file and the
+exact key, such as `rules.low-word-count.min_words`. A Crawl refuses those settings
+before making any HTTP request.
+
+Existing crawl files retain their recorded Rule settings and rows. Continuing a Crawl
+uses the recorded settings of its enabled Rules that are installed.
 
 ## Read Issues from a crawl file
 
