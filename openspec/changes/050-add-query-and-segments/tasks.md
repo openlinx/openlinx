@@ -19,7 +19,7 @@ Every group ends with a docs task and a review task.
 - [x] 1.3 Drive `Issue list › Issues of a running Crawl are computed live` (Services): a `running` Crawl from the factory, with no `affected_urls` rows, read through the reader's live path (`040` task 3.14). Verify: red → green; one commit.
 - [x] 1.4 Drive `Issue list › Filters combine` (CLI). Register `linx issues` with `@command_meta(output="list")` and return a `Page` via `paginate()`, binding the cursor to the resolved Crawl ID and normalised filters (design D14). Filter values are comma-separated, repeatable and case-insensitive. Verify: red → green; one commit.
 - [x] 1.5 Drive `Issue list › Filter by category` (CLI). Verify: red → green; one commit.
-- [ ] 1.6 Drive `Issue list › Unknown Issue Type` (CLI). Verify: red → green; one commit.
+- [x] 1.6 Drive `Issue list › Unknown Issue Type` (CLI). Verify: red → green; one commit.
 - [ ] 1.7 Drive `Issue detail › A Rule that did not fire` (Services): `issues <rule-id>` returns a `Page` with `header` `{"rule": ...}`, its Affected URLs paged by keyset in `url` order (design D4, D14). Verify: red → green; one commit.
 - [ ] 1.8 Drive `Issue detail › Thresholds recorded for the Crawl` (Services). Verify: red → green; one commit.
 - [ ] 1.9 Drive `Issue detail › Guidance of the Rule` (Services). Verify: red → green; one commit.

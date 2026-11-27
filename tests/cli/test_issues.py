@@ -230,6 +230,19 @@ def test_a_cursor_rejects_another_selection(
     )
 
 
+def test_unknown_issue_type(temp_workspace: TempWorkspace, issue_crawl: Path) -> None:
+    result = run_cli("issues", "--workspace", str(temp_workspace.root), "--type", "critical")
+
+    assert (result.exit_code, result.stdout) == (2, b"")
+    (error,) = result.errors()
+    assert error == result.stderr_json_lines()[-1]
+    assert error["code"] == "invalid_value"
+    assert error["details"]["flag"] == "--type"
+    assert error["details"]["value"] == "critical"
+    assert error["details"]["accepted"] == ["issue", "warning", "opportunity"]
+    assert error["hint"].strip()
+
+
 def test_issues_is_described_as_a_list_command() -> None:
     listed = run_cli("commands")
     assert listed.exit_code == 0, listed.stderr
