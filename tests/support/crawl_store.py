@@ -32,17 +32,20 @@ from tests.support.crawls import STARTED_AT, create_any_crawl
 from tests.support.page_data import page_link_rows, page_row
 from tests.support.workspace import TempWorkspace
 
+type IssueExample = tuple[str, IssueType, Priority, int]
 
-def _rules() -> tuple[tuple[Rule, ...], tuple[RuleRow, ...]]:
-    rows: tuple[tuple[str, IssueType, Priority], ...] = (
-        ("rule-a", "warning", "high"),
-        ("rule-b", "issue", "low"),
-        ("rule-c", "issue", "high"),
-        ("rule-d", "issue", "high"),
-        ("rule-e", "issue", "high"),
-        ("rule-f", "issue", "medium"),
-        ("rule-g", "opportunity", "high"),
-    )
+_ORDERED_ISSUES: tuple[IssueExample, ...] = (
+    ("rule-a", "warning", "high", 50),
+    ("rule-b", "issue", "low", 3),
+    ("rule-c", "issue", "high", 1),
+    ("rule-d", "issue", "high", 9),
+    ("rule-e", "issue", "high", 9),
+    ("rule-f", "issue", "medium", 10),
+    ("rule-g", "opportunity", "high", 1),
+)
+
+
+def _rules(examples: tuple[IssueExample, ...]) -> tuple[tuple[Rule, ...], tuple[RuleRow, ...]]:
     matching_urls = text("SELECT id AS url_id, NULL AS detail FROM urls WHERE url LIKE :pattern")
     rules = tuple(
         Rule(
@@ -60,7 +63,7 @@ def _rules() -> tuple[tuple[Rule, ...], tuple[RuleRow, ...]]:
                 )
             ),
         )
-        for rule_id, issue_type, priority in rows
+        for rule_id, issue_type, priority, _ in examples
     )
     snapshots = tuple(
         RuleRow(
@@ -87,20 +90,21 @@ def crawl_store(
     pages: Mapping[str, str] | None = None,
     journal_setting: JournalSetting = "wal",
     completed: bool = True,
+    example_issues: tuple[IssueExample, ...] = _ORDERED_ISSUES,
 ) -> Path:
     """Record linked HTML Pages with the installed Rules, completing the Crawl by default.
 
-    Without explicit Pages, record non-HTML 404s for the ordering scenario's later Rules.
+    Without explicit Pages, record non-HTML 404s for the example Issues of later Rules.
     """
     responses: Mapping[str, str | None]
     if pages is None:
-        rules, snapshots = _rules()
+        rules, snapshots = _rules(example_issues)
         crawl_file = create_any_crawl(
             temp_workspace, rules=snapshots, journal_setting=journal_setting
         )
         responses = {
-            f"https://example.com/{rule.id}/{index}": None
-            for rule, count in zip(rules, (50, 3, 1, 9, 9, 10, 1), strict=True)
+            f"https://example.com/{rule_id}/{index}": None
+            for rule_id, _, _, count in example_issues
             for index in range(count)
         }
     else:

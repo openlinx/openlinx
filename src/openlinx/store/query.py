@@ -13,7 +13,12 @@ from openlinx.store.schema import rules
 
 
 def ordered_issues_in(
-    connection: Connection, path: Path, catalogue: Sequence[RuleQuery]
+    connection: Connection,
+    path: Path,
+    catalogue: Sequence[RuleQuery],
+    *,
+    issue_types: tuple[str, ...] = (),
+    priorities: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Join the reader's Issues to the Rule descriptions recorded for this Crawl."""
     check_rule_tables(connection, path)
@@ -28,6 +33,10 @@ def ordered_issues_in(
             source.c.rule_id,
         )
     )
+    if issue_types:
+        statement = statement.where(source.c.issue_type.in_(issue_types))
+    if priorities:
+        statement = statement.where(source.c.priority.in_(priorities))
     return [
         {str(key): value for key, value in row.items()}
         for row in connection.execute(statement).mappings()
