@@ -15,7 +15,15 @@ from openlinx.store.issues import affected_urls_unit
 from openlinx.store.links import write_links
 from openlinx.store.page_records import PageRow
 from openlinx.store.pages import write_pages
-from openlinx.store.records import FetchedUrl, IssueType, NewUrl, Priority, Provenance, RuleRow
+from openlinx.store.records import (
+    FetchedUrl,
+    IssueType,
+    JournalSetting,
+    NewUrl,
+    Priority,
+    Provenance,
+    RuleRow,
+)
 from openlinx.store.rows import HandlerRows
 from openlinx.store.urls import queued_batch, record_fetched, record_seed
 from openlinx.store.writer import CrawlWriter
@@ -73,7 +81,12 @@ def _rules() -> tuple[tuple[Rule, ...], tuple[RuleRow, ...]]:
     return rules, snapshots
 
 
-def crawl_store(temp_workspace: TempWorkspace, *, pages: Mapping[str, str] | None = None) -> Path:
+def crawl_store(
+    temp_workspace: TempWorkspace,
+    *,
+    pages: Mapping[str, str] | None = None,
+    journal_setting: JournalSetting = "wal",
+) -> Path:
     """Record a completed Crawl with the given linked HTML Pages and the installed Rules.
 
     Without explicit Pages, record non-HTML 404s for the ordering scenario's later Rules.
@@ -81,7 +94,9 @@ def crawl_store(temp_workspace: TempWorkspace, *, pages: Mapping[str, str] | Non
     responses: Mapping[str, str | None]
     if pages is None:
         rules, snapshots = _rules()
-        crawl_file = create_any_crawl(temp_workspace, rules=snapshots, journal_setting="wal")
+        crawl_file = create_any_crawl(
+            temp_workspace, rules=snapshots, journal_setting=journal_setting
+        )
         responses = {
             f"https://example.com/{rule.id}/{index}": None
             for rule, count in zip(rules, (50, 3, 1, 9, 9, 10, 1), strict=True)
@@ -89,7 +104,7 @@ def crawl_store(temp_workspace: TempWorkspace, *, pages: Mapping[str, str] | Non
         }
     else:
         rules = RULES
-        crawl_file = create_any_crawl(temp_workspace, journal_setting="wal")
+        crawl_file = create_any_crawl(temp_workspace, journal_setting=journal_setting)
         responses = pages
 
     root = NormalizedUrl("https://example.com/")

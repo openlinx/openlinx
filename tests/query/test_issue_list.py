@@ -118,10 +118,62 @@ def test_issue_list_item_fields(temp_workspace: TempWorkspace) -> None:
     ]
 
 
-def test_issue_list_detects_replacement_after_crawl_selection(
-    temp_workspace: TempWorkspace,
+@pytest.mark.parametrize("journal_mode", ["wal", "delete"])
+def test_issue_list_refuses_another_crawl_id_in_the_selected_file(
+    temp_workspace: TempWorkspace, journal_mode: JournalSetting
 ) -> None:
-    file = crawl_store(temp_workspace)
+    file = crawl_store(
+        temp_workspace,
+        pages={"https://example.com/a": "<title>Welcome</title><h1>Welcome</h1>"},
+        journal_setting=journal_mode,
+    )
+    other = crawl_store(
+        temp_workspace,
+        pages={"https://example.com/a": "<h1>No Title</h1>"},
+        journal_setting=journal_mode,
+    )
+    ((expected_id,),) = query(file, "SELECT id FROM crawl")
+    ((found_id,),) = query(other, "SELECT id FROM crawl")
+    assert expected_id != found_id
+    request = QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=expected_id)
+    selected = file.stat()
+    replaced = False
+
+    def back_up_after_selection(_engine: Engine) -> None:
+        nonlocal replaced
+        if not replaced:
+            with (
+                closing(sqlite3.connect(other)) as source,
+                closing(sqlite3.connect(file)) as target,
+            ):
+                source.backup(target)
+            replaced = True
+
+    # The backup changes the recorded Crawl without replacing the file's inode.
+    event.listen(Engine, "engine_disposed", back_up_after_selection)
+    try:
+        with pytest.raises(OpenLinxError) as caught:
+            issue_list(request)
+    finally:
+        event.remove(Engine, "engine_disposed", back_up_after_selection)
+
+    actual = file.stat()
+    assert replaced
+    assert (actual.st_dev, actual.st_ino) == (selected.st_dev, selected.st_ino)
+    assert query(file, "SELECT id FROM crawl") == [(found_id,)]
+    assert query(file, "PRAGMA journal_mode") == [(journal_mode,)]
+    assert (caught.value.code, caught.value.exit_code, caught.value.diagnostic.details) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(file), "expected_id": expected_id, "found_id": found_id},
+    )
+
+
+@pytest.mark.parametrize("journal_mode", ["wal", "delete"])
+def test_issue_list_detects_replacement_after_crawl_selection(
+    temp_workspace: TempWorkspace, journal_mode: JournalSetting
+) -> None:
+    file = crawl_store(temp_workspace, journal_setting=journal_mode)
     replacement = file.with_suffix(".replacement")
     copyfile(file, replacement)
 

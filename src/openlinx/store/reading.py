@@ -12,8 +12,11 @@ from openlinx.naming import PRODUCT_NAME
 from openlinx.output.codes import CRAWL_SCHEMA_TOO_NEW
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import READER_BUSY_SECONDS, busy_error, is_busy, opening
-from openlinx.store.records import CrawlFileIdentity
+from openlinx.store.identity import check_crawl_id
+from openlinx.store.records import CrawlFile, CrawlFileIdentity
 from openlinx.store.schema import SCHEMA_VERSION, crawl
+
+_CRAWL_ID = select(crawl.c.id)
 
 
 @contextmanager
@@ -36,6 +39,14 @@ def reading(
         if not is_busy(error):
             raise
         raise busy_error(path, "reading", READER_BUSY_SECONDS, error) from error
+
+
+@contextmanager
+def reading_selected(selected: CrawlFile) -> Iterator[Connection]:
+    """Confirm the recorded Crawl ID in the snapshot used for the response."""
+    with reading(selected.path, identity=selected.identity, snapshot=True) as connection:
+        check_crawl_id(selected.path, selected.id, connection.execute(_CRAWL_ID).scalar_one())
+        yield connection
 
 
 def _check_schema_version(connection: Connection, path: Path) -> None:
