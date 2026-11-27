@@ -1,8 +1,8 @@
 # Comment review and test quality plan
 
-Status after 022: the pilot review is complete. Comment review, test quality fixes
-and test moves are separate work items. The directory map and migration slices
-still need review.
+The first whole-suite review covered all 177 Python test modules collected on
+Linux at `dc048245`. Some confirmed findings still await corrections. The comment
+review also includes source files and test support outside that count.
 
 The goal is to make tests easy to find and understand while preserving every
 existing contract and regression guard. Keep the public seams and boundary doubles
@@ -66,8 +66,8 @@ and comments in [hooks](../tests/crawl/test_hooks.py), [writer](../tests/store/t
 [network pause](../tests/crawl/test_network_pause.py), [code style](../tests/test_code_style.py)
 and [request headers](../tests/crawl/test_request_headers.py). All 268 collected
 cases from 207 test functions passed. Their exact node IDs, including parameter
-IDs, matched the full Linux collection. The pilot covers 5 of 177 collected
-Python test modules, leaving 172 modules and 2,403 of 2,671 node IDs to review.
+IDs, matched the full Linux collection. The pilot covered 5 of 177 collected
+Python test modules. At that point, 172 modules and 2,403 of 2,671 node IDs remained.
 
 Four isolated mutations exposed gaps in existing tests:
 
@@ -93,11 +93,48 @@ the warning's `first_url` field. Keep the explanations of
 [typed Hook factories](testing.md#hook-type-contracts) and
 [optimistic Writer replay](testing.md#narrow-implementation-checks).
 
-Continue the review with [Hook type contracts](../tests/test_handler_types.py),
+The next batch covered [Hook type contracts](../tests/test_handler_types.py),
 [writer throughput](../tests/test_writer_throughput.py),
 [Requester behaviour](../tests/crawl/test_requester.py) and
 [CLI header input](../tests/cli/test_request_headers.py). Keep corrections to
 assertions and comments separate from file moves.
+
+## Whole-suite review at `dc048245`
+
+The historical Linux baseline collected 2,671 pytest cases, including
+parameterized variants. The review recorded each module's scenarios, test seams,
+sources of expected values, and relevant assertions or comments. Platform-specific
+behavior still needs results from its native runner.
+
+| Reviewed area | Modules | Collected cases |
+|---|---:|---:|
+| CLI and contract | 33 | 303 |
+| Crawl | 72 | 1,603 |
+| Store, fixture site and Workspace | 37 | 345 |
+| Extraction, output and project-level tests | 35 | 420 |
+| **Total** | **177** | **2,671** |
+
+The Writer throughput smoke test passed when it submitted zero Pages. A
+separate correction checks that the requested 105 Pages and actual Link rows
+reach the Store. [Writer regression and mutation evidence](https://github.com/openlinx/openlinx/pull/63)
+
+A Windows 3.12 run missed the start and cancellation of a 30-second probe
+timer. A controlled run reproduced the failed observation when floating-point
+arithmetic put the duration just above the Clock observer's 30-second limit.
+[Windows job](https://github.com/openlinx/openlinx/actions/runs/44410047689/job/135175443667)
+
+Remaining findings stay open until the original failure is demonstrated, the
+reviewed fix passes the required checks and it reaches `main`. CI results belong
+to the commit and platform that ran them.
+
+After the baseline, five post-Crawl Pass cases moved from
+`tests/crawl/test_hooks.py` to `tests/crawl/hooks/test_post_crawl_passes.py`
+with their test names and parameter IDs preserved. [Pass test move](https://github.com/openlinx/openlinx/pull/54)
+
+The Ruff guard in `tests/test_code_style.py` changed to check both ignore tables
+for suppressed import rules. Review changed checks against their own diff.
+[Ruff guard correction](https://github.com/openlinx/openlinx/pull/50) ·
+[Review checklist](https://github.com/openlinx/openlinx/pull/62)
 
 ## Preparation after 022
 
