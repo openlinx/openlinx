@@ -35,7 +35,7 @@ Each Rule SHALL be evaluated over exactly one population, and its Affected URLs 
 - **`internal_pages`**: the rows of `030-add-page-data`'s `pages` table whose URL was parsed (`urls.parsed` = 1), which are the analysed Pages, including a Page on which an extractor failed (`urls.parse_error` = `extractor_error`), whose columns from that extractor are NULL. Rules marked *Indexable only* further restrict this to Pages whose `indexability` is `indexable`.
 - **`resources`**: image Resources, meaning URLs that are the target of at least one `image` Link whose source is a Page, and that were requested by `022-add-fetch-policy`'s Resource checks (`fetch_state` `fetched` or `error`), whether Internal or External. A Resource is a non-HTML file that a Page references (CONTEXT.md); the Rules of this catalogue check only images.
 
-A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). For example, a canonical target that the Crawl never requested produces no Affected URL.
+A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). For example, an unrequested canonical target with no recorded robots.txt verdict produces no Affected URL.
 
 #### Scenario: External URLs are not Internal URLs
 - **WHEN** an External URL linked from a Page responded 404
@@ -261,6 +261,8 @@ The `headings` category SHALL contain these Rules, all over `internal_pages`:
 - **THEN** `h2-missing` fires for it
 
 ### Requirement: Canonical Rules
+**In short:** Check canonical declarations and the Indexability of their targets.
+
 The `canonicals` category SHALL contain these Rules, all over `internal_pages`:
 
 | id | Issue Type | Priority | Fires for a Page where… | `detail` |
@@ -274,7 +276,7 @@ The `canonicals` category SHALL contain these Rules, all over `internal_pages`:
 The *target's Indexability* SHALL come from `030-add-page-data`:
 
 - **When the target is a Page,** it is the Page's stored `indexability` and `indexability_status`.
-- **When the target is not a Page,** steps 1–4 of 030's Indexability order are applied to the target's `urls` row: `blocked_by_robots_txt`, `redirected`, `client_error` or `server_error`. A target with `fetch_state` `error` is non-indexable with the reason `no_response`. The reason goes in `detail.target_reason`, not under the column name `indexability_status`, because `no_response` is not one of that column's values. A target with any other outcome, such as a 2xx response that is not HTML, counts as indexable. A target that was never requested has no Indexability, and the Rule does not fire.
+- **For a target without a Page,** apply steps 1–4 of 030's Indexability order to the target's `urls` row by checking `blocked_by_robots_txt`, `redirected`, `client_error` and `server_error` in that order. If none applies, the target is Non-Indexable with reason `no_response` only when its own request failed without a response, recorded as `fetch_state = 'error'`, `attempt_count > 0` and a `fetch_error` other than `record_failed`. The Rule fires only when one of these reasons applies.
 
 #### Scenario: Missing canonical
 - **WHEN** an analysed Page has `canonical_count` 0 and no noindex directive
@@ -297,8 +299,16 @@ The *target's Indexability* SHALL come from `030-add-page-data`:
 - **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "target_reason": "noindex"}`
 
 #### Scenario: Canonical to a URL without a response
-- **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and `/b` is not a Page and has `fetch_state` `error`
+- **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and a request to `/b` times out, recording `fetch_state` `error`, `fetch_error` `timeout`, a positive `attempt_count` and no Page
 - **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "target_reason": "no_response"}`
+
+#### Scenario: Canonical target robots.txt preflight fails
+- **WHEN** a Page's canonical target has `fetch_state` `error` from a robots.txt preflight failure, `attempt_count` 0 and no other reason applies
+- **THEN** `canonical-to-non-indexable` has no Affected URL for the Page
+
+#### Scenario: Canonical target response could not be recorded
+- **WHEN** a Page's canonical target has `fetch_state` `error`, `fetch_error` `record_failed`, a positive `attempt_count` and no other reason applies
+- **THEN** `canonical-to-non-indexable` has no Affected URL for the Page
 
 #### Scenario: Canonical to an indexable Page
 - **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and `/b` is a 200 Page with `indexability` `indexable`

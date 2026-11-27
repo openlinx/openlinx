@@ -15,7 +15,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **Release scope.** v0.1 ships the [15 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after release, within the existing ROADMAP milestones. Plan their Rule-specific work in 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9 for v0.2. The pixel threshold for `title-too-long` also waits for v0.2. For shared behaviour, use a v0.1 Rule to exercise snapshots, disabling, empty Issue results and resume. Keep the examples that depend on a deferred Rule, including the image Resource example in 10.4, for the post-release plan. Each group's documentation and review cover the Rules in that release.
 
-**Implemented v0.1 Rules through group 7.** The CLI lists 16 Rules. Thirteen have executable evaluation queries. Three registrations still use no-row queries: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
+**Implemented v0.1 Rules through group 8.** The CLI lists 18 Rules. Fifteen have executable evaluation queries. Three registrations still use no-row queries: `h2-missing`, `low-word-count` (`min_words`, default 200) and `url-parameters`. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
 
 ## 1. Rule model and the rules Command (slice)
 
@@ -120,16 +120,16 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [ ] 8.2 Drive "Canonicalised Page" at seam 2, and register `canonicalised`.
 - [ ] 8.3 Drive "Relative canonical" at seam 2, and register `canonical-relative`.
 - [ ] 8.4 Drive "Conflicting canonicals" and "Agreeing canonicals" at seam 2. This is a trivial pair. Register `canonical-conflicting`.
-- [ ] 8.5 Drive "Canonical to a redirect" at seam 2, with the target's Indexability in the Rule's reproducing query (design D13). Register `canonical-to-non-indexable`.
-- [ ] 8.6 Drive "Canonical to a noindex Page" at seam 2.
-- [ ] 8.7 Drive "Canonical to a URL without a response" at seam 2.
-- [ ] 8.8 Drive "Canonical to an indexable Page" and "Canonical to a non-HTML 200 response" at seam 2. This is a trivial pair: both targets count as indexable.
-- [ ] 8.9 Drive "Canonical target never requested" at seam 2.
-- [ ] 8.10 Drive "Noindex from X-Robots-Tag only" and "Noindex from both sources" at seam 2. This is a trivial pair: `detail.sources`. Register `noindex`.
+- [x] 8.5 Drive "Canonical to a redirect" at seam 2, with the target's Indexability in the Rule's reproducing query (design D13). Register `canonical-to-non-indexable`.
+- [x] 8.6 Drive "Canonical to a noindex Page" at seam 2.
+- [x] 8.7 Drive "Canonical to a URL without a response", "Canonical target robots.txt preflight fails" and "Canonical target response could not be recorded" at seams 2 and 3+6. Check the registered and recorded SQL against actual Crawl outcomes.
+- [x] 8.8 Drive "Canonical to an indexable Page" and "Canonical to a non-HTML 200 response" at seam 2. This is a trivial pair: both targets count as indexable.
+- [x] 8.9 Drive "Canonical target never requested" at seam 2.
+- [x] 8.10 Drive "Noindex from X-Robots-Tag only" and "Noindex from both sources" at seam 2. This is a trivial pair: `detail.sources`. Register `noindex`.
 - [ ] 8.11 Drive "Nofollow from meta robots" at seam 2, and register `nofollow`.
 - [ ] 8.12 Drive "Meta refresh used" at seam 2, and register `meta-refresh`.
-- [ ] 8.13 Docs: add the canonical and directive Rules for the current release to `docs/rules.md`. For v0.1, check “Catalogue size” and “Rule ids are unique kebab-case” at seam 1 for coverage of the 15 ROADMAP ids and uniqueness across all registrations.
-- [ ] 8.14 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
+- [x] 8.13 Docs: add the canonical and directive Rules for the current release to `docs/rules.md`. For v0.1, check “Catalogue size” and “Rule ids are unique kebab-case” at seam 1 for coverage of the 15 ROADMAP ids and uniqueness across all registrations.
+- [x] 8.14 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. Content, URL and image Rules
 

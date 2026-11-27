@@ -5,7 +5,7 @@
 The motivation is in proposal.md, and the catalogue and behaviour are in `specs/rules/spec.md`. Ownership follows [ROADMAP.md](../../../ROADMAP.md) ("What each change owns"). Rules read three sources:
 
 - the `urls` table of `020-add-crawl-core`, with the fetch columns of `022-add-fetch-policy`:
-  - Internal/External, `status_code`, `fetch_state` and `fetch_error`
+  - Internal/External, `status_code`, `fetch_state`, `fetch_error` and `attempt_count`
   - `blocked_by_robots_txt`, `redirect_url_id` and `in_redirect_loop`
   - `size_bytes` and `parsed`
 - the `pages` and `links` tables, the stored Indexability and the link counts of `030-add-page-data`
@@ -129,12 +129,13 @@ v0.1 does not recompute stored Issues. A Crawl is judged by the configuration it
 Categories are stored enumeration values, and `015` requires enumeration values to match `^[a-z][a-z0-9_]*$`. So they are `response_codes`, `meta_descriptions` and so on. `070` maps them to its kebab-case Report Section ids. Rule ids are free text that people type as command arguments and as `openlinx.toml` table names, where TOML bare keys allow `-`. They keep the kebab-case form of the approved design.
 
 ### D13. Canonical targets use 030's Indexability
-`canonical-to-non-indexable` fires when the target's Indexability is non-indexable, not on "any non-200":
-- **When the target is a Page,** that is the stored `indexability` of `030`.
-- **When the target is not a Page,** `030` stores no Indexability, so the Rule applies steps 1–4 of `030`'s order (robots.txt, 3xx, 4xx, 5xx) to its `urls` row, plus `no_response` for a request that got no response.
+**In short:** Use the canonical target's stored Page Indexability or infer it from its URL outcome.
+
+- **When the target is a Page,** use the stored `indexability` and `indexability_status` of `030` so the Rule also sees Page-specific reasons such as `noindex`.
+- **For a target without a Page,** apply steps 1–4 of `030`'s order to its `urls` row before considering `no_response`. The target's positive `attempt_count` distinguishes its own request from a robots.txt preflight error recorded against the same URL. `record_failed` can also carry a positive count, so the Rule excludes it from `no_response` because the error describes a Store write failure.
 - **The detail key is `target_reason`:** its values are `030`'s six `indexability_status` values plus `no_response`. Naming it `indexability_status` would give one name two value sets (ADR-0005 rule 7), because `no_response` is not a value of that column.
 
-A 2xx non-HTML target, such as a PDF, therefore counts as indexable, as it would for `030`. A target that was never requested is not judged.
+A 2xx non-HTML target, such as a PDF, counts as indexable when robots.txt allows it. A URL that was skipped because robots.txt disallowed it has a recorded reason even without a request to that URL.
 - *Alternative: store Indexability for every Internal URL.* It would add Indexability columns to `020`'s `urls` table, which the v0.1 schema blueprint does not have. It is left to `030`'s Open Questions.
 
 ### D14. The tables under ADR-0005

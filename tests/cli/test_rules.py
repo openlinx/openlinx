@@ -6,6 +6,7 @@ import subprocess
 import sys
 from contextlib import closing
 from tempfile import TemporaryFile
+from typing import Any
 
 import pytest
 
@@ -37,6 +38,54 @@ def test_first_rule_in_the_list(temp_workspace: TempWorkspace) -> None:
     )
     assert following.exit_code == 0, following.stderr
     assert following.json()["items"] == [{"id": "internal-5xx", "thresholds": {}}]
+
+
+@pytest.fixture
+def catalogue_items(temp_workspace: TempWorkspace) -> list[dict[str, Any]]:
+    command = ("rules", "list", "--limit", "50")
+    args: tuple[str, ...] = command
+    items: list[dict[str, Any]] = []
+    while True:
+        result = run_cli(*args)
+        assert result.exit_code == 0, result.stderr
+        page = result.json()
+        items.extend(page["items"])
+        cursor = page["next_cursor"]
+        if cursor is None:
+            return items
+        args = (*command, "--cursor", cursor)
+
+
+def test_catalogue_size(catalogue_items: list[dict[str, Any]]) -> None:
+    v01_ids = {
+        "internal-4xx",
+        "internal-5xx",
+        "internal-no-response",
+        "internal-3xx",
+        "redirect-chain",
+        "redirect-loop",
+        "internal-blocked-by-robots-txt",
+        "http-url",
+        "title-missing",
+        "title-duplicate",
+        "title-too-long",
+        "meta-description-missing",
+        "h1-missing",
+        "noindex",
+        "canonical-to-non-indexable",
+    }
+
+    assert v01_ids - {item["id"] for item in catalogue_items} == set()
+    assert [item["id"] for item in catalogue_items if item["enabled"] is not True] == []
+
+
+def test_rule_ids_are_unique_kebab_case(catalogue_items: list[dict[str, Any]]) -> None:
+    rule_ids = [item["id"] for item in catalogue_items]
+
+    assert [
+        rule_id for rule_id in rule_ids if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", rule_id)
+    ] == []
+    assert len(rule_ids) == len(set(rule_ids))
 
 
 def test_every_rule_has_its_guidance(temp_workspace: TempWorkspace) -> None:

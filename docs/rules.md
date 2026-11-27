@@ -44,6 +44,8 @@ The response-code Rules belong to `response_codes`, and the `http-url` Rule belo
 | `title-too-long` | `opportunity` | `medium` | An analysed Page's first title exceeds its recorded `max_chars` limit (default 60). | JSON object with `length`, the measured character count |
 | `meta-description-missing` | `opportunity` | `medium` | An analysed Page has no meta description or its first meta description is empty. | SQL `NULL` |
 | `h1-missing` | `warning` | `medium` | An analysed Page has no `<h1>` or its first `<h1>` is empty. | SQL `NULL` |
+| `canonical-to-non-indexable` | `issue` | `high` | An analysed Page declares a different URL as canonical and that target is Non-Indexable. | JSON object with `canonical_url` and `target_reason` |
+| `noindex` | `warning` | `high` | An analysed Page has `pages.meta_robots_noindex = 1` or `pages.x_robots_tag_noindex = 1`. | JSON object with `sources`, the applicable directive sources |
 
 The `internal_urls` population includes Internal URLs with `fetch_state` `fetched` or `error`,
 or with `blocked_by_robots_txt = 1`, including URLs outside a Section Crawl's Scope. A
@@ -67,7 +69,48 @@ even when the recorded targets form a closed loop.
 
 The title, meta description and heading Rules apply to analysed Pages (`urls.parsed = 1`).
 Missing measurements from a failed extractor do not trigger these Rules on their own.
+
 Read a Rule's guidance and reproducing SQL with [`linx rules show`](#read-one-rule).
+
+The `canonical-to-non-indexable` Rule belongs to `canonicals` and `noindex` belongs to
+`directives`. Both apply to analysed Pages (`internal_pages`, with `urls.parsed = 1`).
+
+The canonical query matches the source Page's `pages.canonical_url` to the target's `urls.url`.
+It reports the source Page as the Affected URL when that target is a different URL and is
+Non-Indexable. For a target Page, the Rule reads the stored Indexability and uses its
+Indexability Status as `target_reason`. The possible reasons are `blocked_by_robots_txt`,
+`redirected`, `client_error`, `server_error`, `noindex` and `canonicalised`.
+
+For a target without a Page, the Rule uses the first applicable reason in this order.
+
+1. `blocked_by_robots_txt` applies when the Crawl records a robots.txt prohibition, including
+   when the target was skipped and has zero requests.
+2. `redirected` applies to a recorded 3xx response.
+3. `client_error` applies to a recorded 4xx response or a status of 600 or above.
+4. `server_error` applies to a recorded 5xx response.
+5. `no_response` requires a failed request to the target URL itself (`fetch_state = 'error'`
+   and `attempt_count > 0`). A robots.txt preflight failure leaves zero target attempts.
+   The Rule excludes `fetch_error = 'record_failed'` from this reason because it describes a
+   Store write failure, even with a positive attempt count.
+
+An allowed 200 PDF gives no Issue. A skipped or queued target gives no Issue when the Crawl
+has recorded neither a robots.txt prohibition nor a request outcome for it.
+
+If the target `https://example.test/b` has the stored Indexability Status `redirected`,
+the detail is `{"canonical_url": "https://example.test/b", "target_reason": "redirected"}`.
+A target with the stored Indexability Status `noindex` gives
+`{"canonical_url": "https://example.test/b", "target_reason": "noindex"}`.
+A timeout requesting the target gives
+`{"canonical_url": "https://example.test/b", "target_reason": "no_response"}`.
+Run `linx rules show canonical-to-non-indexable` for the guidance and reproducing SQL.
+
+For `noindex`, each source is listed when its stored flag is 1. If only the applicable
+HTTP `X-Robots-Tag` header gives noindex, the detail is `{"sources": ["x_robots_tag"]}`.
+When both sources apply, `meta_robots` comes first, as in
+`{"sources": ["meta_robots", "x_robots_tag"]}`. The Rule uses the directive flags even when
+the Page's Indexability Status is `blocked_by_robots_txt`.
+Run `linx rules show noindex` for the guidance and reproducing SQL.
+[Robots directives](crawling.md#robots-directives)
 
 ## Browse the catalogue
 
@@ -81,15 +124,16 @@ This example replaces the returned cursor with a placeholder.
 
 ```json
 {
-  "total": 16,
+  "total": 18,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "<opaque cursor>"
 }
 ```
 
-`total` counts the entire catalogue. `items` contains the current page in catalogue order,
-grouped by category. To see the next page in the same Workspace, pass the returned `next_cursor`
-to `--cursor` and continue until it is `null`. Treat the cursor as an opaque value.
+`total` counts the entire catalogue, including entries for later releases. The 15 v0.1
+Rules have runnable evaluation queries. `items` contains the current page in catalogue
+order, grouped by category. To see the next page in the same Workspace, pass the returned
+`next_cursor` to `--cursor` and continue until it is `null`. Treat the cursor as an opaque value.
 `--format jsonl` prints one JSON object per item. `--format table` produces a table for people.
 With either format, an available next page is reported as `more_items` on stderr.
 [CLI paging and fields](cli.md#lists-paging-fields-and-cursors)

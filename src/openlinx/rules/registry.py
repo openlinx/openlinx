@@ -1,6 +1,8 @@
 """Collect the Rules in catalogue order."""
 
+from openlinx.rules.canonicals import RULES as CANONICAL_RULES
 from openlinx.rules.content import RULES as CONTENT_RULES
+from openlinx.rules.directives import RULES as DIRECTIVE_RULES
 from openlinx.rules.headings import RULES as HEADING_RULES
 from openlinx.rules.meta_descriptions import RULES as META_DESCRIPTION_RULES
 from openlinx.rules.model import Rule
@@ -16,6 +18,8 @@ RULES: tuple[Rule, ...] = (
     *TITLE_RULES,
     *META_DESCRIPTION_RULES,
     *HEADING_RULES,
+    *CANONICAL_RULES,
+    *DIRECTIVE_RULES,
     *CONTENT_RULES,
     *URL_RULES,
 )
