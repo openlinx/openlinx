@@ -120,7 +120,7 @@ def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedC
         ).one()
         if selected is not None:
             check_crawl_id(selected.path, selected.id, row.id)
-        _check_rule_tables(connection, path)
+        check_rule_tables(connection, path)
         urls: list[str] = list(
             connection.execute(select(seeds.c.url).order_by(seeds.c.position)).scalars()
         )
@@ -134,8 +134,8 @@ def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedC
         )
 
 
-def _check_rule_tables(connection: Connection, path: Path) -> None:
-    # Development builds before Rules also wrote schema version 1.
+def check_rule_tables(connection: Connection, path: Path) -> None:
+    """Refuse pre-Rules Crawl files, which also recorded schema version 1."""
     names = (rules.name, affected_urls.name)
     present: set[str] = set(
         connection.exec_driver_sql(

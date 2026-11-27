@@ -17,15 +17,18 @@ from openlinx.store.schema import SCHEMA_VERSION, crawl
 
 
 @contextmanager
-def reading(path: Path, *, identity: CrawlFileIdentity | None = None) -> Iterator[Connection]:
+def reading(
+    path: Path, *, identity: CrawlFileIdentity | None = None, snapshot: bool = False
+) -> Iterator[Connection]:
+    """Pin a snapshot in WAL and on request in rollback-journal mode."""
     try:
         with (
             opening(path, role="read", identity=identity) as engine,
             engine.connect() as connection,
         ):
-            # Legacy SQLite transactions do not begin on SELECT. Pin the operation in WAL;
-            # a rollback-journal reader must release its shared lock between statements.
-            if connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal":
+            # Legacy SQLite transactions do not begin on SELECT. A rollback-journal
+            # snapshot can delay Writer commits, so compound readers opt in.
+            if snapshot or connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal":
                 connection.exec_driver_sql("BEGIN")
             _check_schema_version(connection, path)
             yield connection
