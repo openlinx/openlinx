@@ -1,9 +1,9 @@
-"""Create Crawl files and update their run metadata in the Workspace's data folder."""
+"""Create Crawl files under the writer claim and update run metadata (060 D12)."""
 
 import platform
 import sqlite3
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,7 +16,9 @@ from openlinx import __version__
 from openlinx.json_numbers import decode_json_object
 from openlinx.output.codes import WORKSPACE_NOT_WRITABLE
 from openlinx.output.diagnostics import OpenLinxError
+from openlinx.store.claim import claim_writer
 from openlinx.store.connections import connect, not_writable_name, opening
+from openlinx.store.identity import check_crawl_id
 from openlinx.store.ids import Choice, crawl_path, new_crawl_id
 from openlinx.store.journal import JournalChoice, confirm_journal_mode
 from openlinx.store.reading import reading
@@ -45,23 +47,29 @@ _FIRST_SEED = select(seeds.c.url).order_by(seeds.c.position).limit(1)
 _SEED_COUNT = select(func.count()).select_from(seeds)
 
 
+@contextmanager
 def create_crawl_file(
     request: NewCrawl, started_at: datetime, choice: Choice, journal: JournalChoice
-) -> tuple[CrawlFile, JournalChoice]:
+) -> Iterator[tuple[CrawlFile, JournalChoice]]:
     workspace = request.workspace
     create_data_folder(workspace)
-    # A permissions problem must reach an agent as an error code, never as a traceback.
-    with as_workspace_not_writable(workspace):
-        crawl_file = _claim_new_file(workspace.crawls_dir, started_at, choice)
-        try:
-            with _sqlite_not_writable(crawl_file.path):
-                journal, granted = _set_journal_mode(crawl_file.path, journal, workspace.data_dir)
-                _write_new_file(crawl_file, request, started_at, granted)
-        except BaseException:
-            # A claimed file left empty would break --crawl latest in this Workspace.
-            crawl_file.path.unlink()
-            raise
-    return crawl_file, journal
+    with ExitStack() as ownership:
+        # Only creation errors belong to the Workspace; the caller runs after this block.
+        with as_workspace_not_writable(workspace):
+            crawl_file = ownership.enter_context(
+                _claim_new_file(workspace.crawls_dir, started_at, choice)
+            )
+            try:
+                with _sqlite_not_writable(crawl_file.path):
+                    journal, granted = _set_journal_mode(
+                        crawl_file.path, journal, workspace.data_dir
+                    )
+                    _write_new_file(crawl_file, request, started_at, granted)
+            except BaseException:
+                # A claimed file left empty would break --crawl latest in this Workspace.
+                crawl_file.path.unlink()
+                raise
+        yield crawl_file, journal
 
 
 def set_state(
@@ -97,10 +105,11 @@ def record_scope(scope: RecordedScope) -> Callable[[Connection], None]:
     return unit
 
 
-def read_recorded(path: Path) -> RecordedCrawl:
-    with reading(path) as connection:
+def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedCrawl:
+    with reading(path, identity=selected.identity if selected is not None else None) as connection:
         row = connection.execute(
             select(
+                crawl.c.id,
                 crawl.c.state,
                 crawl.c.crawl_mode,
                 crawl.c.config,
@@ -108,6 +117,8 @@ def read_recorded(path: Path) -> RecordedCrawl:
                 crawl.c.warnings,
             )
         ).one()
+        if selected is not None:
+            check_crawl_id(selected.path, selected.id, row.id)
         urls: list[str] = list(
             connection.execute(select(seeds.c.url).order_by(seeds.c.position)).scalars()
         )
@@ -160,16 +171,23 @@ def crawl_summary() -> Callable[[Connection], CrawlSummary]:
     return unit
 
 
-def _claim_new_file(crawls_dir: Path, started_at: datetime, choice: Choice) -> CrawlFile:
+@contextmanager
+def _claim_new_file(crawls_dir: Path, started_at: datetime, choice: Choice) -> Iterator[CrawlFile]:
     while True:
         crawl_id = new_crawl_id(started_at, choice)
         path = crawl_path(crawls_dir, crawl_id)
-        # Exclusive create: of two processes that draw the same id, only one gets the file.
-        try:
-            path.open("xb").close()
-        except FileExistsError:
+        if path.exists():
             continue
-        return CrawlFile(crawl_id, path)
+        crawl_file = CrawlFile(crawl_id, path)
+        with ExitStack() as ownership:
+            # Reserve the claim file atomically: an existence check would race its creator.
+            try:
+                ownership.enter_context(claim_writer(crawl_file, exclusive=True))
+                path.open("xb").close()
+            except FileExistsError:
+                continue
+            yield crawl_file
+            return
 
 
 def _set_journal_mode(

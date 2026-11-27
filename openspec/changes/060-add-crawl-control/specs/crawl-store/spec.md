@@ -1,6 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Crawl ids
+**In short:** A new Crawl draws an id unused by any crawl file, writer claim file or log file in its Workspace.
 
 A crawl id SHALL consist of:
 - the Crawl's UTC start time, formatted `YYYYMMDD-HHMMSS`
@@ -21,6 +22,10 @@ A process MAY reserve a new id by creating `<id>.log` exclusively, and then crea
 
 #### Scenario: A reserved id is drawn again
 - **WHEN** only `20260927-140312-k3f9.log` exists, and a Crawl is created at `2026-09-27T14:03:12.900Z` while the random source yields `k3f9` and then `m2p7`
+- **THEN** the new Crawl's id is `20260927-140312-m2p7`
+
+#### Scenario: An id with a writer claim file is drawn again
+- **WHEN** only `20260927-140312-k3f9.lock` exists, and a Crawl is created at `2026-09-27T14:03:12.900Z` while the random source yields `k3f9` and then `m2p7`
 - **THEN** the new Crawl's id is `20260927-140312-m2p7`
 
 #### Scenario: A chosen id is created once

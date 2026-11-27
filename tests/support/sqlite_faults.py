@@ -45,13 +45,16 @@ def shm_held(monkeypatch: pytest.MonkeyPatch, opens: int | None) -> None:
 
 
 @contextmanager
-def disk_full_after(pages: int) -> Iterator[None]:
+def disk_full_after(pages: int, *, include_creation: bool = False) -> Iterator[None]:
     """SQLite reports a full disk once a crawl file grows `pages` pages past its size when the
-    connection opened, as on a disk with that much room left. A file being created is not
-    capped, and the next connection gets room again, as one opened after space was freed."""
+    connection opened, as on a disk with that much room left. Creation is uncapped unless
+    include_creation is True; each new connection gets room as if space had been freed."""
 
     def cap(connection: sqlite3.Connection, _: Any) -> None:
-        if connection.execute("SELECT 1 FROM sqlite_schema WHERE name = 'crawl'").fetchone():
+        if (
+            include_creation
+            or connection.execute("SELECT 1 FROM sqlite_schema WHERE name = 'crawl'").fetchone()
+        ):
             (count,) = connection.execute("PRAGMA page_count").fetchone()
             connection.execute(f"PRAGMA max_page_count = {count + pages}")
 

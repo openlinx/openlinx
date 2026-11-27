@@ -63,6 +63,7 @@ from openlinx.services.crawls import create_crawl
 from openlinx.services.hooks import default_page_executor
 from openlinx.services.interrupts import interrupts_stop
 from openlinx.services.settings import default_tables
+from openlinx.store.claim import claim_writer
 from openlinx.store.crawls import (
     crawl_summary,
     read_recorded,
@@ -71,6 +72,7 @@ from openlinx.store.crawls import (
     record_warnings,
 )
 from openlinx.store.failures import is_write_failure
+from openlinx.store.identity import verify_file_identity
 from openlinx.store.records import (
     CrawlFile,
     CrawlMode,
@@ -346,18 +348,19 @@ def start_crawl(
         fetch_policy=plan.fetch_policy,
         secrets=secret_values(plan.new_crawl.config, plan.new_crawl.secret_names.settings),
     )
-    crawl = _Crawl(
-        plan=planned,
-        crawl_file=create_crawl(plan.new_crawl, clock, log),
-        continuing=None,
-        clock=clock,
-        log=log,
-        hooks=hooks,
-        pages=pages or default_page_executor,
-        fetchers=fetchers,
-        stop=stop or StopSignal(),
-    )
-    return _crawled(crawl)
+    with create_crawl(plan.new_crawl, clock, log) as crawl_file:
+        crawl = _Crawl(
+            plan=planned,
+            crawl_file=crawl_file,
+            continuing=None,
+            clock=clock,
+            log=log,
+            hooks=hooks,
+            pages=pages or default_page_executor,
+            fetchers=fetchers,
+            stop=stop or StopSignal(),
+        )
+        return _crawled(crawl)
 
 
 def continue_crawl(
@@ -375,66 +378,75 @@ def continue_crawl(
 
     The keyword arguments are start_crawl's, including a fresh stop flag for each run.
     """
-    recorded = read_recorded(crawl_file.path)
-    custom_user_agent = _recorded_user_agent(recorded.config, crawl_file.path)
-    # Before anything is written; the continue's unit checks it again as it writes.
-    check_transition(recorded.state, "running", None)
-    given = overrides.given()
-    if "proxy" not in given:
-        check_recorded_proxy(recorded.config["crawl"].get("proxy"), crawl_file.path)
-    if recorded.config["crawl"].get("auth") is not None and "auth" not in given:
-        raise OpenLinxError(
-            SECRETS_REQUIRED,
-            "Continuing this Crawl requires fresh Basic Auth credentials.",
-            hint="Supply fresh credentials through --auth or crawl.auth.",
+    with claim_writer(crawl_file) as path:
+        identity = verify_file_identity(crawl_file.path, crawl_file.identity, at=path)
+        crawl_file = replace(crawl_file, identity=identity)
+        recorded = read_recorded(crawl_file.path, selected=crawl_file)
+        custom_user_agent = _recorded_user_agent(recorded.config, crawl_file.path)
+        # Before anything is written; the continue's unit checks it again as it writes.
+        check_transition(recorded.state, "running", None)
+        given = overrides.given()
+        if "proxy" not in given:
+            check_recorded_proxy(recorded.config["crawl"].get("proxy"), crawl_file.path)
+        if recorded.config["crawl"].get("auth") is not None and "auth" not in given:
+            raise OpenLinxError(
+                SECRETS_REQUIRED,
+                "Continuing this Crawl requires fresh Basic Auth credentials.",
+                hint="Supply fresh credentials through --auth or crawl.auth.",
+            )
+        headers = restored_headers(
+            recorded.config["crawl"].get("header", []), given.pop("header", ())
         )
-    headers = restored_headers(recorded.config["crawl"].get("header", []), given.pop("header", ()))
-    try:
-        settings = CrawlSettings.model_validate(
-            {**recorded.config["crawl"], **given, "header": headers}
+        try:
+            settings = CrawlSettings.model_validate(
+                {**recorded.config["crawl"], **given, "header": headers}
+            )
+        # Only an override can be refused: the recorded values passed when the Crawl started.
+        except ValidationError as error:
+            refused = refused_given_value(error, {"crawl": given}, table="crawl")
+            if refused is None:
+                raise
+            raise refused from error
+        if "proxy" in given:
+            check_fresh_proxy(settings.proxy)
+        strip_params = strip_params_pattern(settings.strip_params)
+        # The proxy variables of the continue's own environment, as a start reads them, recorded in
+        # place of the start's.
+        proxies = ProxyVariables.of(os.environ)
+        environment = _environment(proxies)
+        runtime = {"crawl": settings.model_dump(mode="json"), **environment}
+        secret_names = SecretNames(
+            settings={**default_tables().secret_settings(), **_PROXY_SECRETS}
         )
-    # Only an override can be refused: the recorded values passed when the Crawl started.
-    except ValidationError as error:
-        refused = refused_given_value(error, {"crawl": given}, table="crawl")
-        if refused is None:
-            raise
-        raise refused from error
-    if "proxy" in given:
-        check_fresh_proxy(settings.proxy)
-    strip_params = strip_params_pattern(settings.strip_params)
-    # The proxy variables of the continue's own environment, as a start reads them, recorded in
-    # place of the start's.
-    proxies = ProxyVariables.of(os.environ)
-    environment = _environment(proxies)
-    runtime = {"crawl": settings.model_dump(mode="json"), **environment}
-    secret_names = SecretNames(settings={**default_tables().secret_settings(), **_PROXY_SECRETS})
-    planned = _Planned(
-        seed=_seed(recorded.seeds[0], strip_params),
-        settings=settings,
-        scope=ScopeRules.from_json(recorded.scope),
-        strip_params=strip_params,
-        crawl_mode=recorded.crawl_mode,
-        seed_count=len(recorded.seeds),
-        fetch_policy=_fetch_policy(settings, proxies, custom_user_agent=custom_user_agent),
-        secrets=secret_values(runtime, secret_names.settings),
-    )
-    started = {table: values for table, values in recorded.config.items() if table != "environment"}
-    config = {
-        **started,
-        **redact((), runtime, secret_names).config,
-    }
-    crawl = _Crawl(
-        plan=planned,
-        crawl_file=crawl_file,
-        continuing=config,
-        clock=clock,
-        log=WarningLog(reporter, [Diagnostic.from_json(w) for w in recorded.warnings]),
-        hooks=hooks,
-        pages=pages or default_page_executor,
-        fetchers=fetchers,
-        stop=stop or StopSignal(),
-    )
-    return _crawled(crawl)
+        planned = _Planned(
+            seed=_seed(recorded.seeds[0], strip_params),
+            settings=settings,
+            scope=ScopeRules.from_json(recorded.scope),
+            strip_params=strip_params,
+            crawl_mode=recorded.crawl_mode,
+            seed_count=len(recorded.seeds),
+            fetch_policy=_fetch_policy(settings, proxies, custom_user_agent=custom_user_agent),
+            secrets=secret_values(runtime, secret_names.settings),
+        )
+        started = {
+            table: values for table, values in recorded.config.items() if table != "environment"
+        }
+        config = {
+            **started,
+            **redact((), runtime, secret_names).config,
+        }
+        crawl = _Crawl(
+            plan=planned,
+            crawl_file=crawl_file,
+            continuing=config,
+            clock=clock,
+            log=WarningLog(reporter, [Diagnostic.from_json(w) for w in recorded.warnings]),
+            hooks=hooks,
+            pages=pages or default_page_executor,
+            fetchers=fetchers,
+            stop=stop or StopSignal(),
+        )
+        return _crawled(crawl)
 
 
 def _recorded_user_agent(config: Mapping[str, Any], path: Path) -> bool:
@@ -521,6 +533,16 @@ class _Crawl:
     stop: StopSignal
 
 
+def _open_writer(crawl: _Crawl, *, disk_temp_store: bool = False) -> CrawlWriter:
+    # Failure recording opens a new writer against the same verified selection.
+    return CrawlWriter(
+        crawl.crawl_file.path,
+        crawl.clock,
+        disk_temp_store=disk_temp_store,
+        selected=crawl.crawl_file if crawl.continuing is not None else None,
+    )
+
+
 async def _run(crawl: _Crawl) -> _End:
     try:
         return await _crawl_and_end(crawl)
@@ -576,7 +598,7 @@ async def _failed_end(crawl: _Crawl, error: OpenLinxError) -> _End:
     that fails too, the file stays running (020-add-crawl-core D16)."""
     try:
         with crawl.clock.off_loop():
-            writer = await asyncio.to_thread(CrawlWriter, crawl.crawl_file.path, crawl.clock)
+            writer = await asyncio.to_thread(_open_writer, crawl)
         try:
             async with writer.loop_deadline():
                 ended = await _end(crawl, writer, "failed", "write_failed")
@@ -617,9 +639,7 @@ async def _crawl_context(crawl: _Crawl) -> AsyncIterator[CrawlContext]:
         # Opening and closing the writer block, so they run off the event loop.
         with clock.off_loop():
             # The run can claim an origin per URL; its temporary SQLite store may spill to disk.
-            writer = await asyncio.to_thread(
-                CrawlWriter, crawl_file.path, clock, disk_temp_store=True
-            )
+            writer = await asyncio.to_thread(_open_writer, crawl, disk_temp_store=True)
         try:
             # The engine drives the writer, so its commits keep the Crawl's clock.
             async with (

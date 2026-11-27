@@ -131,11 +131,19 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
   - It then releases the claim and deletes the claim's lock file.
 
 ### D12. The writer claim, control writes, `interrupted` and reserved ids
-`015` was planned to build these, and they moved here on 2026-10-05, because only background Crawls and `resume` need them. They live in `openlinx.store` (`020` D14).
+**In short:** An OS lock assigns one writer to each Crawl and supports safe continuation, liveness checks and id reservation.
+
+`015` left these Store operations to this change. The writer claim establishes ownership for foreground creation and continuation before the control Commands are added.
 - **The writer claim** (`openlinx.store.claim`): an operating-system lock on `<id>.lock`, taken without waiting: `msvcrt.locking` on Windows and `fcntl.flock` on POSIX, on the lock file, never on the crawl file.
   - The operating system releases it when the process ends, SIGKILL and TerminateProcess included, so "`running` and the claim is free" means the process is dead (D2).
-  - It is taken where the id is claimed: `create_crawl` draws the id and takes `<id>.lock` before it creates `<id>.sqlite` (`_claim_new_file`), and gives the claim to the Crawl Service with the `CrawlFile`; a resume takes it before it opens the writer. The Crawl Service holds it until the writer is closed. A Crawl therefore never exists without a live claim (D3).
-  - Failing to take it is `crawl_locked` (exit code 5), declared by this change.
+  - `claim_writer(CrawlFile)` is a context manager. Its context owns and closes the lock descriptor. `CrawlFile` carries the selection as data. Windows locks byte 0 with `LK_NBLCK`; POSIX uses `LOCK_EX | LOCK_NB`. Only a lock conflict maps to `crawl_locked`; other I/O errors retain their proper diagnostic.
+  - `create_crawl_file` and `create_crawl` become context managers yielding their existing result values. Creation takes the claim before the exclusive SQLite create. `start_crawl` holds the creation context around the entire `_crawled` operation, including post-crawl passes and `_failed_end`, until all writers close.
+  - Initialization cleanup ends before the creation context yields: a failure to initialize removes the incomplete SQLite file while still holding the claim, but an exception from running an initialized Crawl must preserve that file. The descriptor closes on every exit; the lock file remains.
+  - An existing file's symbolic link resolves to one path for the sidecar and SQLite. An existing file with more than one hard link is refused with `crawl_not_writable` before SQLite opens it. Resolving either hard link preserves its name, and SQLite derives its journal and WAL paths from that name. [SQLite on multiple links](https://sqlite.org/howtocorrupt.html#multiple_links_to_the_same_file).
+  - Selection remembers the resolved path and filesystem identity for the metadata it reads. A continue verifies that identity at claim acquisition and at SQLite open. Both the admission read and each writer connection check the stored Crawl id under the claim before a write can start.
+  - The existing continue Service acquires the claim before reading recorded state or opening a writer and holds it until every writer closes.
+  - *Alternative:* returning a bare lock descriptor inside `CrawlFile`. Rejected because ordinary record consumers would unknowingly own a resource, and exceptional returns could leak ownership.
+  - A conflicting claim is `crawl_locked` (exit code 5), declared by this change.
   - The lock file stays behind. It is harmless, it marks the id as taken, and `crawls rm` deletes it.
 - **Control writes** (`write_control`, in `openlinx.store.control`): a read-write connection without the claim, opened with `opening(path, role="control", busy_seconds=5)`, a new `ConnectionRole` whose connect listener installs a SQLite authorizer that refuses every write to a table not marked `info={"control": True}`.
 - **Recording `interrupted`** (`check_writer`, in the same module): it tries the claim without waiting. When it gets it and the state is `running`, one transaction records `interrupted` through `020`'s `set_state`, whose `TRANSITIONS` this change extends with `running` → `interrupted` and `interrupted` → `running`, and sets the last run's `end_state`. Then it releases the claim.

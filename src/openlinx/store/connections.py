@@ -15,6 +15,8 @@ from sqlalchemy.pool import NullPool
 
 from openlinx.output.codes import CRAWL_BUSY
 from openlinx.output.diagnostics import OpenLinxError
+from openlinx.store.identity import verify_file_identity
+from openlinx.store.records import CrawlFileIdentity
 
 READER_BUSY_SECONDS = 5.0
 WRITER_BUSY_SECONDS = 30.0
@@ -74,17 +76,35 @@ def file_uri(path: PurePath) -> str:
 
 
 def connect(
-    path: Path, *, read_only: bool = False, busy_seconds: float | None = None
+    path: Path,
+    *,
+    read_only: bool = False,
+    busy_seconds: float | None = None,
+    identity: CrawlFileIdentity | None = None,
 ) -> sqlite3.Connection:
     # rw, not SQLite's default rwc: a missing crawl file is an error, never a new empty file.
-    uri = file_uri(path.resolve()) + ("?mode=ro" if read_only else "?mode=rw")
+    resolved = path.resolve() if identity is None else identity.path
+    uri = file_uri(resolved) + ("?mode=ro" if read_only else "?mode=rw")
     # A reader gives up after 5 s (crawl_busy); the writer waits out a reader's longest wait.
     if busy_seconds is None:
         busy_seconds = READER_BUSY_SECONDS if read_only else WRITER_BUSY_SECONDS
     deadline = time.monotonic() + busy_seconds
     while True:
-        connection = sqlite3.connect(uri, uri=True, timeout=busy_seconds)
+        if identity is not None:
+            verify_file_identity(path, identity, at=resolved)
         try:
+            connection = sqlite3.connect(uri, uri=True, timeout=busy_seconds)
+        except sqlite3.Error as error:
+            # A missing or changed file can fail the open before the post-open check.
+            if identity is not None:
+                try:
+                    verify_file_identity(path, identity, at=resolved)
+                except OpenLinxError as changed:
+                    raise changed from error
+            raise
+        try:
+            if identity is not None:
+                verify_file_identity(path, identity, at=resolved)
             connection.execute("PRAGMA foreign_keys = ON")
             # The first read opens the WAL index (-shm), where a killed writer can still hold it.
             connection.execute("PRAGMA schema_version").fetchone()
@@ -114,11 +134,14 @@ def opening(
     role: ConnectionRole,
     busy_seconds: float | None = None,
     disk_temp_store: bool = False,
+    identity: CrawlFileIdentity | None = None,
 ) -> Iterator[Engine]:
     read_only = role == "read"
     engine = create_engine(
         "sqlite://",
-        creator=lambda: connect(path, read_only=read_only, busy_seconds=busy_seconds),
+        creator=lambda: connect(
+            path, read_only=read_only, busy_seconds=busy_seconds, identity=identity
+        ),
         poolclass=NullPool,
     )
     if not read_only:

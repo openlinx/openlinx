@@ -1,7 +1,12 @@
 """Verify Crawl selection through the store API."""
 
+import errno
+import os
 import shutil
+import sqlite3
+from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import delete, update
@@ -112,6 +117,61 @@ def test_not_a_crawl_file(temp_workspace: TempWorkspace) -> None:
         raised.value.exit_code,
         raised.value.diagnostic.details["file"],
     ) == ("crawl_file_invalid", 6, str(notes))
+
+
+@pytest.mark.parametrize("during_open", [False, True], ids=["at_selection", "during_open"])
+def test_an_unreadable_crawl_file_gets_a_read_diagnostic(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch, during_open: bool
+) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    workspace = current_workspace(temp_workspace)
+    paths = (crawl.path, crawl.path.resolve())
+    can_stat = during_open
+    original_stat = os.stat
+    original_connect = sqlite3.connect
+
+    def stat(path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+        if not can_stat and isinstance(path, (str, Path)) and Path(path) in paths:
+            raise PermissionError(errno.EACCES, "Permission denied", path)
+        return original_stat(path, *args, **kwargs)
+
+    def connect(database: str, *, uri: bool, timeout: float) -> sqlite3.Connection:
+        nonlocal can_stat
+        connection = original_connect(database, uri=uri, timeout=timeout)
+        can_stat = False
+        return connection
+
+    with monkeypatch.context() as system:
+        system.setattr(os, "stat", stat)
+        if during_open:
+            system.setattr(sqlite3, "connect", connect)
+        with pytest.raises(OpenLinxError) as raised:
+            resolve_crawl(str(crawl.path), workspace=workspace, cwd=temp_workspace.root)
+
+    assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(crawl.path)},
+    )
+
+
+def test_selecting_a_newer_crawl_preserves_its_schema_diagnostic(
+    temp_workspace: TempWorkspace,
+) -> None:
+    crawl = create_crawl_at(temp_workspace, "2026-09-27T10:00:00.000Z", "aaaa")
+    with closing(sqlite3.connect(crawl.path)) as connection:
+        connection.execute("PRAGMA user_version = 99")
+
+    with pytest.raises(OpenLinxError) as raised:
+        resolve_crawl(
+            crawl.id, workspace=current_workspace(temp_workspace), cwd=temp_workspace.root
+        )
+
+    assert (raised.value.code, raised.value.exit_code, raised.value.diagnostic.details) == (
+        "crawl_schema_too_new",
+        6,
+        {"file_schema_version": 99, "tool_schema_version": 1},
+    )
 
 
 def test_a_crawl_file_without_its_crawl_row(temp_workspace: TempWorkspace) -> None:

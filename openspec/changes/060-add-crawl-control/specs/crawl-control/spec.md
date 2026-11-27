@@ -384,12 +384,60 @@ Secrets are never stored in clear:
 - **THEN** the `crawl` table of `crawl.config` has `concurrency` = 2
 
 ### Requirement: One writer per Crawl
+**In short:** One process holds the writer claim throughout a Crawl, and continuation uses the file verified at selection.
+
 A Crawl's writer claim SHALL be an operating-system lock on the file `<crawl id>.lock` next to its crawl file, taken without waiting. The operating system releases it when its process ends, however it ends.
 - Every process that creates, runs or resumes a Crawl SHALL take the claim before it creates or opens the crawl file for writing, and SHALL hold it for as long as it runs.
+- An existing crawl file selected through a symbolic link SHALL use its resolved path for the writer claim and SQLite connections. The writer-claim operation SHALL refuse an existing crawl file with multiple hard links before opening SQLite for a run. The refusal SHALL use exit code 7 and `crawl_not_writable`, with `details.file` naming the selected path.
+- Continuation SHALL use the file verified at selection for the claim, the admission read and every writer. A changed file or resolved target SHALL be refused with exit code 7 and `crawl_not_writable` before any Crawl write. A different stored Crawl id SHALL be refused with `crawl_file_invalid`.
 - A second such process SHALL be refused with exit code 5 and error code `crawl_locked`, whose hint names `linx status`.
 - A process that takes the claim for another purpose, such as recording `interrupted` or `crawls rm`, SHALL hold it only for that operation.
 
 > **v0.1.**
+
+#### Scenario: A running Crawl keeps its writer claim
+- **WHEN** a foreground Crawl is serving a request against the slow fixture site, and a separate process tries to acquire its writer claim without waiting
+- **THEN** the other process cannot acquire the claim, and the Crawl remains running
+
+#### Scenario: A completed Crawl releases its writer claim
+- **WHEN** the Crawl Service returns a completed Crawl while its caller process stays alive
+- **THEN** another process can acquire that Crawl's writer claim
+
+#### Scenario: A failed Crawl releases its writer claim
+- **WHEN** the Crawl Service finishes recording a failed Crawl while its caller process stays alive
+- **THEN** another process can acquire that Crawl's writer claim, and its crawl file remains readable
+
+#### Scenario: A failed creation releases its writer claim
+- **WHEN** a filesystem or SQLite failure prevents initialization of a new Crawl while its caller process stays alive
+- **THEN** no incomplete crawl file remains, and another process can acquire the writer claim
+
+#### Scenario: A killed Crawl releases its writer claim
+- **WHEN** the process of a running Crawl is killed with SIGKILL on POSIX or TerminateProcess on Windows
+- **THEN** a different process can acquire its writer claim without waiting
+
+#### Scenario: Creation holds its writer claim before writing the schema
+- **WHEN** a process is initializing a new Crawl before its schema is written
+- **THEN** a separate process cannot acquire that Crawl's writer claim
+
+#### Scenario: Post-crawl passes keep the writer claim
+- **WHEN** a registered post-crawl pass is still running after fetching has ended
+- **THEN** a separate process cannot acquire that Crawl's writer claim
+
+#### Scenario: Failure recording keeps the writer claim
+- **WHEN** the main writer has failed and the Crawl Service is recording the failure through its fallback writer
+- **THEN** a separate process cannot acquire that Crawl's writer claim
+
+#### Scenario: A continuing Crawl keeps its writer claim
+- **WHEN** the Crawl Service continues a stopped Crawl created by this build and is serving a request
+- **THEN** a separate process cannot acquire that Crawl's writer claim until the service returns and its writers have closed
+
+#### Scenario: Continuing a replaced selection is refused
+- **WHEN** a stopped Crawl is selected and its file is replaced by a copy with the same Crawl id before the Service continues it
+- **THEN** continuation fails with `crawl_not_writable` and exit code 7, both files keep their original Crawl State and URL outcomes, and the site receives no further requests
+
+#### Scenario: Both names of a hard-linked crawl file are refused
+- **WHEN** a stopped Crawl's SQLite file has two hard links in different folders and the Crawl Service attempts to continue it through either name
+- **THEN** each attempt fails with `crawl_not_writable` and exit code 7 before opening SQLite or fetching a URL
 
 #### Scenario: Two resumes at the same time
 - **WHEN** two `linx resume --crawl <id>` processes start at the same time for a `stopped` Crawl of the slow fixture site

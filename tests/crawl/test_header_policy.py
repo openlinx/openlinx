@@ -159,7 +159,8 @@ def test_the_initial_crawl_records_the_selected_user_agent_winner(
         )
     )
 
-    created = create_crawl(plan.new_crawl, SystemClock(), Collected())
+    with create_crawl(plan.new_crawl, SystemClock(), Collected()) as created:
+        pass
 
     config = json.loads(crawl_row(created.path)["config"])
     assert config["request_policy"] == {"custom_user_agent": custom}
