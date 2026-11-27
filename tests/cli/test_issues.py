@@ -24,6 +24,95 @@ def issue_crawl(temp_workspace: TempWorkspace) -> Path:
     return crawl_store(temp_workspace, example_issues=_FILTER_EXAMPLES)
 
 
+@pytest.fixture
+def category_crawl(temp_workspace: TempWorkspace) -> Path:
+    return crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/no-title": "<h1>Welcome</h1><h2>First section</h2>",
+            "https://example.com/no-heading": "<title>Welcome</title><h2>First section</h2>",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected"),
+    [
+        pytest.param(("--category", "headings"), ["h1-missing"], id="headings-only"),
+        pytest.param(
+            ("--category", " TITLES,Headings "),
+            ["title-missing", "h1-missing"],
+            id="comma-separated",
+        ),
+        pytest.param(
+            ("--category", "HEADINGS", "--category", "titles"),
+            ["title-missing", "h1-missing"],
+            id="repeatable",
+        ),
+        pytest.param(
+            ("--category", "titles", "--type", "issue,warning", "--priority", "medium"),
+            [],
+            id="with-type-and-priority",
+        ),
+    ],
+)
+def test_filter_by_category(
+    category_crawl: Path, filters: tuple[str, ...], expected: list[str]
+) -> None:
+    result = run_cli("issues", "--crawl", str(category_crawl), "--fields", "rule_id", *filters)
+
+    assert result.exit_code == 0, result.stderr
+    assert result.json() == {
+        "total": len(expected),
+        "items": [{"rule_id": rule_id} for rule_id in expected],
+        "next_cursor": None,
+    }
+
+
+def test_a_cursor_belongs_to_its_normalised_categories(category_crawl: Path) -> None:
+    args = ("issues", "--crawl", str(category_crawl), "--fields", "rule_id", "--limit", "1")
+    first = run_cli(*args, "--category", "titles,headings")
+    assert first.exit_code == 0, first.stderr
+    page = first.json()
+    assert page["items"] == [{"rule_id": "title-missing"}]
+    cursor = page["next_cursor"]
+    assert isinstance(cursor, str)
+    assert cursor
+
+    resumed = run_cli(
+        *args, "--category", "HEADINGS", "--category", "titles,titles", "--cursor", cursor
+    )
+    assert resumed.exit_code == 0, resumed.stderr
+    assert resumed.json() == {"total": 2, "items": [{"rule_id": "h1-missing"}], "next_cursor": None}
+
+    changed = run_cli(*args, "--category", "headings", "--cursor", cursor)
+    assert (changed.exit_code, changed.stdout, [error["code"] for error in changed.errors()]) == (
+        2,
+        b"",
+        ["invalid_cursor"],
+    )
+
+
+def test_unknown_category_lists_accepted_values(category_crawl: Path) -> None:
+    result = run_cli("issues", "--crawl", str(category_crawl), "--category", "titles,links")
+
+    assert (result.exit_code, result.stdout) == (2, b"")
+    (error,) = result.errors()
+    assert error["code"] == "invalid_value"
+    assert error["details"]["accepted"] == [
+        "response_codes",
+        "security",
+        "titles",
+        "meta_descriptions",
+        "headings",
+        "canonicals",
+        "directives",
+        "content",
+        "urls",
+        "images",
+    ]
+
+
 @pytest.mark.parametrize(
     "filters",
     [
@@ -167,6 +256,7 @@ def test_issues_is_described_as_a_list_command() -> None:
     }
     options = {option["name"]: option for option in entry["options"]}
     assert options.keys() == {
+        "--category",
         "--type",
         "--priority",
         "--crawl",

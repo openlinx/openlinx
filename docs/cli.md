@@ -195,7 +195,7 @@ after selection when continuing a Crawl, see [Writer ownership](crawl-store.md#w
 
 `linx issues` returns one item per Issue, with its Rule ID, category, Issue Type, Priority, Affected URL count and recorded Rule description. It orders by Issue Type (issue, warning, opportunity), then Priority (high, medium, low), then by decreasing Affected URL count, then by ascending Rule ID.
 
-Use `--type` and `--priority` to select Issues. Values can be comma-separated, repeated or given in mixed case. Each flag accepts any of its values, and an Issue must match every supplied flag. For example, `linx issues --type issue,warning --priority high` lists the high Priority Issues and Warnings. A [cursor](#lists-paging-fields-and-cursors) belongs to the selected Crawl ID and the filter values. If `latest` resolves to another Crawl, start again without a cursor or select the original Crawl.
+Use `--type`, `--priority` and `--category` to select Issues. Values can be comma-separated, repeated or given in mixed case. Each flag accepts any of its values, and an Issue must match every supplied flag. For example, `linx issues --type issue,warning --priority high` lists the high Priority Issues and Warnings. Use `linx issues --category headings` to list Issues in the headings category. To see the category IDs, run `linx schema rules` and look at the values for `category`. A [cursor](#lists-paging-fields-and-cursors) belongs to the selected Crawl ID and the filter values. If `latest` resolves to another Crawl, start again without a cursor or select the original Crawl.
 
 ## Exit codes
 

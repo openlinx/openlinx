@@ -19,6 +19,7 @@ def ordered_issues_in(
     *,
     issue_types: tuple[str, ...] = (),
     priorities: tuple[str, ...] = (),
+    categories: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Join the reader's Issues to the Rule descriptions recorded for this Crawl."""
     check_rule_tables(connection, path)
@@ -37,6 +38,8 @@ def ordered_issues_in(
         statement = statement.where(source.c.issue_type.in_(issue_types))
     if priorities:
         statement = statement.where(source.c.priority.in_(priorities))
+    if categories:
+        statement = statement.where(source.c.category.in_(categories))
     return [
         {str(key): value for key, value in row.items()}
         for row in connection.execute(statement).mappings()
