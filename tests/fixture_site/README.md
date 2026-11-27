@@ -25,8 +25,10 @@ SITE = Site(
 - **A one-off site** is built inline in the test: `Site(routes={...})`.
 - A site is checked when it is declared: a `Page` takes exactly one of `file=` and `body=`, and a site with `Page(file=...)` routes needs `root=`.
 - A declared route takes precedence for its path. For an undeclared path,
-  `Site(resolve=...)` can supply a route. The optional callable receives the
-  request path without its query string and returns a `Route` or `None`.
+  `Site(resolve=...)` can supply a route. The optional synchronous callable receives
+  the request path without its query string and returns a `Route` or `None`.
+  Resolved routes follow the same rules as declared routes, including `root=` for
+  file-backed Pages and a per-path request count for `Responses`.
   A request without a declared or resolved route answers 404.
 
 ## Route kinds
@@ -82,6 +84,18 @@ When the server stops, it cancels every handler still running (hanging, delayed,
   - `url(path)`
   - `most_simultaneous`, the most requests the site has handled at once, from a request's arrival until its handler returned
   - `requests`, a snapshot of the request log. Each entry has method, path including query, headers, monotonic receipt time, an HTTP version tuple and the selected ALPN protocol (None without selection).
+
+For a large computed site, start `RunningServer(site, keep_log=False)` and call
+`stop()` in a `finally` block. Its handle still measures `most_simultaneous`,
+and `requests` is empty. The server keeps one event per distinct declared
+`after` target, including targets in any answer of a declared `Responses` route.
+If the resolver introduces other targets, pass their paths at startup, for example
+`after_paths=("/ready",)`, so even an earlier request for that path releases the waiter.
+An undeclared target from the resolver returns 500 and fails the test at teardown.
+
+For computed Pages with no dependencies, ordinary requests leave no per-path
+history in the fixture. A `Responses` route still needs a counter per requested
+path, and failed dependencies retain their diagnostics until teardown.
 
 Clients in tests:
 - aiohttp needs nothing special.

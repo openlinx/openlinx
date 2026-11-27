@@ -1,6 +1,6 @@
 """Declare the Rules for HTTP response codes."""
 
-from openlinx.rules.model import NO_ROWS, Rule
+from openlinx.rules.model import Rule
 
 INTERNAL_4XX = Rule(
     id="internal-4xx",
@@ -17,7 +17,11 @@ INTERNAL_4XX = Rule(
         "Restore the content, redirect the URL with a 301 to the closest equivalent Page, or "
         "change the Links that point to it. Answer 410 only for content that is gone for good."
     ),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql="""\
+SELECT id AS url_id, json_object('status_code', status_code) AS detail
+FROM urls
+WHERE is_internal = 1 AND fetch_state IN ('fetched', 'error')
+  AND status_code BETWEEN 400 AND 499""",
 )
 INTERNAL_5XX = Rule(
     id="internal-5xx",
@@ -34,7 +38,35 @@ INTERNAL_5XX = Rule(
         "Find the failure in the server's error log for the URL, fix it, then request the URL "
         "again. A 503 during maintenance should carry a Retry-After header."
     ),
-    reproduce_sql=NO_ROWS,
+    reproduce_sql="""\
+SELECT id AS url_id, json_object('status_code', status_code) AS detail
+FROM urls
+WHERE is_internal = 1 AND fetch_state IN ('fetched', 'error')
+  AND status_code BETWEEN 500 AND 599""",
 )
 
-RULES = (INTERNAL_4XX, INTERNAL_5XX)
+INTERNAL_NO_RESPONSE = Rule(
+    id="internal-no-response",
+    category="response_codes",
+    issue_type="issue",
+    priority="high",
+    applies_to="internal_urls",
+    description="An Internal URL got no HTTP response.",
+    why_it_matters=(
+        "Visitors and search engines cannot reach the content. Repeated failures can "
+        "reduce how often a search engine crawls the site."
+    ),
+    how_to_fix=(
+        "Check detail.error and the server logs. For a timeout, check response times. "
+        "For DNS, connection or TLS errors, check the host and its network configuration."
+    ),
+    reproduce_sql="""\
+SELECT id AS url_id, json_object('error', fetch_error) AS detail
+FROM urls
+WHERE is_internal = 1 AND fetch_state = 'error'
+  -- With record_failed the Crawl received a response but could not write it.
+  -- The record_failed warning reports that failure.
+  AND fetch_error <> 'record_failed'""",
+)
+
+RULES = (INTERNAL_4XX, INTERNAL_5XX, INTERNAL_NO_RESPONSE)

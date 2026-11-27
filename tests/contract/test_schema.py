@@ -18,7 +18,7 @@ from openlinx.store.schema import metadata
 from openlinx.workspace.discovery import resolve_workspace
 from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli
 from tests.support.clock import FakeClock
-from tests.support.crawls import create_any_crawl, new_crawl
+from tests.support.crawls import create_any_crawl, new_crawl, query
 from tests.support.processes import python_command
 from tests.support.schema import indexed_rows_declared
 from tests.support.workspace import TempWorkspace
@@ -32,6 +32,13 @@ def test_documentation_and_declaration_agree() -> None:
     documented = parse_tables(SCHEMA_DOC.read_text(encoding="utf-8"))
 
     assert documented == run_cli("schema", "--limit", "1000").json()["items"]
+
+
+def test_issues_is_a_view() -> None:
+    result = run_cli("schema", "issues", "--fields", "name,kind")
+
+    assert result.exit_code == 0
+    assert result.json()["items"] == [{"name": "issues", "kind": "view"}]
 
 
 def test_no_check_lists_more_than_two_values(temp_workspace: TempWorkspace) -> None:
@@ -53,25 +60,27 @@ def test_no_check_lists_more_than_two_values(temp_workspace: TempWorkspace) -> N
 
 
 def file_schema(file: Path) -> dict[str, dict[str, Any]]:
-    """Public tables as SQLite reports them, in the shape of `declared_schema`."""
+    """Public tables and views as SQLite reports them, shaped like `declared_schema`."""
+    objects: dict[str, dict[str, Any]] = {}
     with closing(sqlite3.connect(f"{file.as_uri()}?mode=ro", uri=True)) as connection:
-        listed = {
-            name: (without_rowid, strict)
-            for schema, name, kind, _, without_rowid, strict in connection.execute(
-                "PRAGMA table_list"
-            )
-            if schema == "main" and kind == "table" and not name.startswith(("sqlite_", "_"))
-        }
-        return {
-            name: {
-                "strict": bool(strict),
-                "without_rowid": bool(without_rowid),
-                "columns": _file_columns(connection, name),
-                "indexes": _file_indexes(connection, name),
-                "checks": sorted(CHECK_NAME.findall(_create_sql(connection, "table", name))),
-            }
-            for name, (without_rowid, strict) in listed.items()
-        }
+        for schema, name, kind, _, without_rowid, strict in connection.execute("PRAGMA table_list"):
+            if schema != "main" or name.startswith(("sqlite_", "_")):
+                continue
+            if kind == "view":
+                columns = connection.execute(
+                    "SELECT name FROM pragma_table_info(?) ORDER BY cid", (name,)
+                )
+                objects[name] = {"kind": "view", "columns": [column for (column,) in columns]}
+            elif kind == "table":
+                objects[name] = {
+                    "kind": "table",
+                    "strict": bool(strict),
+                    "without_rowid": bool(without_rowid),
+                    "columns": _file_columns(connection, name),
+                    "indexes": _file_indexes(connection, name),
+                    "checks": sorted(CHECK_NAME.findall(_create_sql(connection, "table", name))),
+                }
+    return objects
 
 
 def _create_sql(connection: sqlite3.Connection, kind: str, name: str) -> str:
@@ -110,15 +119,22 @@ def _file_indexes(connection: sqlite3.Connection, table: str) -> list[tuple[Any,
 
 
 def declared_schema() -> dict[str, dict[str, Any]]:
-    """The public tables of `linx schema`, with what only the declaration knows.
+    """The public schema of `linx schema`, with what only the declaration knows.
 
-    create_all makes CHECKs and WITHOUT ROWID from this declaration, so for those two the
-    comparison guards against a file made another way, such as by a future migration.
+    SQLite does not preserve the declared types and nullability of view expressions.
+    The file contract for a view is its kind and ordered column names.
     """
-    tables = {}
+    objects: dict[str, dict[str, Any]] = {}
     for item in describe_schema().tables:
+        if item["kind"] == "view":
+            objects[item["name"]] = {
+                "kind": "view",
+                "columns": [column["name"] for column in item["columns"]],
+            }
+            continue
         table = metadata.tables[item["name"]]
-        tables[item["name"]] = {
+        objects[item["name"]] = {
+            "kind": "table",
             "strict": table.dialect_options["sqlite"]["strict"],
             "without_rowid": not table.dialect_options["sqlite"]["with_rowid"],
             "columns": [
@@ -141,7 +157,7 @@ def declared_schema() -> dict[str, dict[str, Any]]:
                 if isinstance(constraint, CheckConstraint)
             ),
         }
-    return tables
+    return objects
 
 
 def test_a_new_file_matches_the_declaration(temp_workspace: TempWorkspace) -> None:
@@ -164,11 +180,17 @@ def test_a_new_file_matches_a_declared_reference_and_indexes(
 
 
 def test_every_table_is_strict(temp_workspace: TempWorkspace) -> None:
-    tables = file_schema(create_any_crawl(temp_workspace).path)
+    objects = file_schema(create_any_crawl(temp_workspace).path)
 
-    assert {name: table["strict"] for name, table in tables.items()} == {
-        table["name"]: True for table in describe_schema().tables
+    assert {name: item["strict"] for name, item in objects.items() if item["kind"] == "table"} == {
+        table["name"]: True for table in describe_schema().tables if table["kind"] == "table"
     }, "a table is not STRICT: declare it with public_table(...), which makes it STRICT"
+
+
+def test_a_new_rules_table_is_a_strict_rowid_table(temp_workspace: TempWorkspace) -> None:
+    file = create_any_crawl(temp_workspace).path
+
+    assert query(file, "SELECT wr, strict FROM pragma_table_list('rules')") == [(0, 1)]
 
 
 INDEXED_SECTION = """## Table `urls`

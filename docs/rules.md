@@ -8,6 +8,8 @@ the URLs it affects. Each of those URLs is an Affected URL. [Glossary](../CONTEX
 and enabled state configured in the current Workspace. They work without a Crawl. Reading the
 catalogue does not run the Rules or tell you which URLs are affected.
 
+See the [planned v0.1 Rules](../ROADMAP.md#the-v01-rules) for release scope.
+
 ## Issue Type and Priority
 
 Issue Type describes the nature of the Issue. The CLI prints one of these values.
@@ -35,11 +37,13 @@ unchanged.
 linx rules list --limit 1 --fields id,category
 ```
 
+This example replaces the returned cursor with a placeholder.
+
 ```json
 {
-  "total": 7,
+  "total": 9,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
-  "next_cursor": "eyJ2IjoxLCJxIjoiNTAzZmFkY2E1NzU2NzNkOSIsImsiOjF9"
+  "next_cursor": "<opaque cursor>"
 }
 ```
 
@@ -74,9 +78,13 @@ the same fields in each item by default.
   "thresholds": {"max_chars": {"value": 60, "default": 60, "unit": "characters"}},
   "description": "A Page's first title is longer than max_chars characters.",
   "why_it_matters": "Search engines cut a long title short in their results, so its end, often the brand or what sets the Page apart, is not shown.",
-  "how_to_fix": "Shorten the title to the limit, with the words that describe the Page first."
+  "how_to_fix": "Shorten the title to the limit, with the words that describe the Page first.",
+  "reproduce_sql": "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
 }
 ```
+
+Registered Rules whose conditions are still pending return no rows, as shown by the
+`title-too-long` query in this example.
 
 `applies_to` names the Rule's intended population, such as `internal_pages` for title Rules or
 `internal_urls` for response-code Rules. The model also allows `resources` for Rules about
@@ -130,9 +138,66 @@ If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, runnin
 `rules.title-to-long` in `details.errors[0].key`. Its hint reads
 `Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
 
-## Planned evaluation and configuration
+The response-code Rules report Internal HTTP client errors (400–499), server errors
+(500–599) and requests that received no response. Their Affected URLs record the
+status code or fetch error in `detail`.
 
-The planned evaluation uses a SQL query per Rule over stored Crawl data. The query identifies
-Affected URLs. Per-Crawl Rule records, Issue evaluation and the Health Score are planned.
-The catalogue output will also expose the reproducing query.
-[Planned v0.1 catalogue](../ROADMAP.md#the-v01-rules)
+## Read Issues from a crawl file
+
+Run these queries against the SQLite file of a Crawl with `title-missing` enabled.
+The current catalogue also includes `h1-missing`. Its Issues appear separately when Pages
+lack an H1. These examples filter to `title-missing`.
+
+The [`rules` table](schema.md#table-rules) holds the catalogue, effective settings and
+reproducing SQL recorded when the Crawl was created.
+
+```sql
+SELECT id, enabled, thresholds, reproduce_sql
+FROM rules
+WHERE id = 'title-missing';
+```
+
+The [`affected_urls` table](schema.md#table-affected_urls) holds the last pass's rows. Join
+on `url_id` to see each URL. The `title-missing` Rule checks `pages.title_count` and
+`pages.title_1` and returns SQL NULL for `detail`.
+
+```sql
+SELECT urls.url, affected_urls.detail
+FROM affected_urls
+JOIN urls ON urls.id = affected_urls.url_id
+WHERE affected_urls.rule_id = 'title-missing'
+ORDER BY urls.url;
+```
+
+The [`issues` view](schema.md#view-issues) counts those rows per Rule. A Rule with no
+Affected URLs has no row in the view.
+
+```sql
+SELECT rule_id, issue_type, priority, affected_count
+FROM issues
+WHERE rule_id = 'title-missing';
+```
+
+For a `completed` or `stopped` Crawl, the Issues reader reads the final pass from
+`affected_urls` and `issues`. For a `running`, `failed` or `interrupted` Crawl, the reader
+computes live results over the available data using queries from the installed Rule catalogue.
+It uses the Crawl's `rules` snapshot to determine which Rules are enabled. Queries that use
+thresholds read them from that same snapshot. Direct reads of `affected_urls` and `issues`
+show stored rows. A resumed Crawl can still have rows from its previous pass.
+
+## Reproducing queries
+
+Both Rules Commands include `reproduce_sql`, a read-only SELECT that returns `url_id`
+and `detail` from a crawl file. Run this example from the Crawl's Workspace and replace
+`<crawl-id>` with its id. `jq` decodes the SQL from the Command's JSON output for the
+SQLite CLI.
+
+```sh
+crawl_file='.openlinx/crawls/<crawl-id>.sqlite'
+query=$(linx rules show title-missing | jq -er '.reproduce_sql') &&
+  sqlite3 -readonly -header -column "$crawl_file" "$query"
+```
+
+To compare this query with the definition recorded at Crawl creation, inspect
+`rules.reproduce_sql` in the crawl file. The recorded `enabled` value shows whether
+the Rule was enabled for that Crawl.
