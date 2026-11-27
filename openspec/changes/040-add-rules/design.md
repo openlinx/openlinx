@@ -112,6 +112,8 @@ No count of Affected URLs is stored: a count that only repeats the rows of anoth
 ### D9. Strict configuration through `010`'s settings validation
 `[rules.<id>]` tables are part of the settings model, which `010` validates eagerly whenever settings load. Unknown ids, unknown keys and bad values become `settings_invalid` problems with dotted keys, such as `rules.title-to-long`, and a hint naming the closest known id or key. A silent typo would quietly change audit results. The cost is that an `openlinx.toml` written for a newer version, with new Rule ids, fails on an older tool; the message names the unknown id, so the fix is obvious.
 
+Rule threshold overrides are bounded when the Workspace loads so that every accepted integer can be printed in decimal JSON and recorded exactly in the Crawl configuration. The maximum is 10^4300 − 1. It applies to the numeric value across TOML bases and digit separators. An oversized threshold follows the existing keyed settings diagnostic before any Crawl request. The limit belongs to Rule thresholds and requires no process-wide change to Python's integer conversion policy.
+
 The table names are Rule ids. They mirror no flag, so `010`'s flag-mirroring key rule does not apply to them.
 
 ### D10. Changing thresholds after a Crawl

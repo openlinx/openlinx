@@ -10,7 +10,7 @@ from typing import Any, Literal, TypedDict
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.store.rows import HandlerRows
 from openlinx.workspace.discovery import Workspace
-from openlinx.workspace.tables import SecretPolicy
+from openlinx.workspace.tables import SecretPolicy, SecretSettings
 
 type CrawlMode = Literal["spider", "list", "sitemap"]
 
@@ -191,10 +191,10 @@ LATEST = "latest"
 
 @dataclass(frozen=True)
 class SecretNames:
-    """The recording policy for each secret flag and dotted settings key."""
+    """Policies by flag or settings path; flat settings also take a dotted key."""
 
     flags: Mapping[str, SecretPolicy] = field(default_factory=dict)
-    settings: Mapping[str, SecretPolicy] = field(default_factory=dict)
+    settings: SecretSettings = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)

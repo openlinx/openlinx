@@ -103,6 +103,7 @@ Never replace our own modules or our own CLI with a double. Installer tests use 
 ## Rules
 
 - **Test behaviour through public interfaces.** A test must survive a refactor that doesn't change behaviour.
+- Where the contract specifies a message's meaning, verify that the test accepts equivalent wording and rejects the opposite claim, and check exact wording only when the contract promises it.
 - **Use expected values from the spec** as literals. Never recompute them the way the code does. Contract tests compare against hand-written expected JSON; never auto-accept a snapshot.
 - **Mock only system boundaries:** the network outside the fixture site, the clock, randomness and, occasionally, the file system. Never mock our own modules. The Fetcher interface and an injectable clock exist so that scheduler and politeness tests can be deterministic.
 - **One logical assertion per test,** with a name that says *what* happens, not *how*.

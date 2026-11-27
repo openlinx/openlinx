@@ -31,7 +31,7 @@ def test_a_command_in_a_group_is_listed_by_its_full_path() -> None:
     (entry,) = [entry for entry in entries if entry["name"] == "rules list"]
     options = {option["name"]: option for option in entry["options"]}
     assert (entry["output"], entry["formats"]) == ("list", ["json", "jsonl", "table"])
-    assert set(options) == {"--format", "--limit", "--cursor", "--fields"}
+    assert set(options) == {"--format", "--limit", "--cursor", "--fields", "--workspace"}
     assert [options["--limit"][key] for key in ("default", "min", "max")] == [50, 0, 1000]
 
 
@@ -43,7 +43,7 @@ def test_rules_show_is_described_as_a_document_command() -> None:
         ["json", "table"],
         None,
     )
-    assert [option["name"] for option in entry["options"]] == ["--format"]
+    assert [option["name"] for option in entry["options"]] == ["--format", "--workspace"]
 
 
 def test_tool_version() -> None:

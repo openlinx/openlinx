@@ -1,19 +1,29 @@
 """Verify secrets are redacted from recorded Crawl data."""
 
+import json
 from typing import cast
 
 import pytest
 import typer
+from pydantic import BaseModel, ConfigDict, Field
 
 from openlinx.cli.options import secret_flags
 from openlinx.cli.runner import OpenLinxGroup
-from openlinx.services.crawling import CrawlRequest, plan_crawl
+from openlinx.clock import SystemClock
+from openlinx.crawl.engine.hooks import Hooks, UrlResult, handler
+from openlinx.output.reporter import Collected
+from openlinx.services.crawling import CrawlPlan, CrawlRequest, plan_crawl, start_crawl
+from openlinx.services.crawls import create_crawl
+from openlinx.services.settings import default_tables
 from openlinx.store.records import SecretNames
 from openlinx.store.redaction import SecretValues, redact
 from openlinx.store.writer import CrawlWriter
+from openlinx.workspace.tables import check_table
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
 from tests.support.app import example_app
 from tests.support.clock import FakeClock
-from tests.support.crawls import create_any_crawl
+from tests.support.crawls import crawl_row, create_any_crawl
 from tests.support.workspace import TempWorkspace
 
 # What the test app's example-settings Command declares secret.
@@ -141,6 +151,122 @@ def test_a_secret_setting_that_is_not_a_string() -> None:
     redacted = redact([], {"example": {"token": 12345}}, EXAMPLE_SECRETS)
 
     assert redacted.config == {"example": {"token": "***"}}
+
+
+class CredentialSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", serialize_by_alias=True)
+
+    token: str | None = Field(
+        None,
+        alias="access-token",
+        serialization_alias="access.token",
+        description="The client token.",
+        json_schema_extra={"secret": "whole"},
+    )
+    endpoint: str | None = Field(
+        None, description="The service URL.", json_schema_extra={"secret": "url"}
+    )
+    tokens: list[str] | None = Field(
+        None,
+        alias="token-list",
+        serialization_alias="tokens.list",
+        description="Additional client tokens.",
+        json_schema_extra={"secret": "whole"},
+    )
+    label: str = Field("default", description="A public label.")
+
+
+class FixedCredentialSettings(BaseModel):
+    """Settings for a predefined client."""
+
+    model_config = ConfigDict(extra="forbid", serialize_by_alias=True)
+
+    client: CredentialSettings = Field(
+        default_factory=lambda: CredentialSettings.model_validate({}),
+        alias="service-client",
+        serialization_alias="service.client",
+        description="The predefined client.",
+    )
+
+
+def _credential_plan(temp_workspace: TempWorkspace, seed: str, settings: bytes) -> CrawlPlan:
+    check_table("example", FixedCredentialSettings)
+    tables = default_tables()
+    tables.register("example", f"{__name__}:FixedCredentialSettings")
+    (temp_workspace.root / "openlinx.toml").write_bytes(settings)
+    request = CrawlRequest(
+        seed=seed,
+        cwd=temp_workspace.root,
+        home=temp_workspace.home,
+        workspace=None,
+        command_argv=(),
+        flags={},
+        secret_flags={},
+    )
+    return plan_crawl(request, tables)
+
+
+def test_fixed_subtable_secrets_are_redacted_in_the_recorded_config(
+    temp_workspace: TempWorkspace,
+) -> None:
+    plan = _credential_plan(
+        temp_workspace,
+        "http://127.0.0.1/",
+        b"[example.service-client]\n"
+        b'access-token = "https://user:synthetic-token@example.test/"\n'
+        b'endpoint = "https://user:synthetic-password@example.test/service"\n'
+        b'label = "keep this label"\n',
+    )
+
+    created = create_crawl(plan.new_crawl, FakeClock(), Collected())
+    config = json.loads(crawl_row(created.path)["config"])
+
+    assert config["example"] == {
+        "service.client": {
+            "access.token": "***",
+            "endpoint": "https://user:***@example.test/service",
+            "label": "keep this label",
+            "tokens.list": None,
+        }
+    }
+
+
+def test_fixed_subtable_secret_list_is_redacted_in_handler_warnings(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site(routes={"/": Page(body="<p>Example</p>")}))
+    plan = _credential_plan(
+        temp_workspace,
+        server.url("/"),
+        b"[example.service-client]\n"
+        b'token-list = ["synthetic-one", "synthetic-two"]\n'
+        b'label = "public client"\n',
+    )
+    credentials = plan.loaded.table(FixedCredentialSettings).client
+
+    def refused(_result: UrlResult) -> tuple[str, ...]:
+        raise ValueError(f"refused {credentials.tokens!r} for {credentials.label}")
+
+    hooks = Hooks(handlers=(handler("credentials", refused, lambda _connection, _rows: None),))
+    reporter = Collected()
+    result = start_crawl(plan, SystemClock(), reporter, hooks)
+
+    row = crawl_row(result.crawl_file)
+    stored = json.loads(row["config"])["example"]["service.client"]
+    assert (stored["tokens.list"], stored["label"]) == ("***", "public client")
+    expected = ["refused ['***', '***'] for public client"]
+    assert (
+        [
+            warning.details["error"]
+            for warning in reporter.warnings
+            if warning.code == "handler_failed"
+        ],
+        [
+            warning["details"]["error"]
+            for warning in json.loads(row["warnings"])
+            if warning["code"] == "handler_failed"
+        ],
+    ) == (expected, expected)
 
 
 def example_secret_names(temp_workspace: TempWorkspace) -> SecretNames:

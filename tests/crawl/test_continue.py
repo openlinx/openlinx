@@ -1,8 +1,11 @@
 """Verify stopped and failed Crawls continue through the service API."""
 
 import json
+import os
+import subprocess
 from collections.abc import Sequence
 from dataclasses import replace
+from pathlib import Path
 
 import msgspec
 import pytest
@@ -19,9 +22,11 @@ from openlinx.store.transitions import CrawlStateError
 from tests.fixture_site.hosts import FixtureResolver, on_http_port
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
+from tests.support.cli import CRAWL_PROCESS_TIMEOUT, run_cli_process
 from tests.support.crawling import continued, crawl_result
-from tests.support.crawls import query, sha256_of
+from tests.support.crawls import crawl_row, query, sha256_of
 from tests.support.network import closed_port
+from tests.support.processes import python_command
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
@@ -55,6 +60,97 @@ def test_a_continue_records_the_settings_it_runs_with(
     (config,) = query(result.crawl_file, "SELECT config FROM crawl")
     recorded = json.loads(config[0])["crawl"]
     assert (recorded["max_urls"], recorded["rate"], recorded["concurrency"]) == (None, 50.0, 2)
+
+
+def test_a_continue_keeps_the_exact_recorded_rule_threshold(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(b"[rules.title-too-long]\nmax_chars = 18446744073709551617\n")
+    server = fixture_site(NINE_PAGES)
+
+    stopped = crawl_result(server.url("/"), max_urls=3)
+
+    assert stopped.summary.state == "stopped"
+    config = json.loads(crawl_row(stopped.crawl_file)["config"])
+    assert config["rules"]["title-too-long"]["max_chars"] == 18446744073709551617
+
+    settings_file.write_bytes(b"[rules.title-too-long]\nmax_chars = 70\n")
+    result = continued(stopped, CrawlOverrides(max_urls=None))
+
+    assert result.summary.state == "completed"
+    config = json.loads(crawl_row(result.crawl_file)["config"])
+    assert config["rules"]["title-too-long"]["max_chars"] == 18446744073709551617
+
+
+@pytest.mark.parametrize("start_limit", ["4300", "640"], ids=["recorded-crawl", "new-crawl"])
+def test_a_continue_reads_and_preserves_wide_thresholds_under_a_lower_python_limit(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, start_limit: str
+) -> None:
+    threshold = 10**4300 - 1
+    settings = temp_workspace.root / "openlinx.toml"
+    settings.write_text(f"[rules.title-too-long]\nmax_chars = {threshold:#x}\n", encoding="utf-8")
+    server = fixture_site(NINE_PAGES)
+
+    start = run_cli_process(
+        "crawl",
+        server.url("/"),
+        "--max-urls",
+        "3",
+        env={**os.environ, "PYTHONINTMAXSTRDIGITS": start_limit},
+        timeout=CRAWL_PROCESS_TIMEOUT,
+    )
+
+    assert start.exit_code == 0, start.stderr
+    output = start.json()
+    assert output["state"] == "stopped"
+    file = Path(output["crawl_file"])
+    config = json.loads(crawl_row(file)["config"])
+    assert config["rules"]["title-too-long"]["max_chars"] == threshold
+
+    settings.write_text("[rules.title-too-long]\nmax_chars = 70\n", encoding="utf-8")
+    command = python_command(
+        "-c",
+        """
+import sys
+from pathlib import Path
+
+from openlinx.clock import SystemClock
+from openlinx.output.reporter import Collected
+from openlinx.services.crawling import CrawlOverrides, continue_crawl
+from openlinx.services.hooks import default_hooks
+from openlinx.store.crawls import read_recorded
+from openlinx.store.records import CrawlFile
+
+assert sys.get_int_max_str_digits() == 640
+path = Path(sys.argv[1])
+threshold = read_recorded(path).config["rules"]["title-too-long"]["max_chars"]
+assert type(threshold) is int and threshold == 10**4300 - 1
+result = continue_crawl(
+    CrawlFile(sys.argv[2], path),
+    CrawlOverrides(max_urls=None),
+    SystemClock(),
+    Collected(),
+    default_hooks(),
+)
+assert result.summary.state == "completed"
+assert sys.get_int_max_str_digits() == 640
+""",
+        str(file),
+        output["crawl_id"],
+    )
+    resumed = subprocess.run(
+        command.argv,
+        env={**os.environ, **(command.env or {}), "PYTHONINTMAXSTRDIGITS": "640"},
+        capture_output=True,
+        check=False,
+        timeout=CRAWL_PROCESS_TIMEOUT,
+    )
+
+    assert resumed.returncode == 0, resumed.stderr
+    assert query(file, "SELECT count(*) FROM pages") == [(10,)]
+    config = json.loads(crawl_row(file)["config"])
+    assert config["rules"]["title-too-long"]["max_chars"] == threshold
 
 
 def test_the_url_limit_counts_over_the_crawl_s_whole_life(

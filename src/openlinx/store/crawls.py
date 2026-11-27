@@ -13,6 +13,7 @@ from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import DBAPIError
 
 from openlinx import __version__
+from openlinx.json_numbers import decode_json_object
 from openlinx.output.codes import WORKSPACE_NOT_WRITABLE
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import connect, not_writable_name, opening
@@ -113,8 +114,7 @@ def read_recorded(path: Path) -> RecordedCrawl:
         return RecordedCrawl(
             state=row.state,
             crawl_mode=row.crawl_mode,
-            # The Json type writes JSON text and reads it back as written.
-            config=orjson.loads(row.config),
+            config=decode_json_object(row.config),
             scope=orjson.loads(row.scope),
             seeds=tuple(urls),
             warnings=tuple(orjson.loads(row.warnings)),
