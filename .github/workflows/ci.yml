@@ -65,10 +65,11 @@ jobs:
         run: uv run mypy
 
       - name: Tests and coverage
-        run: uv run pytest --junitxml="$RUNNER_TEMP/pytest-ci.xml"
+        id: pytest
+        run: uv run pytest -o junit_family=xunit1 --junitxml="$RUNNER_TEMP/pytest-ci.xml"
 
       - name: Native Windows repeat-interrupt acceptance (026 4.2c)
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.pytest.outcome != 'skipped' }}
         run: uv run --locked python scripts/check_windows_owner_death.py "$RUNNER_TEMP/pytest-ci.xml"
 
       - name: Build

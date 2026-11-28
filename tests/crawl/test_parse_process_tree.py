@@ -475,16 +475,21 @@ def test_a_second_ctrl_break_ends_the_parse_tree_during_windows_bootstrap(
     tmp_path: Path,
     phase: str,
     delivery: str,
+    record_property: Callable[[str, object], None],
 ) -> None:
     """End the owner while the spawn handoff and the child's native bootstrap are held."""
     if sys.platform == "win32":
-        _windows_owner_death_case(fixture_site, tmp_path, phase, delivery)
+        _windows_owner_death_case(fixture_site, tmp_path, phase, delivery, record_property)
 
 
 if sys.platform == "win32":
 
     def _windows_owner_death_case(
-        fixture_site: StartSite, tmp_path: Path, phase: str, delivery: str
+        fixture_site: StartSite,
+        tmp_path: Path,
+        phase: str,
+        delivery: str,
+        record_property: Callable[[str, object], None],
     ) -> None:
         from tests.crawl.parse_windows_console import bootstrap_probe, private_console, read_record
 
@@ -532,9 +537,17 @@ if sys.platform == "win32":
                     assert console.exit_status(watched[role], 10) == 3
             assert int(read_record(tmp_path / "spawn_handoff")) == pids[held]
             assert len(set(pids.values())) == len(roles)
-            assert {p.pid for p in psutil.Process(console.owner_pid).children(recursive=True)} == {
-                pid for role, pid in pids.items() if phase != "replacement" or role != initial
+            active = {
+                role: pid for role, pid in pids.items() if phase != "replacement" or role != initial
             }
+            descendants = console.assert_parse_children(set(active.values()))
+            record_property(
+                "windows_bootstrap_processes",
+                json.dumps(
+                    {"owner_pid": console.owner_pid, "active": active, "descendants": descendants},
+                    sort_keys=True,
+                ),
+            )
             committed_by = monotonic() + 5
             while (rows := query(file, urls)) != expected_urls:
                 assert monotonic() < committed_by, rows
@@ -566,7 +579,10 @@ if sys.platform == "win32":
             if not late:
                 assert console.broker.wait(timeout=5) == 130
         assert _assert_recovery_pages(fixture_site, tmp_path / "recovery") != file
-        assert not late, f"parse children exceeded 10 s after owner exit: {late}; observed {exits}"
+        assert not late, (
+            f"parse children exceeded 10 s after owner exit: {late}; "
+            f"observed exits {exits}; before interrupt {descendants}"
+        )
 
 
 def _windows_bootstrap_case(site: StartSite, folder: Path, phase: str, delivery: str) -> None:

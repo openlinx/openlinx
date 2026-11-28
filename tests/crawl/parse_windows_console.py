@@ -148,6 +148,28 @@ class ConsoleCrawl:
             return handle
         raise RuntimeError("Native process handles require Windows")
 
+    def assert_parse_children(self, expected: set[int]) -> dict[int, tuple[int, str]]:
+        """Account for every descendant while the owner and parse children are held."""
+        if sys.platform == "win32":
+            console_host = Path(os.environ["SYSTEMROOT"]) / "System32" / "conhost.exe"
+            descendants = {}
+            for child in psutil.Process(self.owner_pid).children(recursive=True):
+                with suppress(psutil.NoSuchProcess):
+                    descendants[child.pid] = (child.ppid(), child.exe())
+            # Windows can report its console hosts in the same tree as the parse
+            # interpreters. Require all held interpreters and account for every extra.
+            assert all(Path(executable).is_absolute() for _, executable in descendants.values()), (
+                descendants
+            )
+            parse_pids = {
+                pid
+                for pid, (_, executable) in descendants.items()
+                if Path(executable) != console_host
+            }
+            assert parse_pids == expected, descendants
+            return descendants
+        raise RuntimeError("Native process identities require Windows")
+
     def _capture_status(self, handle: int, pid: int) -> None:
         if sys.platform == "win32":
             if _winapi.WaitForSingleObject(handle, 0) == _winapi.WAIT_OBJECT_0:

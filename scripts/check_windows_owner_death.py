@@ -18,6 +18,7 @@ def check_report(report: Path) -> None:
     root = ElementTree.parse(report).getroot()  # noqa: S314
     counts = dict.fromkeys(_CASES, 0)
     failed = set()
+    observations = {}
     for case in root.iter("testcase"):
         name = case.get("name", "")
         if case.get("classname") != _MODULE or name not in counts:
@@ -25,16 +26,25 @@ def check_report(report: Path) -> None:
         counts[name] += 1
         if any(child.tag in {"skipped", "failure", "error"} for child in case):
             failed.add(name)
+        observation = case.find("properties/property[@name='windows_bootstrap_processes']")
+        if observation is not None and (value := observation.get("value")):
+            observations[name] = value
 
-    problems = [
-        f"{name}: {counts[name]} reports, {'unsuccessful' if name in failed else 'no error'}"
-        for name in sorted(_CASES)
-        if counts[name] != 1 or name in failed
-    ]
-    if problems:
-        raise SystemExit("Windows 4.2c requires one pass per case:\n" + "\n".join(problems))
+    problems = []
     for name in sorted(_CASES):
-        print(f"PASS {name} junit=pass")
+        snapshot = observations.get(name)
+        if snapshot is not None:
+            print(f"OBSERVED {name} {snapshot}")
+        if counts[name] != 1 or name in failed or snapshot is None:
+            status = "unsuccessful" if name in failed else "no error"
+            presence = "present" if snapshot is not None else "missing"
+            problems.append(f"{name}: {counts[name]} reports, {status}, snapshot {presence}")
+        else:
+            print(f"PASS {name} junit=pass")
+    if problems:
+        raise SystemExit(
+            "Windows 4.2c requires one observed pass per case:\n" + "\n".join(problems)
+        )
     print("PASS windows-bootstrap-owner-death cases=6")
 
 
