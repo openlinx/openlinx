@@ -4,7 +4,9 @@ import functools
 import inspect
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, cast, runtime_checkable
+from typing import Any, Literal, Protocol, cast, get_type_hints, runtime_checkable
+
+from typer.models import ArgumentInfo
 
 from openlinx.cli.options import FORMAT_PARAMETER, option_meta, option_names
 from openlinx.output.codes import INVALID_VALUE, MORE_ITEMS
@@ -24,7 +26,7 @@ class Example:
         return {"command": self.command, "description": self.description}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CommandMeta:
     name: str
     output: OutputKind
@@ -32,6 +34,7 @@ class CommandMeta:
     fields: Fields | None
     events: bool
     examples: tuple[Example, ...]
+    fields_by_argument: Mapping[str, Fields]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -72,16 +75,18 @@ def command_meta[**P](
     events: bool = False,
     name: str | None = None,
     examples: Sequence[Example] = (),
+    fields_by_argument: Mapping[str, Fields] | None = None,
 ) -> Callable[[Callable[P, Any]], CommandWithMeta[P]]:
     def decorate(command: Callable[P, Any]) -> CommandWithMeta[P]:
         # The one name of the Command: registration, linx commands, cursors and MCP use it.
         meta = CommandMeta(
-            name or command.__name__.replace("_", "-"),
-            output,
-            tuple(formats),
-            fields,
-            events,
-            tuple(examples),
+            name=name or command.__name__.replace("_", "-"),
+            output=output,
+            formats=tuple(formats),
+            fields=fields,
+            events=events,
+            examples=tuple(examples),
+            fields_by_argument=dict(fields_by_argument or {}),
         )
 
         @functools.wraps(command)
@@ -140,9 +145,31 @@ def check_command(command: Callable[..., Any]) -> CommandMeta:
         problems.append(f"a {meta.output} Command declares its fields")
     elif meta.fields is not None and not set(meta.fields.default) <= set(meta.fields.available):
         problems.append("its default fields are not all available")
+    if meta.fields_by_argument:
+        problems += _argument_field_problems(command, declared, meta)
     if problems:
         raise TypeError(f"Command {command.__name__}: {'; '.join(problems)}.")
     return meta
+
+
+def _argument_field_problems(
+    command: Callable[..., Any], declared: Mapping[str, inspect.Parameter], meta: CommandMeta
+) -> list[str]:
+    if meta.output == "document":
+        return ["a document Command has no fields by argument"]
+    hints = get_type_hints(inspect.unwrap(command), include_extras=True)
+    problems = []
+    for name, fields in meta.fields_by_argument.items():
+        annotation = getattr(hints.get(name), "__metadata__", ())
+        if (
+            name not in declared
+            or declared[name].default is inspect.Parameter.empty
+            or not any(isinstance(item, ArgumentInfo) for item in annotation)
+        ):
+            problems.append(f"it does not declare {name} as an optional argument")
+        if not set(fields.default) <= set(fields.available):
+            problems.append(f"its default fields for {name} are not all available")
+    return problems
 
 
 def check_group(group: CommandGroup) -> dict[Callable[..., Any], str]:

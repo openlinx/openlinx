@@ -1,12 +1,19 @@
 """Exercise list filters, paging and discovery through the public Issues Command."""
 
+import os
+from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from tests.support.cli import run_cli
+from openlinx.store.crawls import record_state
+from openlinx.store.records import RuleRow
+from openlinx.store.writer import CrawlWriter
+from tests.support.cli import run_cli, run_cli_process
+from tests.support.clock import FakeClock
 from tests.support.crawl_store import IssueExample, crawl_store
-from tests.support.crawls import create_crawl_at
+from tests.support.crawls import STARTED_AT, create_any_crawl, create_crawl_at
 from tests.support.workspace import TempWorkspace
 
 _FILTER_EXAMPLES: tuple[IssueExample, ...] = (
@@ -32,6 +39,17 @@ def category_crawl(temp_workspace: TempWorkspace) -> Path:
             "https://example.com/no-title": "<h1>Welcome</h1><h2>First section</h2>",
             "https://example.com/no-heading": "<title>Welcome</title><h2>First section</h2>",
         },
+    )
+
+
+@pytest.fixture
+def issue_detail_crawl(temp_workspace: TempWorkspace) -> Path:
+    return crawl_store(
+        temp_workspace,
+        example_issues=(
+            ("title-missing", "issue", "high", 3),
+            ("h1-missing", "warning", "medium", 1),
+        ),
     )
 
 
@@ -246,7 +264,8 @@ def test_unknown_issue_type(temp_workspace: TempWorkspace, issue_crawl: Path) ->
 def test_issues_is_described_as_a_list_command() -> None:
     listed = run_cli("commands")
     assert listed.exit_code == 0, listed.stderr
-    (entry,) = [command for command in listed.json()["commands"] if command["name"] == "issues"]
+    commands = listed.json()["commands"]
+    (entry,) = [command for command in commands if command["name"] == "issues"]
 
     assert (entry["output"], entry["formats"]) == ("list", ["json", "jsonl", "table"])
     assert entry["fields"] == {
@@ -267,6 +286,13 @@ def test_issues_is_described_as_a_list_command() -> None:
             "description",
         ],
     }
+    (argument,) = entry["arguments"]
+    assert (argument["name"], argument["required"], argument["default"]) == ("rule_id", False, None)
+    assert entry["fields_by_argument"] == {
+        "rule_id": {"available": ["url", "detail"], "default": ["url", "detail"]},
+    }
+    assert all("fields_by_argument" not in command for command in commands if command is not entry)
+    assert all(command["name"] != "issue" for command in commands)
     options = {option["name"]: option for option in entry["options"]}
     assert options.keys() == {
         "--category",
@@ -280,3 +306,198 @@ def test_issues_is_described_as_a_list_command() -> None:
         "--fields",
     }
     assert (options["--crawl"]["global"], options["--crawl"]["default"]) == (True, "latest")
+
+
+@pytest.mark.parametrize("rule_id", ["title-mising", "h2-missing"])
+def test_unknown_rule_id_uses_the_selected_crawl(issue_detail_crawl: Path, rule_id: str) -> None:
+    result = run_cli("issues", rule_id, "--crawl", str(issue_detail_crawl))
+
+    assert (result.exit_code, result.stdout) == (4, b"")
+    (error,) = result.errors()
+    assert error["code"] == "rule_not_found"
+    assert error["details"]["id"] == rule_id
+    suggestions = error["details"]["suggestions"]
+    assert suggestions
+    assert set(suggestions) <= {"title-missing", "h1-missing"}
+    if rule_id == "title-mising":
+        assert suggestions[0] == "title-missing"
+    assert "linx rules list" in error["hint"]
+
+
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [("--type", "issue"), ("--priority", "high"), ("--category", "content"), ("--type", "")],
+)
+def test_list_filters_with_rule_id_fail_before_selecting_a_crawl(
+    temp_workspace: TempWorkspace, flag: str, value: str
+) -> None:
+    missing = temp_workspace.root / "missing.sqlite"
+    result = run_cli("issues", "title-missing", "--crawl", str(missing), f"{flag}={value}")
+
+    assert (result.exit_code, result.stdout) == (2, b"")
+    (error,) = result.errors()
+    assert error["code"] == "invalid_value"
+    assert error["details"]["flag"] == flag
+    message = error["message"].lower()
+    hint = error["hint"].lower()
+    assert flag in message
+    assert "filter" in message
+    assert "issue list" in message or "list of issues" in message
+    assert "rule id" in hint
+    assert any(word in hint for word in ("omit", "remove", "drop"))
+
+
+@pytest.mark.parametrize(
+    ("rule_args", "unknown"),
+    [pytest.param((), "url", id="list"), pytest.param(("title-missing",), "rule_id", id="detail")],
+)
+def test_issue_fields_match_discovery(
+    issue_detail_crawl: Path, rule_args: tuple[str, ...], unknown: str
+) -> None:
+    discovery = run_cli("commands")
+    assert discovery.exit_code == 0, discovery.stderr
+    (entry,) = [command for command in discovery.json()["commands"] if command["name"] == "issues"]
+    fields = entry["fields_by_argument"]["rule_id"] if rule_args else entry["fields"]
+    args = ("issues", *rule_args, "--crawl", str(issue_detail_crawl), "--limit", "1")
+
+    default = run_cli(*args)
+    all_fields = run_cli(*args, "--fields", "all")
+    wrong_field = run_cli(*args, "--fields", unknown)
+
+    assert default.exit_code == 0, default.stderr
+    assert all_fields.exit_code == 0, all_fields.stderr
+    assert [list(item) for item in default.json()["items"]] == [fields["default"]]
+    assert [list(item) for item in all_fields.json()["items"]] == [fields["available"]]
+    assert (wrong_field.exit_code, wrong_field.stdout) == (2, b"")
+    (error,) = wrong_field.errors()
+    assert error["code"] == "unknown_field"
+    assert error["details"] == {"field": unknown, "available": fields["available"]}
+
+
+def test_issue_detail_preserves_a_wide_recorded_threshold(temp_workspace: TempWorkspace) -> None:
+    max_hops = 10**700 + 7
+    recorded = RuleRow(
+        id="redirect-chain",
+        category="response_codes",
+        issue_type="warning",
+        priority="medium",
+        applies_to="internal_urls",
+        enabled=True,
+        thresholds={"max_hops": max_hops},
+        description="An Internal URL has a Redirect Chain longer than max_hops.",
+        why_it_matters="Each redirect adds a request.",
+        how_to_fix="Link directly to the destination.",
+        reproduce_sql="SELECT id AS url_id, NULL AS detail FROM urls WHERE 0",
+    )
+    crawl = create_any_crawl(temp_workspace, rules=[recorded]).path
+    with CrawlWriter(crawl, FakeClock()) as writer:
+        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=1)))
+
+    result = run_cli_process(
+        "issues",
+        "redirect-chain",
+        "--crawl",
+        str(crawl),
+        env={**os.environ, "PYTHONINTMAXSTRDIGITS": "640"},
+    )
+
+    assert result.exit_code == 0, result.stderr
+    rule = result.json()["rule"]
+    assert rule["rule_id"] == "redirect-chain"
+    assert rule["thresholds"] == {"max_hops": max_hops}
+    assert type(rule["thresholds"]["max_hops"]) is int
+
+
+@pytest.mark.parametrize(
+    ("rule_args", "projection", "first_item", "remaining_fields", "remaining_items", "total"),
+    [
+        pytest.param(
+            (),
+            " affected_count , rule_id, affected_count ",
+            {"affected_count": 3, "rule_id": "title-missing"},
+            "rule_id",
+            [{"rule_id": "h1-missing"}],
+            2,
+            id="list",
+        ),
+        pytest.param(
+            ("title-missing",),
+            " detail , url, detail ",
+            {"detail": None, "url": "https://example.com/title-missing/0"},
+            "url",
+            [
+                {"url": "https://example.com/title-missing/1"},
+                {"url": "https://example.com/title-missing/2"},
+            ],
+            3,
+            id="detail",
+        ),
+    ],
+)
+def test_projection_can_change_between_issue_pages(
+    issue_detail_crawl: Path,
+    rule_args: tuple[str, ...],
+    projection: str,
+    first_item: dict[str, Any],
+    remaining_fields: str,
+    remaining_items: list[dict[str, Any]],
+    total: int,
+) -> None:
+    args = ("issues", *rule_args, "--crawl", str(issue_detail_crawl))
+    first = run_cli(*args, "--limit", "1", "--fields", projection)
+    assert first.exit_code == 0, first.stderr
+    first_page = first.json()
+    assert (first_page["total"], first_page["items"]) == (total, [first_item])
+    assert list(first_page["items"][0]) == list(first_item)
+    cursor = first_page["next_cursor"]
+    assert isinstance(cursor, str)
+    assert cursor
+
+    last = run_cli(*args, "--limit", "2", "--fields", remaining_fields, "--cursor", cursor)
+    count = run_cli(*args, "--limit", "0", "--cursor", cursor)
+    assert last.exit_code == 0, last.stderr
+    assert count.exit_code == 0, count.stderr
+    last_page, count_page = last.json(), count.json()
+    assert (last_page["total"], last_page["items"], last_page["next_cursor"]) == (
+        total,
+        remaining_items,
+        None,
+    )
+    assert (count_page["total"], count_page["items"], count_page["next_cursor"]) == (
+        total,
+        [],
+        None,
+    )
+    if rule_args:
+        assert first_page["rule"]["rule_id"] == "title-missing"
+        assert first_page["rule"] == last_page["rule"] == count_page["rule"]
+    else:
+        assert all("rule" not in page for page in (first_page, last_page, count_page))
+
+
+def test_issue_cursors_are_bound_to_the_form_crawl_and_rule(
+    temp_workspace: TempWorkspace, issue_detail_crawl: Path
+) -> None:
+    selected = ("--crawl", str(issue_detail_crawl), "--limit", "1")
+    issue_list = run_cli("issues", *selected)
+    detail = run_cli("issues", "title-missing", *selected)
+    assert issue_list.exit_code == 0, issue_list.stderr
+    assert detail.exit_code == 0, detail.stderr
+    list_cursor = issue_list.json()["next_cursor"]
+    detail_cursor = detail.json()["next_cursor"]
+    assert isinstance(list_cursor, str)
+    assert list_cursor
+    assert isinstance(detail_cursor, str)
+    assert detail_cursor
+    other = create_crawl_at(temp_workspace, "2026-09-27T15:00:00.000Z", "next").path
+
+    for args in (
+        ("title-missing", *selected, "--cursor", list_cursor),
+        (*selected, "--cursor", detail_cursor),
+        ("h1-missing", *selected, "--cursor", detail_cursor),
+        ("title-missing", "--crawl", str(other), "--cursor", detail_cursor),
+    ):
+        wrong = run_cli("issues", *args)
+        assert (wrong.exit_code, wrong.stdout) == (2, b"")
+        (error,) = wrong.errors()
+        assert error["code"] == "invalid_cursor"

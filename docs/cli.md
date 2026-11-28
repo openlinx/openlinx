@@ -115,6 +115,12 @@ With `jsonl` and `table` there is no envelope. When more items exist than were p
 {"level":"error","code":"unknown_field","message":"This Command has no field size.","hint":"Use --fields with any of: n, sq, or all.","details":{"field":"size","available":["n","sq"]}}
 ```
 
+When an optional argument changes the list's items, the entry in `linx commands`
+also has `fields_by_argument`. Each key is the argument name and maps to
+`{available, default}`. For `issues`, `fields` describes the Issue list.
+`fields_by_argument.rule_id` describes the Affected URLs and defaults to
+`["url", "detail"]`.
+
 ## Diagnostics
 
 Errors, warnings and info lines are JSON objects, one per line on stderr. Each has exactly these keys:
@@ -196,6 +202,10 @@ after selection when continuing a Crawl, see [Writer ownership](crawl-store.md#w
 `linx issues` returns one item per Issue, with its Rule ID, category, Issue Type, Priority, Affected URL count and recorded Rule description. It orders by Issue Type (issue, warning, opportunity), then Priority (high, medium, low), then by decreasing Affected URL count, then by ascending Rule ID.
 
 Use `--type`, `--priority` and `--category` to select Issues. Values can be comma-separated, repeated or given in mixed case. Each flag accepts any of its values, and an Issue must match every supplied flag. For example, `linx issues --type issue,warning --priority high` lists the high Priority Issues and Warnings. Use `linx issues --category headings` to list Issues in the headings category. To see the category IDs, run `linx schema rules` and look at the values for `category`. A [cursor](#lists-paging-fields-and-cursors) belongs to the selected Crawl ID and the filter values. If `latest` resolves to another Crawl, start again without a cursor or select the original Crawl.
+
+`linx issues <rule-id>` returns the recorded Rule in the JSON header and pages
+its Affected URLs in URL order. Use `--fields`, `--limit` and `--cursor` with
+either form. Omit the Rule ID to use `--type`, `--priority` or `--category`.
 
 ## Exit codes
 

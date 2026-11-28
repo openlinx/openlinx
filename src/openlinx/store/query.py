@@ -72,7 +72,7 @@ def issue_detail_in(
     check_rule_tables(connection, path)
     source = affected_urls_in(connection, rule_id, catalogue).subquery()
     row = connection.execute(_RECORDED_RULE, {"rule_id": rule_id}).mappings().one()
-    rule = dict(row)
+    rule = {str(key): value for key, value in row.items()}
     rule["thresholds"] = decode_json_object(row["thresholds"])
     total: int = connection.execute(select(func.count()).select_from(source)).scalar_one()
     if limit == 0:

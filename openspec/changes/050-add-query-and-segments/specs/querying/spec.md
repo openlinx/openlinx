@@ -34,6 +34,8 @@ The `summary`, `pages`, `page`, `issues`, `sql` and, from v0.2, `export` Command
 - `list` for `pages` and `issues`
 - `rows` for `export` (v0.2)
 
+The single `issues` entry SHALL describe `rule_id` as an optional argument. Its `fields` member SHALL describe the Issue list used when that argument is absent. Its `fields_by_argument.rule_id` member SHALL describe the Affected URL fields used when the argument is supplied, using the same `{available, default}` structure. Both descriptions SHALL match the fields each form accepts and returns by default.
+
 #### Scenario: The flags of pages are listed
 - **WHEN** `linx commands --format json` runs
 - **THEN** the entry for `pages` lists the flags `--where`, `--fields`, `--sort`, `--limit` and `--cursor`
@@ -41,6 +43,11 @@ The `summary`, `pages`, `page`, `issues`, `sql` and, from v0.2, `export` Command
 #### Scenario: Output kinds
 - **WHEN** `linx commands --format json` runs
 - **THEN** the entries for `summary`, `pages` and `sql` have the output kinds `document`, `list` and `document`
+
+#### Scenario: Field discovery for both forms of issues
+- **WHEN** `linx commands --format json` runs
+- **THEN** the `issues` entry lists `rule_id` as an optional argument, `fields.default` contains `affected_count`, and `fields_by_argument.rule_id.default` is `["url", "detail"]`
+- **AND** `fields_by_argument.rule_id.available` lists the fields accepted by `--fields` when a rule id is supplied
 
 #### Scenario: The diagnostic codes of sql are listed
 - **WHEN** `linx commands --format json` runs
@@ -614,6 +621,8 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 
 A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `items`. An unknown rule id SHALL be rejected with the error code `rule_not_found` of `040-add-rules`. The hint SHALL mention `linx rules list`, and `details.suggestions` SHALL list the closest rule ids.
 
+With a rule id, an explicit `--type`, `--priority` or `--category` SHALL be rejected with `invalid_value` before selecting a Crawl. The diagnostic SHALL identify the incompatible option and explain that it filters the Issue list.
+
 #### Scenario: Most-linked Affected URLs first
 - **WHEN** the Issue `title-too-long` has the Affected URLs A (unique_inlinks 5), B (12) and C (null)
 - **AND** `linx issues title-too-long` runs
@@ -650,6 +659,10 @@ A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `i
 #### Scenario: Unknown rule id
 - **WHEN** `linx issues title-mising` runs
 - **THEN** the exit code is 4, the error has the code `rule_not_found`, and its `details.suggestions` starts with `title-missing`
+
+#### Scenario: A list filter is supplied with a rule id
+- **WHEN** `linx issues title-missing --type issue`, `linx issues title-missing --priority high` or `linx issues title-missing --category content` runs
+- **THEN** each invocation exits with code 2 and `invalid_value`, names the supplied option and tells the caller to omit the rule id to filter the Issue list
 
 ### Requirement: Read-only SQL
 
