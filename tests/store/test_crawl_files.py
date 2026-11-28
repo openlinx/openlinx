@@ -1,6 +1,8 @@
 """Verify Crawl file creation within a Workspace."""
 
+import errno
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -116,30 +118,6 @@ def test_an_id_with_a_writer_claim_file_is_drawn_again(temp_workspace: TempWorks
     )
 
 
-def test_an_id_claimed_after_the_sqlite_existence_check_is_drawn_again(
-    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    workspace = resolve_workspace(cwd=temp_workspace.root, flag=None, home=temp_workspace.home)
-    candidate = workspace.crawls_dir / "20260927-140312-k3f9.sqlite"
-    lock = candidate.with_suffix(".lock")
-    exists = Path.exists
-
-    def claim_after_check(path: Path) -> bool:
-        found = exists(path)
-        if path == candidate and not found:
-            lock.write_bytes(b"reserved")
-        return found
-
-    monkeypatch.setattr(Path, "exists", claim_after_check)
-
-    with create_crawl(
-        new_crawl(workspace), FakeClock(start=STARTED_AT), Collected(), scripted_choice("k3f9m2p7")
-    ) as crawl:
-        pass
-
-    assert (crawl.id, lock.read_bytes()) == ("20260927-140312-m2p7", b"reserved")
-
-
 _CREATE_WITH_COLLIDING_ID = """
 import sys
 from pathlib import Path
@@ -182,6 +160,45 @@ def test_an_id_claimed_before_its_sqlite_file_exists_is_drawn_again(
         )
 
     assert (created.returncode, created.stdout) == (0, "20260927-140312-m2p7\n"), created.stderr
+
+
+@pytest.mark.skipif(
+    sys.implementation.name != "cpython"
+    or sys.version_info[:2] != (3, 12)
+    or sys.platform == "win32",
+    reason="CPython 3.12 POSIX resolves symlink chains recursively",
+)
+def test_writer_claim_propagates_recursion_error_from_an_acyclic_symlink_chain(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target.sqlite"
+    target.touch()
+    for index in range(sys.getrecursionlimit()):
+        link = tmp_path / f"link-{index}.sqlite"
+        link.symlink_to(target.name)
+        target = link
+    crawl = CrawlFile("20260927-140312-k3f9", target)
+
+    active_error = OSError(errno.ELOOP, "An unrelated symlink loop")
+    try:
+        raise active_error
+    except OSError:
+        with pytest.raises(RecursionError) as caught, claim_writer(crawl):
+            pytest.fail("The writer claim was acquired despite the resolution failure")
+
+        assert caught.value.__context__ is active_error
+
+
+def test_writer_claim_propagates_an_unrelated_symlink_loop_from_its_body(tmp_path: Path) -> None:
+    crawl = CrawlFile("20260927-140312-k3f9", tmp_path / "20260927-140312-k3f9.sqlite")
+    failure = RuntimeError("Owner failed")
+    # Match the implicit chain that Path.resolve creates on Python 3.12.
+    failure.__context__ = OSError(errno.ELOOP, "An unrelated symlink loop")
+
+    with pytest.raises(RuntimeError) as caught, claim_writer(crawl):
+        raise failure
+
+    assert caught.value is failure
 
 
 def test_unwritable_crawls_folder(temp_workspace: TempWorkspace) -> None:

@@ -4,8 +4,9 @@ import difflib
 import re
 import sys
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -29,9 +30,13 @@ from openlinx.workspace.toml_order import (
     decimal_digits,
     declarations,
     file_positions,
+    format_toml_key,
     oversized_decimals,
     replace_literals,
 )
+
+# Bound recovery even for literals that are not in a field with its own digit limit.
+_DECIMAL_RECOVERY_LIMIT = 4300
 
 
 @dataclass(frozen=True)
@@ -79,7 +84,7 @@ def load_settings(
     try:
         # Validate and order diagnostics from the same bytes even if the file is replaced.
         source = settings_file.read_bytes().decode("utf-8") if settings_file.is_file() else ""
-        file_values, positions = _read_toml(source, fields)
+        file_values, positions, unrecovered = _read_toml(source, fields)
     except UnicodeDecodeError as error:
         problem: dict[str, Any] = {"key": None, "message": "The file is not UTF-8.", "line": None}
         raise _invalid(settings_file, "is not UTF-8", [problem]) from error
@@ -87,36 +92,70 @@ def load_settings(
         problem = {"key": None, "message": str(error), "line": _line(error)}
         raise _invalid(settings_file, "is not valid TOML", [problem]) from error
     root_model = create_model("OpenLinxSettings", __base__=_sources(file_values), **fields)
+    problems: list[tuple[Key, str]] = []
+    validation_error = None
+    hint = None
     try:
-        return Settings(root_model(**values))
+        settings = Settings(root_model(**values))
     except ValidationError as error:
         refused = refused_given_value(error, values)
         if refused is not None:
             raise refused from error
-        problems = error.errors()
+        settings = None
+        validation_error = error
+        problems.extend((detail["loc"], detail["msg"]) for detail in error.errors())
+        hint = _suggestion(error, root_model)
+    if len(problems) > 1 or unrecovered:
+        # Use the same normalization and table choice as the settings source.
+        source_roots = InitSettingsSource(root_model, {key: key for key in file_values})()
+        if unrecovered:
+            overrides = InitSettingsSource(root_model, values)()
+            diagnosed = tuple(key for key, _ in problems)
+            problems.extend(
+                (key, "The decimal integer exceeds this Python process's conversion limit.")
+                for key in _selected_file_paths(unrecovered, source_roots, overrides)
+                if not any(key[: len(location)] == location for location in diagnosed)
+            )
         if len(problems) > 1:
             if positions is None:
                 positions = file_positions(declarations(source))
-            # Ask the file's settings source which spelling supplied each canonical root.
-            # Distinct TOML tables can have names that differ only in case.
-            source_roots = InitSettingsSource(root_model, {key: key for key in file_values})()
-            problems.sort(key=lambda problem: _position(problem["loc"], positions, source_roots))
+            problems.sort(key=lambda problem: _position(problem[0], positions, source_roots))
+    if problems:
         raise _invalid(
             settings_file,
             "is invalid",
-            [
-                {"key": ".".join(map(str, problem["loc"])), "message": problem["msg"]}
-                for problem in problems
-            ],
-            hint=_suggestion(error, root_model),
-        ) from error
+            [{"key": format_toml_key(key), "message": message} for key, message in problems],
+            hint=hint,
+        ) from validation_error
+    if settings is None:
+        raise RuntimeError("settings validation must return settings or report an error")
+    return settings
+
+
+def _selected_file_paths(
+    keys: Iterable[Key], source_roots: Mapping[str, str], overrides: dict[str, Any]
+) -> Iterator[Key]:
+    canonical_roots = {original: canonical for canonical, original in source_roots.items()}
+    for root, *children in keys:
+        if not isinstance(root, str) or root not in canonical_roots:
+            continue
+        key = (canonical_roots[root], *children)
+        # The sources merge dictionaries. An explicit scalar or collection replaces its subtree.
+        override: object = overrides
+        for part in key:
+            if not isinstance(override, dict):
+                break
+            if part not in override:
+                yield key
+                break
+            override = override[part]
 
 
 def _read_toml(
     source: str, fields: Mapping[str, tuple[Table, Any]]
-) -> tuple[dict[str, Any], dict[Key, int] | None]:
+) -> tuple[dict[str, Any], dict[Key, int] | None, tuple[Key, ...]]:
     try:
-        return tomllib.loads(source), None
+        return tomllib.loads(source), None, ()
     except tomllib.TOMLDecodeError:
         raise
     except ValueError:
@@ -128,7 +167,7 @@ def _read_toml(
 
 def _recover_decimal_overflow(
     source: str, fields: Mapping[str, tuple[Table, Any]]
-) -> tuple[dict[str, Any], dict[Key, int]] | None:
+) -> tuple[dict[str, Any], dict[Key, int], tuple[Key, ...]] | None:
     # Check syntax with neutral values before walking declarations. The walker assumes valid
     # TOML, while a conversion error can stop tomllib before it reaches malformed syntax.
     overflows = {
@@ -139,27 +178,39 @@ def _recover_decimal_overflow(
         return None
     probe = replace_literals(source, ((literal, "0") for literal in overflows.values()))
     try:
-        tomllib.loads(probe)
+        decoded = tomllib.loads(probe)
     except tomllib.TOMLDecodeError:
         raise
     except ValueError:
         return None
 
-    # Reparse the original data with replacements only for confirmed bounded fields. The
-    # probe's values must never reach settings, including on files with an unrelated overflow.
+    # Restore each confirmed integer in the parsed document. Keeping the original shape lets
+    # the same model reject unknown keys and wrong types, including integers inside collections.
     located = list(declarations(probe))
-    replacements: list[tuple[re.Match[str], str]] = []
+    unrecovered: list[Key] = []
     for key, token in located:
-        if token is None or (literal := overflows.get(token.start())) is None:
+        if token is None or (literal := overflows.pop(token.start(), None)) is None:
             continue
         limit = _decimal_limit(key, fields)
-        if limit is None or decimal_digits(literal[0]) <= limit:
-            return None
-        replacement = "-1" if literal[0].startswith("-") else hex(10**limit)
-        replacements.append((literal, replacement))
-    if len(replacements) != len(overflows):
+        maximum = _DECIMAL_RECOVERY_LIMIT if limit is None else limit
+        if decimal_digits(literal[0]) <= maximum:
+            number = int(Decimal(literal[0]))
+        elif limit is not None:
+            number = -1 if literal[0].startswith("-") else 10**limit
+        else:
+            # Preserve the integer type, sign and large magnitude for validation. If the model
+            # accepts the placeholder, refuse only a value that survives source precedence.
+            number = 10**maximum
+            if literal[0].startswith("-"):
+                number = -number
+            unrecovered.append(key)
+        container: Any = decoded
+        for part in key[:-1]:
+            container = container[part]
+        container[key[-1]] = number
+    if overflows:
         return None
-    return tomllib.loads(replace_literals(source, replacements)), file_positions(located)
+    return decoded, file_positions(located), tuple(unrecovered)
 
 
 def _decimal_limit(key: Key, fields: Mapping[str, tuple[Table, Any]]) -> int | None:

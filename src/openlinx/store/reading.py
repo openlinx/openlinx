@@ -12,16 +12,25 @@ from openlinx.naming import PRODUCT_NAME
 from openlinx.output.codes import CRAWL_SCHEMA_TOO_NEW
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import READER_BUSY_SECONDS, busy_error, is_busy, opening
+from openlinx.store.identity import check_crawl_id
+from openlinx.store.records import CrawlFile, CrawlFileIdentity
 from openlinx.store.schema import SCHEMA_VERSION, crawl
+
+_CRAWL_ID = select(crawl.c.id)
 
 
 @contextmanager
-def reading(path: Path, *, snapshot: bool = False) -> Iterator[Connection]:
-    """Pin one snapshot in WAL, and in rollback-journal mode when requested."""
+def reading(
+    path: Path, *, identity: CrawlFileIdentity | None = None, snapshot: bool = False
+) -> Iterator[Connection]:
+    """Pin a snapshot in WAL and on request in rollback-journal mode."""
     try:
-        with opening(path, role="read") as engine, engine.connect() as connection:
+        with (
+            opening(path, role="read", identity=identity) as engine,
+            engine.connect() as connection,
+        ):
             # Legacy SQLite transactions do not begin on SELECT. A rollback-journal
-            # snapshot can delay Writer commits, so callers opt in for compound reads.
+            # snapshot can delay Writer commits, so compound readers opt in.
             if snapshot or connection.exec_driver_sql("PRAGMA journal_mode").scalar_one() == "wal":
                 connection.exec_driver_sql("BEGIN")
             _check_schema_version(connection, path)
@@ -30,6 +39,14 @@ def reading(path: Path, *, snapshot: bool = False) -> Iterator[Connection]:
         if not is_busy(error):
             raise
         raise busy_error(path, "reading", READER_BUSY_SECONDS, error) from error
+
+
+@contextmanager
+def reading_selected(selected: CrawlFile) -> Iterator[Connection]:
+    """Confirm the recorded Crawl ID in the snapshot used for the response."""
+    with reading(selected.path, identity=selected.identity, snapshot=True) as connection:
+        check_crawl_id(selected.path, selected.id, connection.execute(_CRAWL_ID).scalar_one())
+        yield connection
 
 
 def _check_schema_version(connection: Connection, path: Path) -> None:
@@ -45,6 +62,6 @@ def _check_schema_version(connection: Connection, path: Path) -> None:
         )
 
 
-def read_metadata(path: Path) -> dict[str, Any]:
-    with reading(path) as connection:
+def read_metadata(path: Path, *, identity: CrawlFileIdentity | None = None) -> dict[str, Any]:
+    with reading(path, identity=identity) as connection:
         return dict(connection.execute(select(crawl)).mappings().one())

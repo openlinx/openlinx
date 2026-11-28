@@ -2,12 +2,14 @@
 
 import asyncio
 import time
+from contextlib import closing
+from http.client import HTTPConnection, RemoteDisconnected
 
 import aiohttp
 import pytest
 
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Responses, Site, Status
 from tests.fixture_site.server import RunningServer
 from tests.fixture_site.sites.exact import site as exact
 
@@ -67,6 +69,26 @@ async def test_hang_never_answers_and_the_server_still_stops_quickly() -> None:
         stopped_in = time.monotonic() - started
 
     assert stopped_in < 2
+
+
+def test_reset_before_headers_drops_the_response_then_uses_the_next_answer(
+    fixture_site: StartSite,
+) -> None:
+    drop = Status(200, reset_before_headers=True)
+    server = fixture_site(Site({"/drop": Responses((drop, Page(body="recovered")))}))
+
+    with closing(HTTPConnection(server.base_url.removeprefix("http://"), timeout=5)) as client:
+        client.request("GET", "/drop")
+        with pytest.raises((RemoteDisconnected, ConnectionResetError)):
+            client.getresponse()
+        client.request("GET", "/drop")
+        with client.getresponse() as response:
+            received = response.status, response.read()
+
+    assert (
+        [(request.method, request.path) for request in server.requests],
+        received,
+    ) == ([("GET", "/drop"), ("GET", "/drop")], (200, b"recovered"))
 
 
 async def test_reset_after_resets_the_connection_inside_the_body(fixture_site: StartSite) -> None:

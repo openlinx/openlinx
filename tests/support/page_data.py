@@ -204,7 +204,6 @@ LATER_PAGE_COLUMNS = {
     "http_version": "v0.2",
     "title_1_width_px": "v0.2",
     "title_2_width_px": "v0.2",
-    "meta_description_1_width_px": "v0.2",
     "meta_description_2_width_px": "v0.2",
     "syllable_count": "v0.2",
     "flesch_reading_ease": "v0.2",

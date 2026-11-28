@@ -26,9 +26,9 @@ from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.cli import await_event, start_cli_process
 from tests.support.clock import FakeClock
-from tests.support.crawl_store import crawl_store
 from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
+from tests.support.rules import PREVIEW_NO_ROWS, V01_RULE_IDS
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import replay_now
 
@@ -112,8 +112,8 @@ def test_detail_is_stored_as_json(fixture_site: StartSite) -> None:
     assert _decoded_details(query(file, sql)) == _decoded_details([(url_id, detail)])
 
 
-@pytest.mark.usefixtures("temp_workspace")
-def test_rule_that_did_not_fire_has_no_issue(fixture_site: StartSite) -> None:
+@pytest.fixture
+def crawl_with_one_title_per_page(temp_workspace: TempWorkspace, fixture_site: StartSite) -> Path:
     server = fixture_site(
         Site(
             {
@@ -124,8 +124,11 @@ def test_rule_that_did_not_fire_has_no_issue(fixture_site: StartSite) -> None:
             }
         )
     )
-    file = crawled(server.url("/rules/"))
+    return crawled(server.url("/rules/"))
 
+
+def test_rule_that_did_not_fire_has_no_issue(crawl_with_one_title_per_page: Path) -> None:
+    file = crawl_with_one_title_per_page
     assert query(file, "SELECT state FROM crawl") == [("completed",)]
     assert query(
         file,
@@ -138,6 +141,20 @@ def test_rule_that_did_not_fire_has_no_issue(fixture_site: StartSite) -> None:
         "SELECT rule_id, affected_count FROM issues "
         "WHERE rule_id IN ('h1-missing', 'title-missing') ORDER BY rule_id",
     ) == [("h1-missing", 1)]
+
+
+def test_multiple_titles_have_no_issue_when_all_pages_have_one_title(
+    crawl_with_one_title_per_page: Path,
+) -> None:
+    file = crawl_with_one_title_per_page
+    assert query(file, "SELECT state FROM crawl") == [("completed",)]
+    assert query(
+        file,
+        "SELECT pages.url_path, pages.title_count FROM pages JOIN urls ON urls.id = pages.url_id "
+        "WHERE urls.parsed = 1 ORDER BY pages.url_path",
+    ) == [("/rules/", 1), ("/rules/shoes", 1)]
+    assert query(file, "SELECT enabled FROM rules WHERE id = 'title-multiple'") == [(1,)]
+    assert query(file, "SELECT rule_id FROM issues WHERE rule_id = 'title-multiple'") == []
 
 
 @pytest.mark.usefixtures("temp_workspace")
@@ -209,39 +226,46 @@ def test_a_running_crawl_writes_no_affected_url(fixture_site: StartSite) -> None
     assert result.summary.state == "completed"
 
 
-async def test_a_second_pass_does_not_duplicate_rows(temp_workspace: TempWorkspace) -> None:
-    file = crawl_store(
-        temp_workspace,
-        pages={
-            "https://example.com/boots": "<title>Shoes</title>",
-            "https://example.com/trainers": "<title>Shoes</title>",
-        },
-        completed=False,
-    )
-    (issues_pass,) = (
-        crawl_pass for crawl_pass in default_hooks().passes if crawl_pass.name == "issues"
-    )
+@pytest.mark.usefixtures("temp_workspace")
+def test_a_second_pass_does_not_duplicate_rows(fixture_site: StartSite) -> None:
+    server = fixture_site(DUPLICATE_TITLE_PAGES)
+    reporter = Collected()
+    defaults = default_hooks()
+    (issues_pass,) = (crawl_pass for crawl_pass in defaults.passes if crawl_pass.name == "issues")
     expected = [
-        ("https://example.com/boots", {"title_1": "Shoes", "pages": 2}),
-        ("https://example.com/trainers", {"title_1": "Shoes", "pages": 2}),
+        (server.url("/rules/"), {"title_1": "Shoes", "pages": 2}),
+        (server.url("/rules/trainers"), {"title_1": "Shoes", "pages": 2}),
     ]
     sql = (
         "SELECT urls.url, affected_urls.detail FROM affected_urls "
         "JOIN urls ON urls.id = affected_urls.url_id "
         "WHERE affected_urls.rule_id = 'title-duplicate' ORDER BY urls.url"
     )
-    assert query(file, sql) == []
+    passes_observed = []
 
-    clock = FakeClock()
-    with CrawlWriter(file, clock) as writer:
-        context = PassContext(writer, clock)
+    async def run_issues_twice(context: PassContext) -> None:
+        (started,) = (data for name, data in reporter.events if name == "crawl_started")
+        file = Path(started["crawl_file"])
+        assert query(file, sql) == []
+
         for pass_number in (1, 2):
             await issues_pass.run(context)
-            await writer.flush_async()
+            await context.writer.flush_async()
             stored = query(file, sql)
             assert [(url, json.loads(detail)) for url, detail in stored] == expected, (
                 f"after Issues pass {pass_number}"
             )
+            passes_observed.append(pass_number)
+
+    repeated_issues = Pass("repeat-issues", run_issues_twice)
+    hooks = replace(
+        defaults,
+        passes=tuple(repeated_issues if item is issues_pass else item for item in defaults.passes),
+    )
+    result = crawl_result(server.url("/rules/"), hooks, reporter=reporter)
+
+    assert result.summary.state == "completed"
+    assert passes_observed == [1, 2]
 
 
 def test_replay_replaces_only_the_affected_urls_of_one_rule(
@@ -303,13 +327,14 @@ def test_a_rule_s_query_returns_its_stored_affected_urls(fixture_site: StartSite
     assert query(file, "SELECT state FROM crawl") == [("completed",)]
     assert (server.url("/rules/untitled"), None) in stored_missing_titles(file)
     rules = dict(query(file, "SELECT id, reproduce_sql FROM rules WHERE enabled = 1"))
-    assert {"title-missing", "internal-4xx"} <= rules.keys()
+    assert rules.keys() == V01_RULE_IDS
     assert query(
         file,
         "SELECT url FROM affected_urls JOIN urls ON urls.id = affected_urls.url_id "
         "WHERE rule_id = 'internal-4xx'",
     ) == [(server.url("/rules/gone"),)]
     for rule_id, sql in rules.items():
+        assert sql.strip() != PREVIEW_NO_ROWS, rule_id
         stored = query(
             file, "SELECT url_id, detail FROM affected_urls WHERE rule_id = ?", (rule_id,)
         )
@@ -463,7 +488,15 @@ def test_issue_visible_before_the_crawl_ends(
             for item in affected
         ]
         assert (issues, urls) == (
-            [("title-missing", 1), ("meta-description-missing", 2), ("h1-missing", 2)],
+            [
+                ("http-url", 2),
+                ("title-missing", 1),
+                ("title-too-short", 1),
+                ("meta-description-missing", 2),
+                ("h1-missing", 2),
+                ("canonical-missing", 2),
+                ("low-word-count", 2),
+            ],
             [server.url("/notitle")],
         )
     finally:

@@ -20,7 +20,6 @@ from tests.fixture_site.routes import (
     CONTENT_TYPES,
     DEFAULT_CONTENT_TYPE,
     Answer,
-    Bytes,
     LargeFile,
     Page,
     Redirect,
@@ -147,8 +146,6 @@ def _respond(site: Site, route: Answer, base_url: str) -> web.StreamResponse:
     match route:
         case Page():
             return _page_response(site, route, base_url)
-        case Bytes(body=body):
-            return web.Response(body=body, headers={"Content-Type": DEFAULT_CONTENT_TYPE})
         case Status(code=code, body=None, reason=reason):
             return web.Response(status=code, reason=reason)
         case Status(code=code, body=body, reason=reason):
@@ -275,6 +272,11 @@ def _build_app(
             await asyncio.sleep(route.delay)
         if route.hang:
             await asyncio.Event().wait()
+        if route.reset_before_headers:
+            transport = request.transport
+            assert transport is not None
+            transport.abort()
+            return web.Response()
         response = _respond(site, route, base_url())
         if route.content_type is not None:
             response.headers["Content-Type"] = route.content_type

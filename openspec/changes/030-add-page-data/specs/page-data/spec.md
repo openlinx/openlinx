@@ -293,7 +293,7 @@ A Page SHALL have `redirect_url` and `redirect_type` set in these cases:
 
 - **HTTP redirect.** A Page with a 3xx status code has `redirect_type` `http_redirect`. Its `redirect_url` is the URL that `urls.redirect_url_id` (`022-add-fetch-policy`) points to, or NULL when that is null.
 - **HTTP Refresh.** A Page with a 2xx status code whose `Refresh` header names a URL different from its own URL, the target of the `http_refresh` Link that `020-add-crawl-core` discovers, has `redirect_type` `http_refresh` and `redirect_url` set to that URL.
-- **Meta refresh.** An analysed Page without an HTTP Refresh redirect, whose meta refresh names a URL different from its own URL, has `redirect_type` `meta_refresh` and `redirect_url` set to that URL (see "Meta refresh").
+- **Meta refresh.** An analysed Page without an HTTP Refresh redirect has `redirect_type` `meta_refresh` and `redirect_url` set to the target selected by "Meta refresh" below, when that target differs from the Page's own URL.
 
 In every other case both columns SHALL be NULL. `redirect_type` also lists `javascript_redirect`, which JavaScript rendering fills from v1.1.
 
@@ -454,17 +454,17 @@ Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the docu
   - `h2_2` and `h2_2_length` are NULL
 
 ### Requirement: SERP pixel widths
-From v0.2, pixel widths SHALL be computed for titles and meta descriptions. In v0.1 the four width columns exist and are NULL (see "Columns measured by later releases stay NULL").
+**In short:** v0.1 stores the estimated desktop pixel width of the normalised first meta description.
 
+The Crawl SHALL measure `meta_description_1_width_px` at 14 px. A present but empty description gives 0. A missing description, unanalysed Page or failed Page extraction gives NULL. From v0.2 the same method SHALL measure `meta_description_2_width_px` at 14 px and `title_1_width_px` and `title_2_width_px` at 20 px.
 
-- `title_1_width_px` and `title_2_width_px` are the widths of the texts in Arial regular at 20 px.
-- `meta_description_1_width_px` and `meta_description_2_width_px` are the widths in Arial regular at 14 px.
+The Crawl SHALL sum the advances of the text's Unicode code points from the bundled Liberation Sans Regular table, multiply by the font size, divide by 2048 and round once to the nearest whole pixel, with halves rounded up. It SHALL apply no kerning or shaping. For a code point missing from the table, the Crawl SHALL apply the first matching row below using Unicode 16.0.0.
 
-Each width is the sum, over the text's characters, of advance × size ÷ 2048, rounded to the nearest whole pixel with halves rounded up. Advances come from a bundled table of Arial advance widths in units of 1/2048 em, and kerning is not applied. A character missing from the table SHALL count as:
-
-- 2048 units for East Asian Wide and Fullwidth characters
-- 0 for combining marks (Mn, Me) and format characters (Cf)
-- the advance of the digit `0` (1139 units) for any other character
+| Code point | Advance in units of 1/2048 em |
+|---|---:|
+| Nonspacing or enclosing mark (Mn, Me) or format character (Cf) | 0 |
+| East Asian Wide or Fullwidth | 2048 |
+| All others | 1139 (the advance of the digit `0`) |
 
 The result SHALL NOT depend on the fonts installed on the machine.
 
@@ -473,8 +473,16 @@ The result SHALL NOT depend on the fonts installed on the machine.
 - **THEN** `title_1_width_px` is 46
 
 #### Scenario: Meta description pixel width
-- **WHEN** an analysed Page's meta description is `Buy shoes`
-- **THEN** `meta_description_1_width_px` is 65
+- **WHEN** a Crawl analyses a Page whose first meta description normalises to `Buy shoes`
+- **THEN** the stored `meta_description_1` is `Buy shoes` and `meta_description_1_width_px` is 65
+
+#### Scenario: Unlisted combining marks add no width
+- **WHEN** the first meta description is `か` followed by U+3099 COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK
+- **THEN** `meta_description_1_width_px` is 14
+
+#### Scenario: Meta description pixel width rounds halves up
+- **WHEN** the first meta description is `iW+`
+- **THEN** `meta_description_1_width_px` is 25
 
 #### Scenario: Wide characters use one em
 - **WHEN** an analysed Page's title is `日本`
@@ -510,7 +518,9 @@ An analysed Page SHALL store the robots directives found in its HTML, and every 
 - **THEN** `x_robots_tag` is `noindex`, `x_robots_tag_noindex` is 1, `x_robots_tag_nofollow` is 0 and `meta_robots` is NULL
 
 ### Requirement: Meta refresh
-`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none. Only that first element can redirect: when its `content` names a URL, the refresh target is the target of the first `meta_refresh` Link that `020-add-crawl-core` discovers, and otherwise there is none.
+`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none.
+
+When the first element's `content` contains a URL reference, the meta refresh target SHALL be the target of the first `meta_refresh` Link that `020-add-crawl-core` discovers. A reference that cannot be resolved to a Link leaves a later element eligible to supply that first Link. If the first element has no URL reference or discovery finds no `meta_refresh` Link, there is no meta refresh target.
 
 #### Scenario: Meta refresh with a quoted target
 - **WHEN** the analysed Page `https://example.test/old` contains `<meta http-equiv="Refresh" content="5; URL='/new'">`
@@ -520,9 +530,14 @@ An analysed Page SHALL store the robots directives found in its HTML, and every 
 - **WHEN** an analysed Page contains `<meta http-equiv="refresh" content="30">`
 - **THEN** `meta_refresh` is `30` and `redirect_type` is NULL
 
-#### Scenario: Only the first meta refresh redirects
+#### Scenario: A first meta refresh without a URL prevents a later redirect
 - **WHEN** an analysed Page's head contains `<meta http-equiv="refresh" content="300">` and then `<meta http-equiv="refresh" content="0; url=/new">`
 - **THEN** `meta_refresh` is `300`, and `redirect_type` and `redirect_url` are NULL
+
+#### Scenario: An unresolvable first meta refresh uses the next Link
+- **WHEN** the analysed Page `{site}/old` responds 200 and contains `<meta http-equiv="refresh" content="0; url=http://[::1">` followed by `<meta http-equiv="refresh" content="0; url=/next">`
+- **THEN** the Crawl requests `{site}/next`, and the original Page has `meta_refresh` `0; url=http://[::1`, `redirect_type` `meta_refresh` and `redirect_url` `{site}/next`
+- **AND** its `indexability` is `non_indexable` and its `indexability_status` is `redirected`
 
 ### Requirement: Canonicals
 The canonical columns of an analysed Page SHALL be computed from its *canonical declarations*. A canonical declaration is a `canonical` Link that `020-add-crawl-core` discovers in the Page's response and that is declared in one of two places:
@@ -923,7 +938,7 @@ The link count columns SHALL count only `hyperlink` Links whose source is a Page
 - `unique_inlinks`: the distinct source Pages of those Links
 - `linking_pages_pct`: 100 × (the number of distinct source Pages with status 200 that link to this Page) ÷ (the number of Pages with status 200 in the Crawl), rounded to 2 decimals, or NULL when there are no Pages with status 200
 
-**The post-crawl passes.** The inlink counts are computed in the post-crawl passes that `020-add-crawl-core` runs when a Crawl ends as `completed` or `stopped`. When a resumed Crawl ends, its pass SHALL publish the three inlink columns for all Pages together. Until publication a reader SHALL see the previous complete result, with NULL in all three columns for a Page first stored after resume. If the Crawl exits before publication, the previous result SHALL remain readable. After publication a new read transaction SHALL see the complete replacement. They run before the post-crawl passes of `040-add-rules`.
+**The post-crawl passes.** The inlink counts are computed in the post-crawl passes that `020-add-crawl-core` runs when a Crawl ends as `completed` or `stopped`. They run again when a resumed Crawl ends, and each run SHALL replace the earlier results; until they have, a resumed Crawl keeps the counts of its last run. They run before the post-crawl passes of `040-add-rules`.
 
 `unique_js_inlinks` and `unique_js_outlinks` SHALL be NULL, because they are measured from v1.1.
 
@@ -940,13 +955,6 @@ The two scenarios below use this site: four 200 Pages A, B, C and D, where A lin
 #### Scenario: Inlinks are NULL while the Crawl runs
 - **WHEN** a Crawl's post-crawl passes have not run yet
 - **THEN** every stored Page has `inlinks` NULL
-
-#### Scenario: Readers see one complete inlink result after resume
-- **GIVEN** a stopped Crawl has two Pages with status 200, A and B. A links to B and the queued URL C. B links to A.
-- **WHEN** the resumed Crawl stores C with status 200 and Links to both A and B, and starts recalculating the counts
-- **THEN** a read transaction opened during the calculation sees `(inlinks, unique_inlinks, linking_pages_pct)` as `(1, 1, 50.00)` for both A and B, and `(NULL, NULL, NULL)` for C
-- **AND** if the process exits before publication, reopening the Store yields those same three rows
-- **AND** after the pass runs to completion, a new read transaction sees `(2, 2, 66.67)` for both A and B and `(1, 1, 33.33)` for C
 
 #### Scenario: Inlink columns are derived
 - **WHEN** `linx schema pages` runs
@@ -1020,9 +1028,11 @@ When storage is off, `page_sources` SHALL hold no rows.
 - **THEN** its `page_sources.encoding` is `windows-1251`
 
 ### Requirement: Columns measured by later releases stay NULL
+**In short:** reserved columns hold NULL until their release starts measuring them.
+
 These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, until the release that fills them:
 
-- from v0.2: the SERP pixel widths `title_1_width_px`, `title_2_width_px`, `meta_description_1_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, which follows `022-add-fetch-policy`'s `origins.http_version`
+- from v0.2: the SERP pixel widths `title_1_width_px`, `title_2_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, which follows `022-add-fetch-policy`'s `origins.http_version`
 - from v0.3: `closest_similarity_pct` and `near_duplicate_count`; `structured_data_error_count` and `structured_data_warning_count`
 - from v1.1: `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count`
 
@@ -1030,7 +1040,7 @@ These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, unt
 
 #### Scenario: Deferred columns are NULL after a completed Crawl
 - **WHEN** a Crawl of the fixture site ends as `completed` and its post-crawl passes have run
-- **THEN** 0 Pages have a non-NULL value in any of the 17 columns listed above, and 0 `links` rows have a non-NULL `html_source`
+- **THEN** 0 Pages have a non-NULL value in any of the 16 columns listed above, and 0 `links` rows have a non-NULL `html_source`
 
 #### Scenario: Deferred columns are described with their release
 - **WHEN** `linx schema pages` runs

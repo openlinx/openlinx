@@ -81,6 +81,10 @@ The Crawl's metadata, in exactly one row.
 | `state` | TEXT | no | | | `running`, `stopped`, `completed`, `failed`, `interrupted` | The Crawl State. |
 | `started_at` | TEXT | no | | `timestamp` | | When the Crawl started. |
 | `completed_at` | TEXT | yes | | `timestamp` | | When the state became completed; NULL in every other state. |
+| `health_score` | INTEGER | yes | | | | Derived: The Health Score from the last post-crawl pass. NULL for a Crawl without Internal Pages. |
+| `health_internal_page_count` | INTEGER | yes | | | | Derived: The number of Internal Pages in the last post-crawl pass. |
+| `health_affected_page_count` | INTEGER | yes | | | | Derived: The number of Internal Pages with an Issue-type Issue from an enabled Rule in the last post-crawl pass. |
+| `health_calculated_at` | TEXT | yes | | `timestamp` | | Derived: When the last post-crawl pass calculated the Health Score. |
 | `stop_reason` | TEXT | yes | | | `max_urls`, `interrupt`, `requested`, `seed_unreachable`, `site_unreachable`, `write_failed` | Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, seed_unreachable, site_unreachable or write_failed for a failed one; NULL while it runs and when it is completed. |
 | `warnings` | TEXT | no | | `json` | | The Crawl's warnings, as an array of diagnostics of level, code, message, hint and details; [] when the Crawl is created. |
 | `command_argv` | TEXT | no | | `json` | | The command line as an array that starts with the command name, secrets redacted. |
@@ -199,7 +203,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `indexability_status` | TEXT | yes | | | `blocked_by_robots_txt`, `redirected`, `client_error`, `server_error`, `noindex`, `canonicalised` | The first reason in the Indexability order that makes the Page non_indexable: robots.txt, then the status class, then noindex, then a refresh redirect, then a canonical to another URL; NULL when the Page is indexable. |
 | `response_time_ms` | INTEGER | no | | | | Time from sending the request to receiving the whole body, equal to urls.response_time_ms. |
 | `last_modified` | TEXT | yes | | `timestamp` | | The first Last-Modified response header as a UTC time, read as an HTTP-date or another Internet Message Format date; NULL when absent, another text or a leap second. |
-| `redirect_url` | TEXT | yes | | | | The URL the Page redirects to: the target of its 3xx response, of its HTTP Refresh header, or of its first meta refresh; NULL when it does not redirect, or when the HTTP redirect has no target. A Refresh to its own URL is no redirect. |
+| `redirect_url` | TEXT | yes | | | | The URL the Page redirects to. For an HTTP redirect or HTTP Refresh, this is the target of the 3xx response or Refresh header. For meta refresh after successful Page extraction, the first declaration must contain a URL reference. The first resolved meta refresh Link supplies the target, which can come from a later declaration if the first reference cannot be resolved. If the Page extractor fails (urls.parse_error is extractor_error), meta_refresh is NULL and the first discovered meta refresh Link can supply redirect_url. NULL when there is no redirect or the HTTP redirect has no target. A Refresh to the Page's own URL is no redirect. |
 | `redirect_type` | TEXT | yes | | | `http_redirect`, `http_refresh`, `meta_refresh`, `javascript_redirect` | How the Page redirects; http_redirect for every 3xx response, even when redirect_url is NULL; NULL when it does not redirect. javascript_redirect is filled from v1.1. |
 | `set_cookie_count` | INTEGER | no | | | | The number of Set-Cookie headers of the Page's response, equal to its rows in cookies. |
 | `js_cookie_count` | INTEGER | yes | | | | Filled from v1.1. The number of cookies the Page's scripts set, measured with JavaScript rendering. |
@@ -214,7 +218,7 @@ One row for each Page of the Crawl: an Internal URL in the Scope whose response 
 | `title_count` | INTEGER | yes | | | | The number of title elements without an svg, math or noscript ancestor; NULL when the Page is not analysed or its Page extractor failed. |
 | `meta_description_1` | TEXT | yes | | | | The content of the Page's first meta description, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `meta_description_1_length` | INTEGER | yes | | | | The length of meta_description_1 in Unicode code points; NULL exactly when meta_description_1 is. |
-| `meta_description_1_width_px` | INTEGER | yes | | | | Filled from v0.2. The width of meta_description_1 in Arial regular at 14 px, in pixels. |
+| `meta_description_1_width_px` | INTEGER | yes | | | | The estimated width of meta_description_1 in pixels at 14 px, using Liberation Sans Regular advances. NULL when absent or not measured. |
 | `meta_description_2` | TEXT | yes | | | | The content of the Page's second meta description, whitespace-normalised, the empty string for one without content; NULL without one, or when the Page is not analysed or its Page extractor failed. |
 | `meta_description_2_length` | INTEGER | yes | | | | The length of meta_description_2 in Unicode code points; NULL exactly when meta_description_2 is. |
 | `meta_description_2_width_px` | INTEGER | yes | | | | Filled from v0.2. The width of meta_description_2 in Arial regular at 14 px, in pixels. |

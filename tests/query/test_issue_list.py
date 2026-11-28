@@ -6,6 +6,7 @@ from contextlib import closing
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
+from shutil import copyfile
 from threading import Event
 
 import orjson
@@ -13,6 +14,7 @@ import pytest
 from sqlalchemy import Connection, Engine, Select, event, update
 
 from openlinx.crawl.urls import NormalizedUrl
+from openlinx.output.diagnostics import OpenLinxError
 from openlinx.rules.titles import TITLE_MISSING
 from openlinx.services.query import QueryRequest, issue_list
 from openlinx.services.rules import RulesRequest, rule_item
@@ -25,13 +27,20 @@ from openlinx.store.rows import HandlerRows
 from openlinx.store.schema import rules
 from openlinx.store.urls import record_fetched, record_seed
 from openlinx.store.writer import CrawlWriter
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
 from tests.support.cli import PROCESS_TIMEOUT
 from tests.support.clock import FakeClock
 from tests.support.crawl_store import crawl_store
-from tests.support.crawls import STARTED_AT, create_any_crawl, query
+from tests.support.crawling import crawl_result
+from tests.support.crawls import STARTED_AT, create_any_crawl, query, sha256_of
 from tests.support.page_data import page_row
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
+
+_TITLE_MISSING_HTML = (
+    '<meta name="description" content="Welcome"><h1>Welcome</h1><h2>First section</h2>'
+)
 
 
 def test_order(temp_workspace: TempWorkspace) -> None:
@@ -51,6 +60,173 @@ def test_order(temp_workspace: TempWorkspace) -> None:
         ("rule-a", "warning", "high", 50),
         ("rule-g", "opportunity", "high", 1),
     ]
+
+
+def test_issue_list_refuses_a_completed_crawl_from_before_rules(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site({"/": Page(body='<a href="/next">Next</a>'), "/next": Page(body="<p>Next</p>")})
+    )
+    file = crawl_result(server.url("/")).crawl_file
+    # Emulate the pre-release schema, which used the same version and had no Rule objects.
+    with closing(sqlite3.connect(file)) as connection:
+        connection.execute("DROP VIEW issues")
+        connection.execute("DROP TABLE affected_urls")
+        connection.execute("DROP TABLE rules")
+    assert query(file, "PRAGMA user_version") == [(1,)]
+    assert query(file, "SELECT state, (SELECT count(*) FROM pages) FROM crawl") == [
+        ("completed", 2)
+    ]
+    before = sha256_of(file)
+
+    with pytest.raises(OpenLinxError) as caught:
+        issue_list(QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file)))
+
+    assert (caught.value.code, caught.value.exit_code, caught.value.diagnostic.details) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(file)},
+    )
+    assert sha256_of(file) == before
+
+
+def test_issue_list_item_fields(temp_workspace: TempWorkspace) -> None:
+    crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/a": _TITLE_MISSING_HTML,
+            "https://example.com/b": _TITLE_MISSING_HTML,
+            "https://example.com/c": _TITLE_MISSING_HTML,
+            "https://example.com/d": _TITLE_MISSING_HTML,
+        },
+    )
+    cwd, home = temp_workspace.root, temp_workspace.home
+
+    result = issue_list(QueryRequest(cwd=cwd, home=home))
+    rules_request = RulesRequest(cwd=cwd, home=home, workspace=None)
+    tables = default_tables()
+
+    assert (result.total, result.next_cursor) == (9, None)
+    assert result.items == [
+        {
+            "rule_id": rule_id,
+            "category": category,
+            "issue_type": issue_type,
+            "priority": priority,
+            "affected_count": count,
+            "description": rule_item(rules_request, tables, rule_id)["description"],
+        }
+        for rule_id, category, issue_type, priority, count in [
+            ("title-missing", "titles", "issue", "high", 4),
+            ("exact-duplicate", "content", "issue", "medium", 4),
+            ("canonical-missing", "canonicals", "warning", "medium", 5),
+            ("low-word-count", "content", "opportunity", "medium", 5),
+            ("meta-description-too-short", "meta_descriptions", "opportunity", "low", 5),
+            ("h1-duplicate", "headings", "opportunity", "low", 4),
+            ("meta-description-duplicate", "meta_descriptions", "opportunity", "low", 4),
+            ("title-same-as-h1", "titles", "opportunity", "low", 1),
+            ("title-too-short", "titles", "opportunity", "low", 1),
+        ]
+    ]
+
+
+def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={"https://example.com/a": _TITLE_MISSING_HTML},
+        completed=False,
+    )
+    assert query(file, "SELECT state FROM crawl") == [("running",)]
+    assert query(file, "SELECT count(*) FROM affected_urls") == [(0,)]
+
+    result = issue_list(QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home))
+
+    assert [(item["rule_id"], item["affected_count"]) for item in result.items] == [
+        ("title-missing", 1),
+        ("canonical-missing", 2),
+        ("low-word-count", 2),
+        ("meta-description-too-short", 2),
+        ("title-same-as-h1", 1),
+        ("title-too-short", 1),
+    ]
+
+
+@pytest.mark.parametrize("journal_mode", ["wal", "delete"])
+def test_issue_list_refuses_another_crawl_id_in_the_selected_file(
+    temp_workspace: TempWorkspace, journal_mode: JournalSetting
+) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={"https://example.com/a": "<title>Welcome</title><h1>Welcome</h1>"},
+        journal_setting=journal_mode,
+    )
+    other = crawl_store(
+        temp_workspace,
+        pages={"https://example.com/a": "<h1>No Title</h1>"},
+        journal_setting=journal_mode,
+    )
+    ((expected_id,),) = query(file, "SELECT id FROM crawl")
+    ((found_id,),) = query(other, "SELECT id FROM crawl")
+    assert expected_id != found_id
+    request = QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=expected_id)
+    selected = file.stat()
+    replaced = False
+
+    def back_up_after_selection(_engine: Engine) -> None:
+        nonlocal replaced
+        if not replaced:
+            with (
+                closing(sqlite3.connect(other)) as source,
+                closing(sqlite3.connect(file)) as target,
+            ):
+                source.backup(target)
+            replaced = True
+
+    # The backup changes the recorded Crawl without replacing the file's inode.
+    event.listen(Engine, "engine_disposed", back_up_after_selection)
+    try:
+        with pytest.raises(OpenLinxError) as caught:
+            issue_list(request)
+    finally:
+        event.remove(Engine, "engine_disposed", back_up_after_selection)
+
+    actual = file.stat()
+    assert replaced
+    assert (actual.st_dev, actual.st_ino) == (selected.st_dev, selected.st_ino)
+    assert query(file, "SELECT id FROM crawl") == [(found_id,)]
+    assert query(file, "PRAGMA journal_mode") == [(journal_mode,)]
+    assert (caught.value.code, caught.value.exit_code, caught.value.diagnostic.details) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(file), "expected_id": expected_id, "found_id": found_id},
+    )
+
+
+@pytest.mark.parametrize("journal_mode", ["wal", "delete"])
+def test_issue_list_detects_replacement_after_crawl_selection(
+    temp_workspace: TempWorkspace, journal_mode: JournalSetting
+) -> None:
+    file = crawl_store(temp_workspace, journal_setting=journal_mode)
+    replacement = file.with_suffix(".replacement")
+    copyfile(file, replacement)
+
+    def replace_after_metadata_read(_engine: Engine) -> None:
+        if replacement.exists():
+            replacement.replace(file)
+
+    # Selection has closed its read. Even a byte-for-byte copy has another file identity.
+    request = QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file))
+    event.listen(Engine, "engine_disposed", replace_after_metadata_read)
+    try:
+        with pytest.raises(OpenLinxError) as caught:
+            issue_list(request)
+    finally:
+        event.remove(Engine, "engine_disposed", replace_after_metadata_read)
+
+    assert not replacement.exists()
+    assert caught.value.code == "crawl_not_writable"
+    assert caught.value.diagnostic.details == {"file": str(file)}
 
 
 def test_issue_list_keeps_the_recorded_description_in_the_same_snapshot(
@@ -222,54 +398,4 @@ def test_issue_list_uses_one_snapshot_across_the_final_pass(
     assert [(item["rule_id"], item["affected_count"]) for item in issue_list(request).items] == [
         ("later-rule", 1),
         ("title-missing", 1),
-    ]
-
-
-def test_item_fields(temp_workspace: TempWorkspace) -> None:
-    html = "<h1>Welcome</h1><h2>First section</h2>"
-    crawl_store(
-        temp_workspace,
-        pages={
-            "https://example.com/a": html,
-            "https://example.com/b": html,
-            "https://example.com/c": html,
-            "https://example.com/d": html,
-        },
-    )
-
-    result = issue_list(QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home))
-    shown = rule_item(
-        RulesRequest(cwd=temp_workspace.root, home=temp_workspace.home, workspace=None),
-        default_tables(),
-        "title-missing",
-    )
-
-    assert result.total == 2
-    item, meta_description = result.items
-    assert item["rule_id"] == "title-missing"
-    assert item["category"] == "titles"
-    assert item["issue_type"] == "issue"
-    assert item["priority"] == "high"
-    assert item["affected_count"] == 4
-    assert item["description"] == shown["description"]
-    assert (meta_description["rule_id"], meta_description["affected_count"]) == (
-        "meta-description-missing",
-        5,
-    )
-
-
-def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspace) -> None:
-    file = crawl_store(
-        temp_workspace,
-        pages={"https://example.com/a": "<h1>Welcome</h1><h2>First section</h2>"},
-        completed=False,
-    )
-
-    result = issue_list(QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home))
-
-    assert query(file, "SELECT state FROM crawl") == [("running",)]
-    assert query(file, "SELECT count(*) FROM affected_urls") == [(0,)]
-    assert [(item["rule_id"], item["affected_count"]) for item in result.items] == [
-        ("title-missing", 1),
-        ("meta-description-missing", 2),
     ]

@@ -26,7 +26,7 @@ YYYYMMDD-HHMMSS-xxxx
 
 - **Sortable:** ids sort by start time, to the second, so `ls` lists Crawls in the order they started.
 - **The random characters** come from `0123456789abcdefghjkmnpqrstvwxyz`. It leaves out `i`, `l`, `o` and `u`, so an id read aloud or copied by hand is not mistaken for another.
-- **Never a taken id:** an id is taken when its crawl file exists. A new Crawl whose drawn id is taken draws new random characters until the id is free.
+- **Never a taken id:** an id is taken when its crawl file or writer claim file exists. A new Crawl draws another id even if only `<id>.lock` remains.
 - **Two processes cannot get the same id.** The crawl file is created exclusively, so when two processes draw the same id in the same second, only one of them creates the file and the other draws again.
 
 ## Selecting a Crawl
@@ -48,7 +48,9 @@ Every Command that reads a Crawl takes the global flag `--crawl`, next to `--wor
 |---|---|---|
 | `no_crawls` | 4 | the Workspace has no Crawl; the hint says how to start one with `linx crawl` |
 | `crawl_not_found` | 4 | no Crawl in the Workspace has the given id, or no file exists at the given path (`details.file`) |
-| `crawl_file_invalid` | 6 | the selected file is not a readable crawl file, or a file selected by id or `latest` holds another id (`details.expected_id` and `details.found_id`); `details.file` names it |
+| `crawl_busy` | 5 | SQLite held the crawl file for longer than the reader waits; `details.file` names it |
+| `crawl_file_invalid` | 6 | the selected file cannot be read, including when it becomes unavailable during selection, or a file selected by id or `latest` holds another id (`details.expected_id` and `details.found_id`); `details.file` names the selected path |
+| `crawl_schema_too_new` | 6 | the crawl file's schema is newer than this tool supports; `details` gives both schema versions |
 | `invalid_value` | 2 | the value is not `latest`, a crawl id or a path |
 
 ## The data folder
@@ -161,7 +163,7 @@ The service and store APIs make the owner explicit:
 
 | API | Context value and lifetime |
 |---|---|
-| `openlinx.store.claim.claim_writer(crawl_file)` | Yields no value; owns the lock descriptor until context exit |
+| `openlinx.store.claim.claim_writer(crawl_file)` | Yields the path protected by the claim and owns the lock descriptor until context exit |
 | `openlinx.store.crawls.create_crawl_file(...)` | Yields `(CrawlFile, JournalChoice)` with the claim held |
 | `openlinx.services.crawls.create_crawl(...)` | Yields `CrawlFile` with the claim held; the caller keeps all its writers inside this context |
 
@@ -170,20 +172,36 @@ exclusively. An existing lock file, including one created by a racing process,
 makes creation draw another id before touching SQLite. Other claim callers open
 the existing lock file, creating it if absent.
 
-`CrawlFile` contains only an id and path. Keeping that record after leaving the
-context does not retain ownership. `start_crawl` manages the creation context for
-its caller, around the entire run.
+`CrawlFile` holds an id and path, and selection records the resolved path and
+filesystem identity. The claim context owns the lock descriptor. `start_crawl`
+manages the creation context for its caller, around the entire run.
+`continue_crawl` takes the same claim before reading recorded settings or
+checking the Crawl State and holds it until every writer closes. A file symlink
+uses the resolved SQLite path for both the lock and the connection.
+Continuation verifies the stored Crawl id under the claim, both when reading
+recorded state and when opening each writer before its first write.
 
-Claim acquisition makes one nonblocking attempt. A lock conflict raises
-`crawl_locked` (exit code 5), with `details.file` naming the crawl file. File-open
-errors are not lock conflicts; creation reports an unwritable Workspace through
-`workspace_not_writable`. This claim is separate from SQLite's transaction locks
-and their `crawl_busy` diagnostic.
+| Code | Exit code | When |
+|---|---|---|
+| `crawl_locked` | 5 | another process holds the claim; the hint names `linx status --crawl <id>` |
+| `crawl_file_invalid` | 6 | the stored Crawl id differs from the selected Crawl id |
+| `crawl_not_writable` | 7 | the claim cannot be opened or acquired because of a filesystem error, the selected file or symlink target has changed or become unavailable, or the file has multiple hard links |
+
+All three diagnostics name the originally selected path in `details.file`.
+The check for multiple hard links runs before opening SQLite for the run.
+SQLite uses the filename to locate its rollback journal or WAL. Keep one name
+for each SQLite file and keep it in place while it is in use.
+[SQLite on multiple links](https://sqlite.org/howtocorrupt.html#multiple_links_to_the_same_file).
+
+Claim acquisition makes one nonblocking attempt. Creation reports an unwritable
+Workspace through `workspace_not_writable`. Contention on SQLite's transaction
+locks has its own `crawl_busy` diagnostic.
 
 Initialization failure removes the incomplete SQLite file under the claim. Once
 creation yields, a run failure preserves the initialized file. Context exit closes
 the descriptor, and the operating system also releases ownership when its process
-dies. The `.lock` file remains; its existence alone does not mean the claim is held.
+dies. A remaining `.lock` file keeps the id taken for new Crawls. A continuation
+can use that lock file once the operating system releases the claim.
 
 ### Units of work
 
@@ -231,7 +249,7 @@ dies. The `.lock` file remains; its existence alone does not mean the claim is h
 - **Watching commits.** An optional `on_commit` callable, given when the writer is opened, is called on the writer thread after each commit with the number of units that commit made durable, for progress and metrics. It must be quick, and an error it raises ends the writer like a failed commit.
 - **What a crash loses.** A process that is killed, even with SIGKILL or TerminateProcess, loses at most the units since the last commit: up to 500 units, or about a second of work. Committed units survive, and the file stays sound: `PRAGMA integrity_check` returns `ok`. Tests kill a real writer process to check both.
 - **The write check.** Opening the writer first runs a write that it rolls back. A crawl file that cannot be written, for example one with the read-only attribute, fails at once with `crawl_not_writable` (exit code 7) and `details.file`, before anything is crawled, and the file is left unchanged.
-- **One writer per Crawl.** The start operation holds its [writer claim](#writer-ownership) until its writers close. Opening a raw `CrawlWriter` does not acquire that claim; its caller owns the surrounding claim context.
+- **One writer per Crawl.** The start and continue operations hold the [writer claim](#writer-ownership) until their writers close. Opening a raw `CrawlWriter` does not acquire that claim; its caller owns the surrounding claim context.
 - **A busy file.** When another connection holds the crawl file, the writer waits up to 30 seconds, on opening, when it starts a transaction or while a unit runs, then fails with `crawl_busy` (exit code 5) and `details.file`. In WAL mode only another writer can hold it that long; in rollback-journal mode a long read can too.
 - **After `close()`,** the writer accepts no more units: a unit submitted then fails at once. Closing twice is harmless.
 
@@ -241,7 +259,7 @@ Commands that only read a Crawl open its file read-only, for one operation at a 
 - **Nothing changes.** Reading leaves the crawl file's bytes as they were, and a write through a reader fails with SQLite's read-only error.
 - **Files are released.** Each read closes its connection when it ends, so even a process that keeps running, such as the MCP server, holds no handle to the file: on Windows another process can delete it right after a read. SQLite's `-wal` and `-shm` companions may stay next to it.
 - **Reading while a Crawl is written.** In WAL mode, the default on local disks ([the journal mode](#the-journal-mode)), a reader sees every committed row while another process writes, and is not held up by the write (only by SQLite's brief recovery after a killed writer). In rollback-journal mode a write shuts readers out: a reader waits up to 5 seconds, then fails with `crawl_busy` (exit code 5) and `details.file`. `--crawl` resolution reads the same way.
-- **Multiple reads in one operation.** In WAL mode, all statements on one read-only connection opened by `reading()` see the same committed snapshot. In rollback-journal mode the default is to release the read lock after each statement. The Query Service's Issue list requests a single snapshot with `reading(..., snapshot=True)`, so its choice of Issue source, results and recorded Rule descriptions stay consistent in both modes. In rollback-journal mode a Writer commit may wait while the Service collects the response data. The lock is released before output formatting and between requests for pages.
+- **Multiple reads in one operation.** In WAL mode, all statements on one read-only connection opened by `reading()` see the same committed snapshot. In rollback-journal mode each statement normally releases its read lock. The Query Service's Issue list requests one snapshot, so the choice of Issue source, the results and recorded Rule descriptions agree in both modes. A Writer commit can wait for this read to finish in rollback-journal mode. The Service releases the lock before formatting the response.
 - **Right after a killed writer, on Windows.** While the process of a killed writer is still exiting, it can still hold the crawl file's `-shm` companion; since SQLite 3.50 that shows up as a disk I/O error. Opening the file waits for it like for a lock, 5 seconds for a reader and 30 for the writer, then fails with `crawl_busy`. The file itself is sound.
 
 ## The journal mode

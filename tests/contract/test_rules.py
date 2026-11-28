@@ -47,3 +47,20 @@ def test_issue_types_are_an_enumeration() -> None:
     (issues,) = result.json()["items"]
     (issue_type,) = (column for column in issues["columns"] if column["name"] == "issue_type")
     assert issue_type["values"] == ["issue", "warning", "opportunity"]
+
+
+def test_health_fields_are_derived() -> None:
+    result = run_cli("schema", "crawl")
+    assert result.exit_code == 0, result.stderr
+
+    (crawl,) = result.json()["items"]
+    columns = {column["name"]: column for column in crawl["columns"]}
+    for name in (
+        "health_score",
+        "health_internal_page_count",
+        "health_affected_page_count",
+        "health_calculated_at",
+    ):
+        column = columns[name]
+        assert column["nullable"] is True, name
+        assert column["description"].startswith("Derived: "), name

@@ -80,7 +80,7 @@ Every task of this group but 6.0 reads the URL's result. Task 6.13 is task 4.11,
 - [x] 6.2 Drive "X-Robots-Tag is stored with the parser's verdict" and "X-Robots-Tag is kept when page preparation fails" at seam 4, a trivial pair: the same columns from the URL's result, for an analysed Page and for one whose preparation failed. Each also asserts `meta_robots_noindex` and `meta_robots_nofollow`: 0 for the analysed Page, NULL for the other. Add `x_robots_tag`, `x_robots_tag_noindex` and `x_robots_tag_nofollow`.
 - [x] 6.13 Drive "HTTP Refresh header is a redirect" at seam 4, from `020`'s `http_refresh` Link, and add `redirect_url` and `redirect_type` with all its values. This task fills `http_refresh` and 6.3 fills `meta_refresh`; `http_redirect` waits for 4.10, so a 3xx Page keeps both columns NULL until then. A target equal to the Page's URL, compared as normalised URLs, is no redirect.
 - [x] 6.3 Drive "Meta refresh with a quoted target" at seam 4: `meta_refresh` from the Page extractor, and `redirect_type` `meta_refresh` with `redirect_url` from `020`'s discovered `meta_refresh` Link. Add `meta_refresh`.
-- [x] 6.14 Drive "Only the first meta refresh redirects" at seam 4: a redirect only when `020`'s refresh reader finds a URL in the first refresh `<meta>`'s `content`.
+- [x] 6.14 Drive "A first meta refresh without a URL prevents a later redirect" at seam 4, and guard "An unresolvable first meta refresh uses the next Link" at seam 3+6. The first refresh element gates the redirect, and `020`'s first discovered `meta_refresh` Link supplies the target.
 - [x] 6.4 Pin "Meta refresh without a target is not a redirect" at seam 4, a `test:` guard, red by mutation: a redirect set whenever `meta_refresh` is present.
 - [x] 6.5 Drive "Relative canonical to another URL" at seam 4, from the `canonical` Links of the URL's result declared in `head` or `http_header`, and add `canonical_url`, `canonical_link_element_1`, `canonical_count` and `canonical_relative`. Pin with a test named after no scenario that an absolute `href` after a leading space, as templates write it, is not relative.
 - [x] 6.6 Drive "HTML and header canonicals disagree" at seam 4, and add `canonical_link_element_2` and `http_canonical`.
@@ -164,7 +164,6 @@ Group 7 needs nothing from `022` or group 4b: step 2 reads only the status code,
 - [x] 11.7 Add `links.followed` at seam 4, after `rel_sponsored`, `NOT NULL`: `020`'s `DiscoveredLink.requests_target`, whose description says it is 1 when the Crawl requests the target through the Link, a Resource included (design D18). Its test, named after the column's row of the spec's Link table and listed in design Risks, has a nofollow hyperlink not followed and an image followed, red first. It changes the Link row, the `links` table, the `links` handler and `docs/schema.md` for this column only.
 - [x] 11.5 Docs: add the link count definitions, the self-link rule, `linking_pages_pct`, that Crawl Depth is the crawl engine's, that a URL skipped at `--max-depth` is the target of `links` rows but has no `pages` row, and that the post-crawl passes run after the last URL is recorded, before `completed` or `stopped` is written, and again after a continue, to `docs/page-data.md`.
 - [x] 11.6 Review: run the code-review skill on group 11's commits, then refactor with the whole suite green.
-- [ ] 11.8 Drive "Readers see one complete inlink result after resume" at the Store and subprocess seams. Read all three columns across at least two calculation ranges from a separate connection, during recalculation, after a process exit before publication, and after a successful rerun. Verify the previous and replacement values for every Page against the scenario.
 
 ## 12. Later columns, the empty HTML table and cross-platform
 
@@ -185,14 +184,16 @@ Task 12.4 moved to group 4 as task 4.0.
 - [x] 4.14 Docs: add the size and HTTP redirect concepts to `docs/page-data.md`.
 - [ ] 4.15 Review: run the code-review skill on group 4b's commits and then on the whole change, and refactor with the whole suite green. Before the change is archived, reduce each Risks entry of tests named after no scenario to the test's name and the failure class it guards.
 
-## 13. (v0.2) SERP pixel widths
+## 13. SERP pixel widths
 
-- [ ] 13.1 (v0.2) Drive "Title pixel width" at seam 4. Add the width-table generator script, the generated Liberation Sans table with its OFL notice and the width function, and fill `title_1_width_px`.
+Task 13.4 ships in v0.1. The remaining tasks follow in v0.2.
+
+- [ ] 13.1 (v0.2) Drive "Title pixel width" at seam 4. Reuse the bundled advances and fallback tables from 13.4 to fill `title_1_width_px`.
 - [ ] 13.2 (v0.2) Drive "Wide characters use one em" at seam 4 (fallback widths).
 - [ ] 13.3 (v0.2) Drive "Realistic long title" at seam 4.
-- [ ] 13.4 (v0.2) Drive "Meta description pixel width" at seam 4, and fill `meta_description_1_width_px`.
+- [x] 13.4 (v0.1, before the snippet Rule in `040`) Drive "Meta description pixel width" at seam 3+6 and the fallback and rounding cases at seam 4. Generate the bundled Liberation Sans advance table and Unicode fallback data with their notices. Fill `meta_description_1_width_px` and document the method in `docs/page-data.md` and the measured column in `docs/schema.md`.
 - [ ] 13.5 (v0.2) Drive "Widths of second elements" at seam 4, and fill `title_2_width_px` and `meta_description_2_width_px`.
-- [ ] 13.6 (v0.2) Docs: add the pixel-width method (source table, font sizes, fallbacks) to `docs/page-data.md`. Drop the `Filled from v0.2. ` prefix from the descriptions of the columns this group fills, and take them out of the list of later columns in the spec.
+- [ ] 13.6 (v0.2) Docs: extend `docs/page-data.md` with the remaining measured widths. Drop the `Filled from v0.2. ` prefix from the descriptions of both title width columns and the second meta description width column, and take them out of the list of later columns in the spec.
 - [ ] 13.7 (v0.2) Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
 
 ## 14. (v0.2) Syllables, readability and language detection

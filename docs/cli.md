@@ -115,6 +115,12 @@ With `jsonl` and `table` there is no envelope. When more items exist than were p
 {"level":"error","code":"unknown_field","message":"This Command has no field size.","hint":"Use --fields with any of: n, sq, or all.","details":{"field":"size","available":["n","sq"]}}
 ```
 
+When an optional argument changes the list's items, the entry in `linx commands`
+also has `fields_by_argument`. Each key is the argument name and maps to
+`{available, default}`. For `issues`, `fields` describes the Issue list.
+`fields_by_argument.rule_id` describes the Affected URLs and defaults to
+`["url", "detail"]`.
+
 ## Diagnostics
 
 Errors, warnings and info lines are JSON objects, one per line on stderr. Each has exactly these keys:
@@ -186,13 +192,20 @@ linx schema seeds --fields name
 
 Every Command that reads a Crawl takes the global flag `--crawl latest|<id>|<path>`, with the default `latest`. `linx commands` describes it with `"global":true` and `"default":"latest"`. What each value selects, and its errors (`no_crawls`, `crawl_not_found`, `crawl_file_invalid` and `invalid_value`), are in [crawl-store.md](crawl-store.md).
 
+If the file becomes unreadable during selection, the diagnostic is
+`crawl_file_invalid` (exit 6), with the selected path in `details.file`. A schema
+from a newer version has its own `crawl_schema_too_new` diagnostic. For diagnostics
+after selection when continuing a Crawl, see [Writer ownership](crawl-store.md#writer-ownership).
+
 ## Listing Issues
 
-Use `linx issues` to list the Issues of a Crawl. See the [Issue list reference](querying.md#listing-issues).
+`linx issues` returns one item per Issue, with its Rule ID, category, Issue Type, Priority, Affected URL count and recorded Rule description. It orders by Issue Type (issue, warning, opportunity), then Priority (high, medium, low), then by decreasing Affected URL count, then by ascending Rule ID.
 
-## Viewing an Issue
+Use `--type`, `--priority` and `--category` to select Issues. Values can be comma-separated, repeated or given in mixed case. Each flag accepts any of its values, and an Issue must match every supplied flag. For example, `linx issues --type issue,warning --priority high` lists the high Priority Issues and Warnings. Use `linx issues --category headings` to list Issues in the headings category. To see the category IDs, run `linx schema rules` and look at the values for `category`. A [cursor](#lists-paging-fields-and-cursors) belongs to the selected Crawl ID and the filter values. If `latest` resolves to another Crawl, start again without a cursor or select the original Crawl.
 
-Use `linx issue <rule-id>` to see the recorded Rule and its Affected URLs. See the [Issue detail reference](querying.md#viewing-an-issue).
+`linx issues <rule-id>` returns the recorded Rule in the JSON header and pages
+its Affected URLs in URL order. Use `--fields`, `--limit` and `--cursor` with
+either form. Omit the Rule ID to use `--type`, `--priority` or `--category`.
 
 ## Exit codes
 

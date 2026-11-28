@@ -215,6 +215,16 @@ is planned in `060` and is not implemented yet. A continue:
 2. in one unit, sets `crawl.state` back to `running` with `stop_reason` NULL, writes the settings it runs with into `crawl.config`, and queues again every `error` URL and every URL skipped as `robots_unreachable`, since those outcomes are usually transient
 3. runs as a new Crawl would: it requests only `queued` URLs, so no URL fetched before is requested again, and it runs the post-crawl passes again when it ends
 
+The service takes the Crawl's [writer claim](crawl-store.md#writer-ownership)
+before it reads the recorded settings or opens a writer. The following
+diagnostics include the selected path in `details.file`.
+
+| Exit code | Error code | When |
+|---|---|---|
+| 5 | `crawl_locked` | another process holds the claim; the hint names `linx status --crawl <id>` |
+| 6 | `crawl_file_invalid` | the stored Crawl id differs from the one selected |
+| 7 | `crawl_not_writable` | the selected file or symlink target changed or became unavailable, the file has multiple hard links, or a filesystem error prevents the service from taking the claim |
+
 Of the settings on this page, a continue may change the URL limit, to a higher one or none,
 concurrency and rate through `CrawlOverrides`. The URL limit counts over the Crawl's whole
 life (see [The URL limit](#the-url-limit)), and the warnings cover it too (see
@@ -569,7 +579,7 @@ The `response_headers` table keeps the headers of each URL whose last attempt go
 - **Timeout:** a request attempt that has not completed within `--timeout` seconds (default 20) fails, its body included, so a server that sends its headers and then the body a byte at a time is cut off too. A URL whose attempts all time out is recorded with `fetch_state` = `error` and `fetch_error` = `timeout`. A value of 0, a negative one or one that is not finite is rejected as `invalid_value` (exit code 2), or in `openlinx.toml` as `settings_invalid` (exit code 3).
 - **Retries:** a request that times out (`timeout`), cannot connect (`connection_refused`, `connection_error`) or gets a 429 or 5xx status is tried again up to `--retries` times (default 2, at most 10), robots.txt's included. A name that does not resolve (`dns_error`), a certificate that does not verify (`tls_error`) and a response that is not HTTP (`invalid_response`) are answers and are not retried, so a dead External domain costs one lookup; nor is any other status: a 404 is requested once. A network-wide outage is the network pause's to wait out, not the retries'.
 - **Backoff:** before retry n the Crawl waits 2^(n-1) seconds, 1, then 2, then 4, with no jitter. A waiting retry holds none of the host's `--concurrency` slots, and each attempt waits its `--rate` turn again.
-- **Retry-After and 429:** a `Retry-After` header on a 429 or 503 response, in seconds or as an HTTP date, sets the wait instead, capped at 120 seconds; a 429 without one waits 10 seconds. During such a wait the host is paused: no request to it starts, the retried one's or any other, with or without `--rate`. The pause comes whether or not the URL has a retry left, with `--retries 0` too.
+- **Retry-After and 429:** a valid `Retry-After` header on a 429 or 503 response sets the wait instead, capped at 120 seconds. It gives seconds in ASCII digits (`0`–`9`) or an HTTP date. A numeric value may have surrounding spaces or tabs. An unrecognised value is ignored. A 429 without a valid value waits 10 seconds. During such a wait the host is paused: no request to it starts, the retried one's or any other, with or without `--rate`. The pause comes whether or not the URL has a retry left, with `--retries 0` too.
 - **What is recorded:** the last attempt's response or failure, and `urls.attempt_count`, the number of requests made for the URL, 0 when it was not requested. A retry is the same URL, so only its first attempt counts towards `--max-urls`.
 
 ### Body size and compression
@@ -675,7 +685,7 @@ FROM urls AS source JOIN urls AS target ON target.id = source.redirect_url_id
 
 ### Loops
 
-The Crawl requests each URL at most once in a run, so every redirect loop ends: a redirect back to a URL already requested records the hop and requests nothing. `in_redirect_loop` marks it:
+The Crawl requests each URL at most once in a run, so every redirect loop ends: a redirect back to a URL already requested records the hop and requests nothing. When a stored redirect closes a loop, the same write marks every member. This works even when the recorded loop has more hops than `--max-redirects`. The value of `in_redirect_loop` is:
 - 1 for every URL of the loop, a URL that redirects to itself included;
 - 0 for any other 3xx response;
 - NULL for a URL without a 3xx response.

@@ -1,28 +1,28 @@
 ## Purpose
 
-Keep page preparation off the crawl process, so a large Crawl uses several CPU cores while fetching goes on. It also keeps that safe: memory stays bounded, a crashing worker and a Page that takes too long are contained, workers end with their Crawl, and no console windows appear on Windows.
+Allow Page preparation to use several CPU cores while fetching goes on. With the pool selected, memory stays bounded, a crashing worker and a Page that takes too long are contained, workers end with their Crawl, and no console windows appear on Windows.
 
 Scenario conventions:
 - `{site}` is the origin of the local fixture site, for example `http://127.0.0.1:8765`.
 - A bare path such as `/about` means `{site}/about`.
 - "An extractor added for the test" is added to `020-add-crawl-core`'s `default_hooks()` and passed to the Crawl Service, as `020`'s design D9 allows.
-- A test may shorten the preparation deadline through the pool executor's parameter; the scenarios hold for any deadline.
+- Pool scenarios select the executor explicitly through the Crawl Service. A test may shorten the preparation deadline through the pool executor's parameter; the scenarios hold for any deadline.
 
 ## ADDED Requirements
 
 ### Requirement: Page preparation in worker processes
-The Crawl SHALL run page preparation (parsing, the link extractor and every registered extractor) in worker processes separate from the crawl process, started with the `spawn` method on every OS. There SHALL be one worker per physical core available to the crawl process minus 2, and at least 1. The `data` of the `crawl_started` event SHALL add `parse_workers`, the number of workers. Extractors and per-response handlers SHALL keep the interface of `020-add-crawl-core`.
+The Crawl SHALL prepare Pages in-process by default. When the pool is selected, the Crawl SHALL run page preparation (parsing, the link extractor and every registered extractor) in fresh worker interpreters on every OS. The `data` of the `crawl_started` event SHALL report `parse_workers`, the selected worker count, or zero for in-process preparation. Extractors and per-response handlers SHALL keep the interface of `020-add-crawl-core`.
 
 #### Scenario: Pages are parsed outside the crawl process
 - **WHEN** an extractor added for the test records the process id it runs in, `/` links to `/about`, and a Crawl of `{site}/` runs
 - **THEN** no recorded process id equals the crawl process's id
 
 #### Scenario: The number of parse workers is reported
-- **WHEN** `linx crawl {site}/` runs
-- **THEN** `data.parse_workers` of the `crawl_started` event is the number of physical cores available to the crawl process minus 2, and at least 1
+- **WHEN** one Crawl uses the in-process default and another explicitly selects a two-worker pool
+- **THEN** `data.parse_workers` of their `crawl_started` events is zero and two respectively
 
 #### Scenario: Pages are parsed in worker processes on Windows (Windows)
-- **WHEN** `linx crawl {site}/` runs as a subprocess on Windows, and `/` links to `/about`
+- **WHEN** a Crawl of `{site}/` runs as a subprocess on Windows with the pool selected, and `/` links to `/about`
 - **THEN** it exits with code 0, and `{site}/about` has `parsed` = 1
 
 ### Requirement: Bounded parse queue
@@ -65,26 +65,23 @@ When preparing one Page takes longer than 30 seconds from the moment a worker to
 - **THEN** each of `{site}/p1` to `{site}/p10` has `parsed` = 1 and no `parse_error`
 
 ### Requirement: Parse workers end with the Crawl
-Every worker process SHALL have ended within 10 seconds after the crawl process ends, whether the Crawl completed or was stopped by an interrupt. The crawl process SHALL handle the owner's interrupts and shut its workers down in order. On Windows the guardian and every worker, including replacements, SHALL be isolated from the Crawl's console beginning at process creation.
+The guardian and every worker process SHALL have ended within 10 seconds after the Crawl owner exits, including during startup or replacement. The attached foreground Crawl SHALL handle its first keyboard interrupt (Ctrl+C or Ctrl+Break on Windows) through the normal interrupt stop path, leaving unfinished URLs `queued`. On Windows, a programmatic Ctrl+Break addressed to the owner's process group or broadcast on its console SHALL take the same path. The owner SHALL begin shutdown without waiting for a starting guardian, initial worker or replacement to become ready. These children SHALL be isolated from the owner's Windows console events from creation, including during bootstrap.
 
 #### Scenario: No parse worker outlives a completed Crawl
-- **WHEN** a `linx crawl {site}/` subprocess ends with the Crawl State `completed`
+- **WHEN** a Crawl subprocess with the pool selected ends with the Crawl State `completed`
 - **THEN** 10 seconds later none of its child processes is still running
 
 #### Scenario: An interrupt ends the parse workers
-- **WHEN** a `linx crawl {site}/` subprocess is stopped by SIGINT on POSIX or by Ctrl+Break on Windows while `/` links to 30 Pages
-- **THEN** 10 seconds after it exits, none of its child processes is still running
-- **AND** a URL whose Page was still in preparation when the grace period ended remains `queued`
+- **WHEN** a foreground Crawl subprocess with the pool selected receives SIGINT on POSIX or Ctrl+Break addressed to its process group on Windows while a worker is preparing a Page
+- **THEN** the Crawl stops with exit code 130 and Store state `stopped` with `stop_reason = interrupt`, unfinished URLs remain `queued`, and no parse child remains 10 seconds after the owner exits
 
 #### Scenario: Ctrl+Break ends the parse tree during Windows bootstrap
-- **WHEN** the foreground Crawl receives a single Ctrl+Break targeted at its process group or broadcast across its console while the guardian, an initial worker or a replacement is still bootstrapping
-- **THEN** only the Crawl receives the event, reports `stopping` with reason `interrupt`, and exits with code 130 and Crawl State `stopped`
-- **AND** its guardian and workers are shut down by the Crawl, without a console termination and within 10 seconds of Crawl exit
-- **AND** an unfinished URL whose outcome was never submitted remains `queued`
+- **WHEN** a foreground Crawl with the pool selected receives programmatic Ctrl+Break addressed to the owner's process group or broadcast on its Windows console, while the guardian, an initial worker or a replacement is in bootstrap
+- **THEN** the owner takes the interrupt stop path and exits with code 130, the children end through owner or guardian cleanup, no parse child remains 10 seconds after the owner exits, and the Store retains the committed results and leaves unfinished URLs `queued`
 
 ### Requirement: No console windows on Windows
-On Windows, the guardian and worker processes SHALL start without a visible console window, including when the Crawl starts with no visible console. Redirected standard streams backed by a file or pipe SHALL remain usable in those children.
+On Windows, the guardian and workers SHALL start without visible console windows, whether or not the Crawl owner is attached to a console. Redirected file and pipe standard streams SHALL remain usable in the children during bootstrap and afterwards.
 
 #### Scenario: Parse workers open no console window (Windows)
-- **WHEN** `linx crawl {site}/` runs on Windows in a process created with CREATE_NO_WINDOW, and `/` links to 30 pages
-- **THEN** no visible top-level window belongs to any of its child processes while it runs
+- **WHEN** a Crawl with the pool selected runs on Windows in a process created with `CREATE_NO_WINDOW`, and `/` links to 30 Pages
+- **THEN** no visible top-level window belongs to any of its child processes while it runs, and the Store contains all 31 parsed Pages after completion

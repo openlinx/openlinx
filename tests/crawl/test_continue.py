@@ -1,8 +1,14 @@
 """Verify stopped and failed Crawls continue through the service API."""
 
 import json
+import os
+import re
+import sqlite3
+import subprocess
 from collections.abc import Sequence
+from contextlib import closing
 from dataclasses import replace
+from pathlib import Path
 
 import msgspec
 import pytest
@@ -15,17 +21,26 @@ from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlOverrides
 from openlinx.services.hooks import default_hooks
+from openlinx.store.connections import connect
 from openlinx.store.transitions import CrawlStateError
 from tests.fixture_site.hosts import FixtureResolver, on_http_port
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
+from tests.support.cli import CRAWL_PROCESS_TIMEOUT, run_cli_process
 from tests.support.crawling import continued, crawl_result
 from tests.support.crawls import crawl_row, query, sha256_of
 from tests.support.network import closed_port
+from tests.support.processes import python_command
 from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
 _PAGES = range(1, 10)
+_HEALTH_COLUMNS = (
+    "health_score",
+    "health_internal_page_count",
+    "health_affected_page_count",
+    "health_calculated_at",
+)
 
 
 def test_continuing_a_stopped_crawl_completes_it(
@@ -41,6 +56,141 @@ def test_continuing_a_stopped_crawl_completes_it(
         result.summary.state,
         query(result.crawl_file, "SELECT count(*) FROM urls WHERE fetch_state = 'fetched'"),
     ) == ("max_urls", "completed", [(10,)])
+
+
+@pytest.mark.parametrize(
+    "missing_tables",
+    [("rules", "affected_urls"), ("affected_urls",)],
+    ids=["before-rules", "no-affected-urls"],
+)
+def test_a_continue_refuses_a_crawl_without_rule_tables_before_writing(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, missing_tables: tuple[str, ...]
+) -> None:
+    server = fixture_site(
+        Site({"/": Page(body='<a href="/next">Next</a>'), "/next": Page(body="<p>Next</p>")})
+    )
+    stopped = crawl_result(server.url("/"), max_urls=1)
+    file = stopped.crawl_file
+
+    # Development builds before Rules also created schema version 1.
+    with closing(sqlite3.connect(file)) as connection:
+        connection.execute("DROP TABLE affected_urls")
+        if "rules" in missing_tables:
+            connection.execute("DROP VIEW issues")
+            connection.execute("DROP TABLE rules")
+
+    assert query(file, "PRAGMA user_version") == [(1,)]
+    assert query(file, "SELECT state, (SELECT count(*) FROM pages) FROM crawl") == [("stopped", 1)]
+    before = sha256_of(file)
+    reporter = Collected()
+
+    with pytest.raises(OpenLinxError) as caught:
+        continued(stopped, CrawlOverrides(max_urls=None), reporter=reporter)
+
+    assert (caught.value.code, caught.value.exit_code, dict(caught.value.diagnostic.details)) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(file)},
+    )
+    message = caught.value.diagnostic.message.replace(str(file), "").casefold()
+    words = set(re.findall(r"\w+", message))
+    assert words & {"missing", "lacks", "absent"}
+    assert words & {"table", "tables"}
+    assert words & {"rules", "affected_urls"} == set(missing_tables)
+    assert reporter.events == []
+    assert sha256_of(file) == before
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
+
+
+def _sql_dump(file: Path) -> tuple[str, ...]:
+    with closing(connect(file, read_only=True)) as connection:
+        return tuple(connection.iterdump())
+
+
+@pytest.mark.parametrize("journal_mode", ["wal", "delete"])
+@pytest.mark.parametrize(
+    "missing_columns",
+    [_HEALTH_COLUMNS, ("health_calculated_at",)],
+    ids=["before-health", "no-health-timestamp"],
+)
+def test_a_continue_refuses_a_crawl_without_health_columns_before_writing(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    journal_mode: str,
+    missing_columns: tuple[str, ...],
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_text(
+        f'[store]\njournal_mode = "{journal_mode}"\n', encoding="utf-8"
+    )
+    server = fixture_site(
+        Site({"/": Page(body='<a href="/next">Next</a>'), "/next": Page(body="<p>Next</p>")})
+    )
+    stopped = crawl_result(server.url("/"), max_urls=1)
+    file = stopped.crawl_file
+
+    # Development builds on either side of the change declare the same schema version.
+    with closing(connect(file)) as connection:
+        for name in missing_columns:
+            connection.execute(f"ALTER TABLE crawl DROP COLUMN {name}")
+
+    assert query(file, "PRAGMA user_version") == [(1,)]
+    assert query(file, "PRAGMA journal_mode") == [(journal_mode,)]
+    assert query(file, "SELECT state, (SELECT count(*) FROM pages) FROM crawl") == [("stopped", 1)]
+    before = crawl_row(file)
+    dump = _sql_dump(file)
+    reporter = Collected()
+
+    with pytest.raises(OpenLinxError) as caught:
+        continued(stopped, CrawlOverrides(max_urls=None), reporter=reporter)
+
+    assert (caught.value.code, caught.value.exit_code, dict(caught.value.diagnostic.details)) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(file)},
+    )
+    message = caught.value.diagnostic.message.replace(str(file), "").casefold()
+    words = set(re.findall(r"\w+", message))
+    assert words & {"missing", "lacks", "absent"}
+    assert words & {"column", "columns"}
+    assert words & set(_HEALTH_COLUMNS) == set(missing_columns)
+    assert reporter.events == []
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
+    assert crawl_row(file) == before
+    assert _sql_dump(file) == dump
+
+
+def test_a_continue_accepts_null_health_columns(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Home</title><a href="/next">Next</a>'),
+                "/next": Page(body="<title>Next</title>"),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), passes=())
+    stopped = crawl_result(server.url("/"), hooks, max_urls=1)
+    assert stopped.summary.state == "stopped"
+    assert query(
+        stopped.crawl_file,
+        "SELECT health_score, health_internal_page_count, health_affected_page_count, "
+        "health_calculated_at FROM crawl",
+    ) == [(None, None, None, None)]
+
+    result = continued(stopped, CrawlOverrides(max_urls=None))
+
+    assert result.summary.state == "completed"
+    assert query(result.crawl_file, "SELECT url_path FROM pages ORDER BY url_path") == [
+        ("/",),
+        ("/next",),
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT health_score, health_internal_page_count, health_affected_page_count, "
+        "health_calculated_at IS NOT NULL FROM crawl",
+    ) == [(100, 2, 0, 1)]
 
 
 def test_a_continue_records_the_settings_it_runs_with(
@@ -76,6 +226,76 @@ def test_a_continue_keeps_the_exact_recorded_rule_threshold(
     assert result.summary.state == "completed"
     config = json.loads(crawl_row(result.crawl_file)["config"])
     assert config["rules"]["title-too-long"]["max_chars"] == 18446744073709551617
+
+
+@pytest.mark.parametrize("start_limit", ["4300", "640"], ids=["recorded-crawl", "new-crawl"])
+def test_a_continue_reads_and_preserves_wide_thresholds_under_a_lower_python_limit(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, start_limit: str
+) -> None:
+    threshold = 10**4300 - 1
+    settings = temp_workspace.root / "openlinx.toml"
+    settings.write_text(f"[rules.title-too-long]\nmax_chars = {threshold:#x}\n", encoding="utf-8")
+    server = fixture_site(NINE_PAGES)
+
+    start = run_cli_process(
+        "crawl",
+        server.url("/"),
+        "--max-urls",
+        "3",
+        env={**os.environ, "PYTHONINTMAXSTRDIGITS": start_limit},
+        timeout=CRAWL_PROCESS_TIMEOUT,
+    )
+
+    assert start.exit_code == 0, start.stderr
+    output = start.json()
+    assert output["state"] == "stopped"
+    file = Path(output["crawl_file"])
+    config = json.loads(crawl_row(file)["config"])
+    assert config["rules"]["title-too-long"]["max_chars"] == threshold
+
+    settings.write_text("[rules.title-too-long]\nmax_chars = 70\n", encoding="utf-8")
+    command = python_command(
+        "-c",
+        """
+import sys
+from pathlib import Path
+
+from openlinx.clock import SystemClock
+from openlinx.output.reporter import Collected
+from openlinx.services.crawling import CrawlOverrides, continue_crawl
+from openlinx.services.hooks import default_hooks
+from openlinx.store.crawls import read_recorded
+from openlinx.store.records import CrawlFile
+
+assert sys.get_int_max_str_digits() == 640
+path = Path(sys.argv[1])
+threshold = read_recorded(path).config["rules"]["title-too-long"]["max_chars"]
+assert type(threshold) is int and threshold == 10**4300 - 1
+result = continue_crawl(
+    CrawlFile(sys.argv[2], path),
+    CrawlOverrides(max_urls=None),
+    SystemClock(),
+    Collected(),
+    default_hooks(),
+)
+assert result.summary.state == "completed"
+assert sys.get_int_max_str_digits() == 640
+""",
+        str(file),
+        output["crawl_id"],
+    )
+    resumed = subprocess.run(
+        command.argv,
+        env={**os.environ, **(command.env or {}), "PYTHONINTMAXSTRDIGITS": "640"},
+        capture_output=True,
+        check=False,
+        timeout=CRAWL_PROCESS_TIMEOUT,
+    )
+
+    assert resumed.returncode == 0, resumed.stderr
+    assert query(file, "SELECT count(*) FROM pages") == [(10,)]
+    config = json.loads(crawl_row(file)["config"])
+    assert config["rules"]["title-too-long"]["max_chars"] == threshold
 
 
 def test_the_url_limit_counts_over_the_crawl_s_whole_life(

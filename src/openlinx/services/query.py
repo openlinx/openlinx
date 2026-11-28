@@ -1,4 +1,4 @@
-"""Resolve a Crawl and return its Issue list or the detail of one Rule."""
+"""Resolve a Crawl and read its Issues or the detail of one Rule."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -22,7 +22,6 @@ from openlinx.store.records import LATEST, CrawlFile, IssueType, Priority, RuleC
 from openlinx.workspace.discovery import resolve_workspace
 
 ISSUES = "issues"
-ISSUE = "issue"
 _ISSUE_ITEM = ("rule_id", "category", "issue_type", "priority", "affected_count", "description")
 ISSUE_FIELDS = Fields(available=_ISSUE_ITEM, default=_ISSUE_ITEM)
 _AFFECTED_URL_ITEM = ("url", "detail")
@@ -50,7 +49,7 @@ def issue_list(
     """Return one page of matching Issues from the selected Crawl's snapshot."""
     from openlinx.rules.registry import RULES
     from openlinx.store.query import ordered_issues_in
-    from openlinx.store.reading import reading
+    from openlinx.store.reading import reading_selected
 
     chosen = select_fields(fields, ISSUE_FIELDS)
     types = _filter_values(issue_types, "--type", get_args(IssueType.__value__))
@@ -58,16 +57,21 @@ def issue_list(
     category = _filter_values(categories, "--category", get_args(RuleCategory.__value__))
     crawl_file = _crawl_file(request)
     selection = {"crawl": crawl_file.id, "type": types, "priority": priority}
-    # Keep cursors issued before the category option for the same unfiltered category selection.
+    # Keep existing cursors valid for the same query without a category filter.
     if category:
         selection["category"] = category
     bound = fingerprint(ISSUES, selection)
     # Check the cursor before a live read runs the enabled Rules.
     if cursor is not None:
         decode_cursor(cursor, bound)
-    with reading(crawl_file.path, snapshot=True) as connection:
+    with reading_selected(crawl_file) as connection:
         items = ordered_issues_in(
-            connection, RULES, issue_types=types, priorities=priority, categories=category
+            connection,
+            crawl_file.path,
+            RULES,
+            issue_types=types,
+            priorities=priority,
+            categories=category,
         )
     return paginate(items, limit=limit, cursor=cursor, fingerprint=bound, fields=chosen)
 
@@ -80,14 +84,14 @@ def issue_detail(
     cursor: str | None = None,
     fields: str | None = None,
 ) -> Page:
-    """Read a recorded Rule and page its Affected URLs by URL in the same snapshot."""
+    """Read a recorded Rule and page its Affected URLs by URL within one snapshot."""
     from openlinx.rules.registry import RULES
     from openlinx.store.query import issue_detail_in
-    from openlinx.store.reading import reading
+    from openlinx.store.reading import reading_selected
 
     chosen = select_fields(fields, AFFECTED_URL_FIELDS)
     crawl_file = _crawl_file(request)
-    bound = fingerprint(ISSUE, {"crawl": crawl_file.id, "rule_id": rule_id})
+    bound = fingerprint("issue_detail", {"crawl": crawl_file.id, "rule_id": rule_id})
     after: str | None = None
     if cursor is not None:
         keyset = decode_cursor(cursor, bound)
@@ -95,9 +99,10 @@ def issue_detail(
             raise invalid_cursor()
         after = keyset[0]
 
-    with reading(crawl_file.path, snapshot=True) as connection:
+    window = limit + 1 if limit > 0 else 0
+    with reading_selected(crawl_file) as connection:
         rule, total, found = issue_detail_in(
-            connection, rule_id, RULES, after=after, limit=limit + 1
+            connection, crawl_file.path, rule_id, RULES, after=after, limit=window
         )
     items = found[:limit]
     next_cursor = (

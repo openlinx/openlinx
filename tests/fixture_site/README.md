@@ -24,18 +24,18 @@ SITE = Site(
 - **A reusable site** is a folder `sites/<name>/` with an empty `__init__.py`, a `site.py` that defines `SITE`, and its page files. Everything under `sites/` is `-text` in `.gitattributes`, so the files keep their exact bytes, line endings included.
 - **A one-off site** is built inline in the test: `Site(routes={...})`.
 - A site is checked when it is declared: a `Page` takes exactly one of `file=` and `body=`, and a site with `Page(file=...)` routes needs `root=`.
-- A site can compute routes with `resolve=`, a synchronous function from the request path
-  (without the query string) to a route or `None`. The server calls it on each request
-  for a path absent from `routes`. Returned routes use the same rules as declared routes,
-  including `root=` for file-backed pages and a per-path request count for `Responses`.
-- A path without a route from either source answers 404.
+- A declared route takes precedence for its path. For an undeclared path,
+  `Site(resolve=...)` can supply a route. The optional synchronous callable receives
+  the request path without its query string and returns a `Route` or `None`.
+  Resolved routes follow the same rules as declared routes, including `root=` for
+  file-backed Pages and a per-path request count for `Responses`.
+  A request without a declared or resolved route answers 404.
 
 ## Route kinds
 
 | Route | Answers with |
 |---|---|
 | `Page(file=... \| body=..., template=False)` | 200 and the file's exact bytes, or the body as UTF-8. The content type comes from the file extension through a fixed table (never `mimetypes`); a `body` page is `text/html; charset=utf-8`. With `template=True`, every `{{base_url}}` becomes the server's base URL. |
-| `Bytes(body, content_type=...)` | 200 with the supplied bytes unchanged. The default content type is `application/octet-stream`. |
 | `Status(code, body=None)` | That status and an empty body, or the body as UTF-8 with `text/html; charset=utf-8`, as an error page. |
 | `Redirect(location, status=301)` | That status and `Location` exactly as declared, never made absolute. `redirect_chain(prefix, hops, to)` builds `<prefix>1` → … → `<prefix><hops>` → `to`. |
 | `Robots(text)` | 200, `text/plain; charset=utf-8` and the text. |
@@ -54,6 +54,7 @@ Every route takes these as keyword arguments:
 - `content_type="..."`: replaces the route's own `Content-Type`.
 - `delay=0.5`: seconds to wait before the response headers.
 - `hang=True`: never answer.
+- `reset_before_headers=True`: drop the connection after receiving the request, before sending any response bytes.
 - `reset_after=100`: send the headers, with the whole body's `Content-Length`, and that many bytes of the body, then reset the connection (TCP RST).
 - `stall_body=True`: send the headers, then never the body.
 - `trickle=True`: send the headers, then the body one byte every 100 ms, never ending, which no per-read timeout ever ends.
@@ -102,19 +103,6 @@ Clients in tests:
 - A `urllib` opener needs `urllib.request.build_opener(urllib.request.ProxyHandler({}))`. On Windows urllib otherwise reads proxy settings from the registry.
 
 Timing tests assert only lower bounds, such as "not before 0.5 s", and use generous client timeouts.
-
-## Synthetic benchmark site
-
-[SyntheticSite](synthetic/site.py) computes each Page from its seed and number. Its
-`fanout` builds a spanning tree from `/` to `/p/1` through the last Page. Faults
-are assigned only to leaves, so a failed response cannot hide a subtree. The
-manifest records expected URL counts, fault outcomes and modeled Issues.
-`latency` delays every response, including 404s.
-
-Use [SiteProcess](synthetic/serve.py) as a context manager to serve the site in a
-separate `spawn` process. It exposes `base_url` and returns counts when you call
-`stop()`. The server disables the request journal and uses one saturating byte
-per Page to count which Pages were requested once or more than once.
 
 ## Extending it
 

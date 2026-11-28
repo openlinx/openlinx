@@ -1,4 +1,4 @@
-"""Encode JSON documents without narrowing integers to 64 bits."""
+"""Preserve exact integers in JSON documents across Python's conversion limits."""
 
 from typing import Any
 
@@ -11,7 +11,22 @@ def encode_json(value: Any) -> bytes:
     except TypeError as error:
         if str(error) != "Integer exceeds 64-bit range":
             raise
-    # Keep the ordinary encoding and CLI startup path. msgspec uses Python's digit limit.
-    from msgspec import json
+    # The fallback converts wide integers directly to decimal JSON numbers.
+    from pydantic_core import to_json
 
-    return json.encode(value)
+    return to_json(value, inf_nan_mode="null")
+
+
+def decode_json_object(data: str) -> dict[str, Any]:
+    """Read a JSON object, preserving recorded integers under a lower Python digit limit."""
+    from msgspec import ValidationError, json
+
+    try:
+        return json.decode(data, type=dict[str, Any])
+    except ValidationError:
+        from pydantic_core import from_json
+
+        value = from_json(data, allow_inf_nan=False)
+        if not isinstance(value, dict):
+            raise
+        return value

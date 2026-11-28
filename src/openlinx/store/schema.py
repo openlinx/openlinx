@@ -179,6 +179,28 @@ crawl = public_table(
         comment="When the state became completed; NULL in every other state.",
     ),
     Column(
+        "health_score",
+        Integer,
+        comment="Derived: The Health Score from the last post-crawl pass. "
+        "NULL for a Crawl without Internal Pages.",
+    ),
+    Column(
+        "health_internal_page_count",
+        Integer,
+        comment="Derived: The number of Internal Pages in the last post-crawl pass.",
+    ),
+    Column(
+        "health_affected_page_count",
+        Integer,
+        comment="Derived: The number of Internal Pages with an Issue-type Issue from an enabled "
+        "Rule in the last post-crawl pass.",
+    ),
+    Column(
+        "health_calculated_at",
+        Timestamp,
+        comment="Derived: When the last post-crawl pass calculated the Health Score.",
+    ),
+    Column(
         "stop_reason",
         Text,
         comment="Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, "
@@ -635,9 +657,16 @@ pages = public_table(
     Column(
         "redirect_url",
         Text,
-        comment="The URL the Page redirects to: the target of its 3xx response, of its HTTP "
-        "Refresh header, or of its first meta refresh; NULL when it does not redirect, or "
-        "when the HTTP redirect has no target. A Refresh to its own URL is no redirect.",
+        comment="The URL the Page redirects to. For an HTTP redirect or HTTP Refresh, this is "
+        "the target of the 3xx response or Refresh header. "
+        "For meta refresh after successful Page extraction, the first declaration "
+        "must contain a URL reference. "
+        "The first resolved meta refresh Link supplies the target, which can come "
+        "from a later declaration if the first reference cannot be resolved. "
+        "If the Page extractor fails (urls.parse_error is extractor_error), "
+        "meta_refresh is NULL and the first discovered meta refresh Link can supply redirect_url. "
+        "NULL when there is no redirect or the HTTP redirect has no target. "
+        "A Refresh to the Page's own URL is no redirect.",
     ),
     Column(
         "redirect_type",
@@ -729,8 +758,8 @@ pages = public_table(
     Column(
         "meta_description_1_width_px",
         Integer,
-        comment="Filled from v0.2. The width of meta_description_1 in Arial regular at 14 px, in "
-        "pixels.",
+        comment="The estimated width of meta_description_1 in pixels at 14 px, using Liberation "
+        "Sans Regular advances. NULL when absent or not measured.",
     ),
     Column(
         "meta_description_2",

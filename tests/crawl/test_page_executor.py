@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from openlinx.crawl.engine.hooks import Hooks, Pass, PassContext
+from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.fetch.fetcher import FetchResult
 from openlinx.crawl.pages.preparation import PageSettings, PreparedPage, prepare_page
 from openlinx.crawl.urls import NormalizedUrl
@@ -14,7 +15,7 @@ from openlinx.output.reporter import Collected
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.support.clock import FakeClock
-from tests.support.crawling import crawl_result
+from tests.support.crawling import continued, crawl_result
 from tests.support.crawls import crawl_row, query
 from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.workspace import TempWorkspace
@@ -215,8 +216,9 @@ class SlowPool:
     backlog = 2
     workers = 1
 
-    def __init__(self, clock: FakeClock) -> None:
+    def __init__(self, clock: FakeClock, delay: float = 10) -> None:
         self._clock = clock
+        self._delay = delay
         self._settings: PageSettings | None = None
         self._preparing = 0
         self.most_preparing = 0
@@ -229,7 +231,7 @@ class SlowPool:
         self._preparing += 1
         self.most_preparing = max(self.most_preparing, self._preparing)
         try:
-            await self._clock.sleep(10)
+            await self._clock.sleep(self._delay)
             return prepare_page(url, response, self._settings)
         finally:
             self._preparing -= 1
@@ -242,17 +244,70 @@ def test_fetching_waits_while_page_preparation_is_behind_by_its_backlog(
     temp_workspace: TempWorkspace,
 ) -> None:
     clock = FakeClock()
+    seed = "http://site.test/"
+    children = [
+        *(f"{seed}p{n}" for n in range(25)),
+        *(f"http://{host}.site.test/p{n}" for host in ("a", "b", "c") for n in range(5)),
+    ]
     pages = {
-        "/": FakePage("".join(f'<a href="/p{n}">P{n}</a>' for n in range(30))),
-        **{f"/p{n}": FakePage(f"<p>P{n}</p>") for n in range(30)},
+        seed: FakePage("".join(f'<a href="{url}">P</a>' for url in children)),
+        **{url: FakePage("<p>Page</p>") for url in children},
     }
     fetcher = FakeFetcher(clock, pages)
     pool = SlowPool(clock)
 
-    crawl_result("http://site.test/", pages=lambda: pool, clock=clock, fetcher=fetcher)
+    result = crawl_result(
+        seed, scope="subdomains", pages=lambda: pool, clock=clock, fetcher=fetcher
+    )
 
-    # The global cap of 20 at the default concurrency, plus the pool's backlog of 2.
-    assert (pool.most_preparing, len(fetcher.starts)) == (22, 32)
+    # The first host overfills the global window on its own. The other hosts reach the
+    # global cap of 20 plus 2 while the first host still has Pages waiting to be prepared.
+    assert pool.most_preparing == 22
+    first_child = min(at for url, at in fetcher.starts if url in children)
+    initial = [url for url, at in fetcher.starts if url in children and at < first_child + 10]
+    assert len(initial) == 22
+    assert sum(url.startswith(seed) for url in initial) == 7
+    assert sorted(url for url, _ in fetcher.starts if url in pages) == sorted(pages)
+    assert query(result.crawl_file, "SELECT url, parsed FROM urls ORDER BY url") == [
+        (url, 1) for url in sorted(pages)
+    ]
+
+
+def test_stopping_a_crawl_with_a_full_preparation_window_leaves_unsubmitted_urls_queued(
+    temp_workspace: TempWorkspace,
+) -> None:
+    clock, stop = FakeClock(), StopSignal()
+    seed = "http://site.test/"
+    children = [f"/p{n}" for n in range(9)]
+    checked = "http://other.test/check"
+    pages = {
+        "/": FakePage("".join(f'<a href="{url}">P</a>' for url in [*children, checked])),
+        **{url: FakePage("<p>Page</p>") for url in children},
+        checked: FakePage("<p>Checked</p>", delay=1),
+    }
+    fetcher = FakeFetcher(clock, pages, on_answer={checked: lambda: stop.set("interrupt")})
+    pool = SlowPool(clock, delay=60)
+
+    stopped = crawl_result(seed, clock=clock, fetcher=fetcher, stop=stop, pages=lambda: pool)
+
+    assert (crawl_row(stopped.crawl_file)["state"], stopped.to_json()["stop_reason"]) == (
+        "stopped",
+        "interrupt",
+    )
+    starts = [path for path, _ in fetcher.path_starts if path in children]
+    assert len(starts) == len(set(starts)) == 7
+    assert query(
+        stopped.crawl_file,
+        "SELECT url, fetch_state, parsed FROM urls WHERE is_internal ORDER BY url",
+    ) == [(seed, "fetched", 1), *((f"http://site.test{path}", "queued", 0) for path in children)]
+
+    fetcher = FakeFetcher(clock, pages)
+    ended = continued(stopped, clock=clock, fetcher=fetcher)
+    assert crawl_row(ended.crawl_file)["state"] == "completed"
+    assert sorted(path for path, _ in fetcher.path_starts if path in ["/", *children]) == children
+    assert query(
+        ended.crawl_file, "SELECT url, parsed FROM urls WHERE is_internal ORDER BY url"
+    ) == [(seed, 1), *((f"http://site.test{path}", 1) for path in children)]
 
 
 class RaisingExecutor:

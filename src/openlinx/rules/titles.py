@@ -73,4 +73,69 @@ WHERE urls.parsed = 1 AND pages.title_1_length > (
     thresholds=(Threshold("max_chars", 60, "characters"),),
 )
 
-RULES = (TITLE_MISSING, TITLE_DUPLICATE, TITLE_TOO_LONG)
+TITLE_TOO_SHORT = Rule(
+    id="title-too-short",
+    category="titles",
+    issue_type="opportunity",
+    priority="low",
+    applies_to="internal_pages",
+    description="A Page's first title is non-empty and shorter than min_chars characters.",
+    why_it_matters="A short title can leave out details that set the Page apart in search results.",
+    how_to_fix="Add specific words that explain what the Page offers, up to a readable length.",
+    reproduce_sql="""\
+SELECT pages.url_id, json_object('length', pages.title_1_length) AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1 AND pages.title_1_length >= 1 AND pages.title_1_length < (
+    SELECT json_extract(thresholds, '$.min_chars') FROM rules WHERE id = 'title-too-short'
+)""",
+    thresholds=(Threshold("min_chars", 30, "characters"),),
+)
+TITLE_MULTIPLE = Rule(
+    id="title-multiple",
+    category="titles",
+    issue_type="issue",
+    priority="medium",
+    applies_to="internal_pages",
+    description="A Page has more than one <title> element.",
+    why_it_matters="Multiple titles send conflicting signals about how to label the Page.",
+    how_to_fix=(
+        "Keep one descriptive <title> in <head> and remove the others. "
+        "Check the Page template for duplicate title markup."
+    ),
+    reproduce_sql="""\
+SELECT pages.url_id, json_object('count', pages.title_count) AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1 AND pages.title_count > 1""",
+)
+TITLE_SAME_AS_H1 = Rule(
+    id="title-same-as-h1",
+    category="titles",
+    issue_type="opportunity",
+    priority="low",
+    applies_to="internal_pages",
+    description="A Page's first title repeats the text of its first <h1>.",
+    why_it_matters=(
+        "A title can give people context in search results, while the main heading "
+        "introduces the content once they arrive."
+    ),
+    how_to_fix=(
+        "If useful, add distinguishing context to the title and keep the <h1> "
+        "focused on the Page's main topic."
+    ),
+    reproduce_sql="""\
+SELECT pages.url_id, NULL AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1 AND pages.title_1 <> '' AND pages.title_1 COLLATE BINARY = pages.h1_1""",
+)
+
+RULES = (
+    TITLE_MISSING,
+    TITLE_DUPLICATE,
+    TITLE_TOO_LONG,
+    TITLE_TOO_SHORT,
+    TITLE_MULTIPLE,
+    TITLE_SAME_AS_H1,
+)

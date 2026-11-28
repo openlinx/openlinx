@@ -9,16 +9,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import msgspec
 import orjson
 from sqlalchemy import Connection, func, insert, select, update
 from sqlalchemy.exc import DBAPIError
 
 from openlinx import __version__
-from openlinx.output.codes import WORKSPACE_NOT_WRITABLE
+from openlinx.json_numbers import decode_json_object
+from openlinx.output.codes import CRAWL_FILE_INVALID, WORKSPACE_NOT_WRITABLE
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.claim import claim_writer
 from openlinx.store.connections import connect, not_writable_name, opening
+from openlinx.store.identity import check_crawl_id
 from openlinx.store.ids import Choice, crawl_path, new_crawl_id
 from openlinx.store.journal import JournalChoice, confirm_journal_mode
 from openlinx.store.reading import reading
@@ -31,7 +32,15 @@ from openlinx.store.records import (
     RecordedScope,
     StopReason,
 )
-from openlinx.store.schema import SCHEMA_VERSION, crawl, metadata, rules, seeds
+from openlinx.store.schema import (
+    SCHEMA_VERSION,
+    affected_urls,
+    crawl,
+    issues,
+    metadata,
+    rules,
+    seeds,
+)
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import requeue_for_a_continue
 from openlinx.workspace.creation import as_workspace_not_writable, create_data_folder
@@ -105,10 +114,11 @@ def record_scope(scope: RecordedScope) -> Callable[[Connection], None]:
     return unit
 
 
-def read_recorded(path: Path) -> RecordedCrawl:
-    with reading(path) as connection:
+def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedCrawl:
+    with reading(path, identity=selected.identity if selected is not None else None) as connection:
         row = connection.execute(
             select(
+                crawl.c.id,
                 crawl.c.state,
                 crawl.c.crawl_mode,
                 crawl.c.config,
@@ -116,17 +126,67 @@ def read_recorded(path: Path) -> RecordedCrawl:
                 crawl.c.warnings,
             )
         ).one()
+        if selected is not None:
+            check_crawl_id(selected.path, selected.id, row.id)
+        check_rule_schema(connection, path)
+        _check_health_columns(connection, path)
         urls: list[str] = list(
             connection.execute(select(seeds.c.url).order_by(seeds.c.position)).scalars()
         )
         return RecordedCrawl(
             state=row.state,
             crawl_mode=row.crawl_mode,
-            # JSON integers outside 64 bits must survive replay as integers.
-            config=msgspec.json.decode(row.config, type=dict[str, Any]),
+            config=decode_json_object(row.config),
             scope=orjson.loads(row.scope),
             seeds=tuple(urls),
             warnings=tuple(orjson.loads(row.warnings)),
+        )
+
+
+def check_rule_schema(connection: Connection, path: Path) -> None:
+    """Refuse Crawl files missing the Rule tables or the stored Issues view."""
+    table_names = (rules.name, affected_urls.name)
+    present: set[str] = set(
+        connection.exec_driver_sql(
+            "SELECT name FROM sqlite_schema WHERE (type = 'table' AND name IN (?, ?))"
+            " OR (type = 'view' AND name = ?)",
+            (*table_names, issues.name),
+        ).scalars()
+    )
+    missing_tables = ", ".join(name for name in table_names if name not in present)
+    missing = []
+    if missing_tables:
+        missing.append(f"required Rule tables: {missing_tables}")
+    if issues.name not in present:
+        missing.append(f"required Rule view: {issues.name}")
+    if missing:
+        objects = " and ".join(missing)
+        raise OpenLinxError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} is missing {objects}.",
+            hint="Crawl again with this tool to record Rules and their Affected URLs.",
+            details={"file": str(path)},
+        )
+
+
+def _check_health_columns(connection: Connection, path: Path) -> None:
+    """Refuse pre-Health Crawl files before Continue changes the file."""
+    names = (
+        crawl.c.health_score.name,
+        crawl.c.health_internal_page_count.name,
+        crawl.c.health_affected_page_count.name,
+        crawl.c.health_calculated_at.name,
+    )
+    present: set[str] = set(
+        connection.exec_driver_sql("SELECT name FROM pragma_table_info(?)", (crawl.name,)).scalars()
+    )
+    missing = ", ".join(name for name in names if name not in present)
+    if missing:
+        raise OpenLinxError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} is missing required Health columns {missing}.",
+            hint="Crawl again with this tool to record the Health Score.",
+            details={"file": str(path)},
         )
 
 

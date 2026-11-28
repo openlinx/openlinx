@@ -8,6 +8,7 @@ import sys
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
 from threading import Event
 from time import monotonic, sleep
@@ -28,6 +29,11 @@ if sys.platform == "win32":
     _kernel.GetConsoleWindow.restype = wintypes.HWND
     _kernel.GenerateConsoleCtrlEvent.argtypes = [wintypes.DWORD, wintypes.DWORD]
     _kernel.GenerateConsoleCtrlEvent.restype = wintypes.BOOL
+    _kernel.GetProcessTimes.argtypes = [
+        wintypes.HANDLE,
+        *([ctypes.POINTER(wintypes.FILETIME)] * 4),
+    ]
+    _kernel.GetProcessTimes.restype = wintypes.BOOL
     _window_visible = ctypes.WinDLL("user32").IsWindowVisible
     _window_visible.argtypes = [wintypes.HWND]
     _window_visible.restype = wintypes.BOOL
@@ -154,6 +160,42 @@ class ConsoleCrawl:
             return _winapi.GetExitCodeProcess(handle)
         raise RuntimeError("Native process status requires Windows")
 
+    def child_exits(
+        self, watched: dict[str, int], seconds: int
+    ) -> dict[str, tuple[int, float] | None]:
+        """Wait within one budget and measure from the native owner exit timestamp."""
+        if sys.platform == "win32":
+            assert _winapi.WaitForSingleObject(self.owner_handle, 0) == _winapi.WAIT_OBJECT_0
+            owner_exit = _exit_time(self.owner_handle)
+            deadline = monotonic() + seconds
+            exits: dict[str, tuple[int, float] | None] = {}
+            for role, handle in watched.items():
+                remaining_ms = max(0, ceil((deadline - monotonic()) * 1000))
+                wait = _winapi.WaitForSingleObject(handle, remaining_ms)
+                if wait == _winapi.WAIT_OBJECT_0:
+                    elapsed = (_exit_time(handle) - owner_exit) / 10_000_000
+                    exits[role] = (_winapi.GetExitCodeProcess(handle), elapsed)
+                else:
+                    assert wait == _winapi.WAIT_TIMEOUT, (role, wait)
+                    exits[role] = None
+            return exits
+        raise RuntimeError("Native process times require Windows")
+
+
+def _exit_time(handle: int) -> int:
+    if sys.platform == "win32":
+        creation, exit_at, kernel, user = (wintypes.FILETIME() for _ in range(4))
+        if not _kernel.GetProcessTimes(
+            handle,
+            ctypes.byref(creation),
+            ctypes.byref(exit_at),
+            ctypes.byref(kernel),
+            ctypes.byref(user),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return (exit_at.dwHighDateTime << 32) | exit_at.dwLowDateTime
+    raise RuntimeError("Native process times require Windows")
+
 
 def _open_process(pid: int) -> int:
     if sys.platform == "win32":
@@ -164,11 +206,16 @@ def _open_process(pid: int) -> int:
 
 @contextmanager
 def private_console(
-    folder: Path, argv: list[str], env: dict[str, str], delivery: str
+    folder: Path, argv: list[str], env: dict[str, str], delivery: str, *, repeat: bool = False
 ) -> Iterator[ConsoleCrawl]:
     if sys.platform == "win32":
         command = python_command(
-            "-m", "tests.crawl.parse_windows_console", str(folder), delivery, *argv
+            "-m",
+            "tests.crawl.parse_windows_console",
+            str(folder),
+            delivery,
+            "twice" if repeat else "once",
+            *argv,
         )
         if command.env is not None:
             env = {**env, "__PYVENV_LAUNCHER__": command.env["__PYVENV_LAUNCHER__"]}
@@ -221,7 +268,7 @@ def private_console(
         raise RuntimeError("A private test console requires Windows")
 
 
-def _broker(folder: Path, delivery: str, argv: list[str]) -> int:
+def _broker(folder: Path, delivery: str, repeat: bool, argv: list[str]) -> int:
     if sys.platform == "win32":
         # The broker is the only test process on this console that receives a broadcast.
         signal.signal(signal.SIGBREAK, signal.SIG_IGN)
@@ -242,6 +289,13 @@ def _broker(folder: Path, delivery: str, argv: list[str]) -> int:
                 group = 0 if delivery == "broadcast" else owner.pid
                 if not _kernel.GenerateConsoleCtrlEvent(signal.CTRL_BREAK_EVENT, group):
                     raise ctypes.WinError(ctypes.get_last_error())
+                if repeat:
+                    _await_file(folder / "send_second_break", 30)
+                    assert owner.poll() is None, "Crawl exited before the second Ctrl+Break"
+                    _record(folder / "second_console_pids", _console_pids())
+                    if not _kernel.GenerateConsoleCtrlEvent(signal.CTRL_BREAK_EVENT, group):
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    _record(folder / "second_break_sent", group)
                 stdout, _ = owner.communicate(timeout=40)
                 os.write(1, stdout)
                 return owner.returncode
@@ -252,4 +306,4 @@ def _broker(folder: Path, delivery: str, argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(_broker(Path(sys.argv[1]), sys.argv[2], sys.argv[3:]))
+    raise SystemExit(_broker(Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "twice", sys.argv[4:]))

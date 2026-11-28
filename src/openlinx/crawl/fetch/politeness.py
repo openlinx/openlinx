@@ -3,6 +3,7 @@
 import asyncio
 
 from openlinx.clock import Clock
+from openlinx.crawl.urls import NormalizedUrl, host_key
 
 
 class RateGate:
@@ -60,14 +61,17 @@ class RequestLimits:
     """The bound on URL tasks and the URL limit, --max-urls, which counts every request it lets
     start; the Requester holds the hosts' slots and the global cap.
 
-    A task holds its permit until its unit is submitted, so `backlog` is how far page
-    preparation may fall behind the requests before fetching waits (020-add-crawl-core D7;
-    026-add-parse-pool D2)."""
+    A task holds room until submitting its unit. With a preparation backlog, the
+    same lifetime also counts against its host's task bound, since the host's
+    request slot is free once HTTP ends, before preparation (026-add-parse-pool D2)."""
 
     def __init__(
-        self, cap: int, backlog: int = 0, max_urls: int | None = None, *, started: int = 0
+        self, concurrency: int, backlog: int = 0, max_urls: int | None = None, *, started: int = 0
     ) -> None:
-        self._tasks = asyncio.Semaphore(cap + backlog)
+        self._tasks = asyncio.Semaphore(global_cap(concurrency) + backlog)
+        self._host_cap = concurrency + backlog if backlog else None
+        self._hosts: dict[str, int] = {}
+        self._task_ended = asyncio.Event()
         self._max_urls = max_urls
         self._started = started
         self._refused: int | None = None
@@ -108,10 +112,30 @@ class RequestLimits:
         """The URL limit once it has refused a request."""
         return self._refused
 
-    async def reserve_task(self) -> None:
-        """Waits for room under the task bound, the global cap plus the page executor's
-        backlog, before a URL's task is created."""
-        await self._tasks.acquire()
+    def task_host(self, url: NormalizedUrl) -> str | None:
+        return host_key(url) if self._host_cap is not None else None
 
-    def task_ended(self) -> None:
+    def host_full(self, host: str | None) -> bool:
+        return host is not None and self._hosts.get(host, 0) == self._host_cap
+
+    def watch_task_ends(self) -> asyncio.Event:
+        """The dispatcher watches for task endings since the start of its pass."""
+        self._task_ended.clear()
+        return self._task_ended
+
+    async def reserve_task(self, host: str | None) -> None:
+        """The single dispatcher has checked host room; wait for global room before
+        reserving both for a new task."""
+        await self._tasks.acquire()
+        if host is not None:
+            self._hosts[host] = self._hosts.get(host, 0) + 1
+
+    def task_ended(self, host: str | None) -> None:
+        if host is not None:
+            left = self._hosts[host] - 1
+            if left:
+                self._hosts[host] = left
+            else:
+                del self._hosts[host]
+            self._task_ended.set()
         self._tasks.release()

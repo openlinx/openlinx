@@ -15,6 +15,8 @@ Both need five things:
 
 ## What Changes
 
+The v0.1 writer ownership slice takes the OS claim before creating a crawl file and keeps it through the end of the start or continue Service, including post-crawl passes and failure recording. Continuation uses the same verified file for the claim, admission read and every writer (D12).
+
 > **Scope (2026-10-05, see ROADMAP.md):** **v0.1** ships 060-min and `resume`: `crawl --detach`, `status` (with dead-process detection) and `stop` (`--wait`), for Spider mode only, with the recorded runs and the control requests. **v0.1.1:** the command recorded for Crawls started through MCP. **Deferred to v0.2:** `resume`'s credential overrides (`022`'s flags), `crawl --dry-run` with its URL estimate and equivalent command, `crawls list|show|rm`, and detached List mode (`024` is v0.2). Each requirement in the spec is marked with its release.
 >
 > **Moved from 015 (2026-10-05):** the writer claim (`crawl_locked`), control writes by processes without the claim, recording a dead Crawl as `interrupted`, and reserved and chosen crawl ids (`crawl_id_taken`). `015` did not build them, so this change does (design D12).
@@ -27,7 +29,7 @@ Both need five things:
   - It validates like a foreground `crawl`, reserves the crawl id, and starts a separate background process that creates the Crawl.
   - Within 10 seconds it prints `{crawl_id, state, run, pid, crawl_file, log_file, warnings, hint}`.
   - The background process survives closing the terminal:
-    - Windows: CREATE_NO_WINDOW (approved) in a new process group, so it opens no window (nor do 026's parse workers), breaking away from the caller's job object when the job allows it.
+    - Windows: `CREATE_NO_WINDOW` in a new process group, away from the caller's console and without a visible window. It breaks away from the caller's job object when the job allows it. If selected, the parse pool applies `026`'s child launch rules.
     - macOS and Linux: a new session.
   - Progress events and diagnostics go to `<crawl-id>.log`. Secrets are passed through the environment, never on the command line.
   - In List mode, the detaching Command reads and checks the list and stores the Seeds before the background process starts, so `--list -` works and list errors come back at once.

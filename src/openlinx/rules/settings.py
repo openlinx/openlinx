@@ -40,10 +40,14 @@ def _tables() -> dict[str, Any]:
     return tables
 
 
+class _RulesSettings(BaseModel):
+    # Keep the Rule ids in the recorded Crawl config as well as in the settings file.
+    model_config = ConfigDict(extra="forbid", serialize_by_alias=True)
+
+
 RulesSettings: type[BaseModel] = create_model(
     "RulesSettings",
-    # Keep the Rule ids in the recorded Crawl config as well as in the settings file.
-    __config__=ConfigDict(extra="forbid", serialize_by_alias=True),
+    __base__=_RulesSettings,
     __doc__="Thresholds and enabled state by Rule id, for example [rules.title-too-long].",
     **_tables(),
 )

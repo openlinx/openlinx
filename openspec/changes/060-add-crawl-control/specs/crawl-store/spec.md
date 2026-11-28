@@ -1,6 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Crawl ids
+**In short:** A new Crawl draws an id unused by any crawl file, writer claim file or log file in its Workspace.
 
 A crawl id SHALL consist of:
 - the Crawl's UTC start time, formatted `YYYYMMDD-HHMMSS`

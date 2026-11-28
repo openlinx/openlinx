@@ -56,6 +56,9 @@ def block(folder: Path) -> None:
 
 def prepare(tree: LexborHTMLParser, page: PageInput, config: Probe) -> Observed:
     if page.url.endswith("/die"):
+        if "OPENLINX_TEST_SPAWN_HANDOFF" in os.environ:
+            # Give the observer the first worker's real handle before replacing it.
+            _await_observer(config.folder / "crash_worker")
         os._exit(3)
     if page.url.endswith("/hang"):
         block(config.folder)
@@ -127,6 +130,12 @@ def main(url: str, folder: Path, phase: str) -> int:
         def start(process: BaseProcess) -> None:
             with patch.dict(os.environ, OPENLINX_TEST_SPAWN_NAME=process.name):
                 spawn(process)
+            if process.name == os.environ.get("OPENLINX_TEST_SPAWN_HANDOFF"):
+                # Keep the owner in this real spawn handoff before the pool receives the PID.
+                from tests.crawl.parse_windows_console import _record
+
+                _record(folder / "spawn_handoff", process.pid)
+                threading.Event().wait()
 
         with patch.object(BaseProcess, "start", start):
             return _crawl(url, folder, phase)

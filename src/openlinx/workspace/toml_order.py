@@ -1,5 +1,6 @@
-"""Locate settings and scalar literals in TOML source for diagnostics."""
+"""Locate and format TOML settings and scalar literals for diagnostics."""
 
+import json
 import re
 import tomllib
 from collections import deque
@@ -16,21 +17,37 @@ _TOKEN = re.compile(
     r'|"(?:[^"\\]++|\\.)*+"'
     r"|'[^']*'|\#[^\n]*|[\[\]{},=.\n]|[^\s\[\]{},=.\"'\#]+"
 )
+_BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 _DECIMAL_INTEGER = re.compile(r"[+-]?[1-9](?:[0-9]++|_[0-9])*+")
 _FLOAT_SUFFIX = re.compile(r"\.[0-9]|[eE][+-]?[0-9]")
 
 
+def format_toml_key(key: Key) -> str:
+    """Quote literal segments that would otherwise change the meaning of a dotted path."""
+    # JSON's basic string escapes work in TOML. TOML also requires escaping DEL.
+    return ".".join(
+        str(part)
+        if isinstance(part, int) or _BARE_KEY.fullmatch(part)
+        else json.dumps(part, ensure_ascii=False).replace("\x7f", r"\u007f")
+        for part in key
+    )
+
+
 def oversized_decimals(source: str, maximum: int) -> Iterator[re.Match[str]]:
-    """Locate decimal assignment values that exceed Python's conversion limit.
+    """Locate decimal values that exceed Python's conversion limit.
 
     Match just the numeric prefix so a syntax error after it cannot hide the value.
-    Keys, comments, strings and floats are left for the TOML decoder.
+    A collection opened in a value position differs from a table header.
     """
     if not maximum:
         return
-    after_equals = False
+    containers: list[str] = []
+    expects_value = False
     for token in _TOKEN.finditer(source):
-        if after_equals:
+        text = token[0]
+        if text == "\n" or text.startswith("#"):
+            continue
+        if expects_value:
             integer = _DECIMAL_INTEGER.match(source, token.start())
             if (
                 integer is not None
@@ -38,7 +55,13 @@ def oversized_decimals(source: str, maximum: int) -> Iterator[re.Match[str]]:
                 and _FLOAT_SUFFIX.match(source, integer.end()) is None
             ):
                 yield integer
-        after_equals = token[0] == "="
+            if text in ("[", "{"):
+                containers.append(text)
+        if containers and text in ("]", "}"):
+            containers.pop()
+        expects_value = text == "=" or (
+            bool(containers) and containers[-1] == "[" and text in ("[", ",")
+        )
 
 
 def decimal_digits(literal: str) -> int:

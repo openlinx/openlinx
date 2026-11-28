@@ -6,9 +6,10 @@ imports and wrap the lines:
     uv run python scripts/crawl_layout_codemod.py src tests scripts
     uv run ruff check --select I --fix . && uv run ruff format .
 
-It rewrites the .py files under each path given and prints each file it changed; a second run
-changes nothing. `from openlinx.crawl import engine` (or pages, robots) means the old module, and
-a bare `openlinx.crawl.engine` (or pages, robots) the new package.
+A directory argument selects .py files. An explicit file is processed regardless of suffix.
+Changed paths are printed, and a second run changes nothing. `from openlinx.crawl import engine`
+(or pages, robots) means the old module, and a bare `openlinx.crawl.engine` (or pages, robots)
+means the new package.
 """
 
 import argparse

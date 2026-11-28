@@ -11,7 +11,7 @@ Seams (docs/testing.md):
 - **[CLI]**: seam 1, `CliRunner`
 - **[Subprocess]**: seam 1, a real `linx` process
 
-Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 build the pool, which is unconditional in v0.1 (the user's decision of 2026-10-11).
+Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 build and qualify the opt-in pool. The default stays in-process until the separately reviewed selection step (2.1b).
 
 ## 1. The 500k benchmark (baseline)
 
@@ -25,15 +25,9 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 - [ ] 2.1 [3+6] Drive "Pages are parsed outside the crawl process".
 
   Done when: the pool executor in `openlinx.crawl.pages.parse_pool` implements `020`'s `PageExecutor.prepare(url, response)` with its own `spawn` workers, one Page per worker at a time; each worker starts with the settings snapshot and the registered extractors, and a work item carries only the response (design D1); extractors and handlers are unchanged.
-  - [x] 2.1a Port the executor behind the Crawl Service's `pages=` seam. Verify that both Pages
-    are prepared in a spawned process with the extractor's config, that handlers run in the
-    Crawl process, and that completion reaps the observed worker. Port the crash, deadline
-    and replacement regressions and exercise bounded close on cancelled work, failed
-    readiness and a worker stuck after its last outcome.
-  - [ ] 2.1b Select the pool at the composition root after the shutdown and parent-death
-    proofs and the quiet 500k in-process baseline. Keep the in-process executor available
-    for benchmark comparisons.
-- [ ] 2.2 [CLI] Drive "The number of parse workers is reported": `parse_workers` in `crawl_started`, from the physical core count of design D1. Done when: `psutil` is a runtime dependency, confined to the Page preparation pool and its guardian, and `tests/cli/test_startup.py` still passes.
+- [ ] 2.1a Keep in-process preparation as the default in start and continue. Exercise the opt-in pool through the Crawl Service's executor seam, including in the subprocess tests.
+- [ ] 2.1b After native shutdown and parent-death qualification (group 4) and the in-process baseline (1.2), review automatic selection separately. If enabled, test the installed wheel with its selected worker count, a native bootstrap interrupt and the exact Store outcome and recovery Pages.
+- [ ] 2.2 [CLI, 3+6] Drive "The number of parse workers is reported": `parse_workers` in `crawl_started` reports zero for in-process preparation and the configured count for the opt-in pool. `psutil` stays off the CLI startup path.
 - [ ] 2.3 [Subprocess, Windows in CI] Drive "Pages are parsed in worker processes on Windows (Windows)".
 - [ ] 2.4 Docs: document the parse pool (start method, worker count, the snapshot sent once when a worker starts, the unchanged extractor interface) in `docs/architecture.md`.
 - [ ] 2.5 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
@@ -52,20 +46,13 @@ Group 1 is the benchmark, run against `020`'s in-process executor. Groups 2–4 
 ## 4. Shutdown and Windows consoles
 
 - [ ] 4.1 [Subprocess] Drive "No parse worker outlives a completed Crawl": each worker gets a stop message and is joined (design D4).
-- [ ] 4.2 [Subprocess] Drive "An interrupt ends the parse workers" and "Ctrl+Break ends the parse tree during Windows bootstrap". Leave unfinished URLs `queued` at grace expiry. On native Windows use a private console, exercise targeted and broadcast delivery during guardian, initial worker and replacement startup, and verify raw exit status, window visibility and a subsequent Crawl in the Store.
-- [ ] 4.3 [Subprocess, Windows in CI] Drive "Parse workers open no console window (Windows)".
-- [x] 4.4 Docs: document shutdown and Windows console behaviour (why `060` uses CREATE_NO_WINDOW) in `docs/architecture.md`.
+- [ ] 4.2 [Subprocess] Drive "An interrupt ends the parse workers". On macOS and Linux, qualify orderly close and owner death on a second SIGINT with a child held in native bootstrap on Python 3.12–3.14. Check bounded exit by process identity, committed Crawl state and queued Seed, and a fresh recovery Crawl with two Pages.
+- [ ] 4.2a [Subprocess, Windows in CI] Drive "Ctrl+Break ends the parse tree during Windows bootstrap". On the exact candidate, run targeted and broadcast delivery for each of guardian, initial worker and replacement on Python 3.12–3.14. Check native handles and raw exit status, console membership, redirected streams, exact Store rows and recovery Pages. Include a matched no-signal control and negative controls that inherit the console or omit early child shutdown.
+- [ ] 4.2b [Windows foreground console] Exercise keyboard Ctrl+C and Ctrl+Break separately with the pool selected while the guardian, initial worker or replacement is in bootstrap and while a worker is preparing a Page. Check the same interrupt stop, exit bound, window visibility and Store outcome. Record the candidate SHA and the console used.
+- [ ] 4.2c [Subprocess, Windows in CI] Qualify owner death while a child is held in native bootstrap before admission. After the first Ctrl+Break reports `stopping` with reason `interrupt`, send a second while the child is still held. Observe the owner and all parse child process handles. Require owner exit 130 and every child to exit within 10 seconds after the owner exits. Verify that the Store retains the last committed `running` state and URL rows, including the `queued` Seed for an initial launch. Run a fresh two-Page recovery Crawl and check both stored Pages.
+- [ ] 4.3 [Subprocess, Windows in CI] Drive "Parse workers open no console window (Windows)". Verify live window visibility and all 31 parsed Pages. Include this case in the native proof of 4.2a.
+- [ ] 4.4 Docs: document shutdown and Windows child launches in `docs/architecture.md` and align the background owner launch in `060` D4.
 - [ ] 4.5 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
-
-  The opt-in subprocess tests cover completion, a single interrupt and abrupt owner death
-  during Page preparation by a replacement, settings unpickling, and the admission wait.
-  Linux proof includes a Page blocked in native code and a pre-admission owner death with
-  the work sockets retained by a separate process. It also covers one and two interrupts
-  while a worker is blocked in native code before reaching its target, then a fresh Crawl
-  which stores both Pages. The Windows fixture holds children before they read the spawn
-  payload and verifies pending and recovered Pages. The executor tests cover cancellation
-  during spawn, stalled work delivery and a forked child holding the result pipe and the
-  POSIX process sentinel. Default CLI and native Windows and macOS acceptance remain open.
 
 ## 5. Change check
 

@@ -107,7 +107,7 @@ With `--list` (`024-add-list-and-sitemap-modes`) and `--detach`, the detaching C
 ### Requirement: Background Crawls outlive their terminal
 The background process SHALL survive the end of the process and terminal that started it:
 - **On Windows:**
-  - It SHALL be created in a new process group with CREATE_NO_WINDOW, so that it shows no console window. The parse worker processes of `026-add-parse-pool` SHALL show none either.
+  - It SHALL be created in a new process group with `CREATE_NO_WINDOW`, away from the caller's console and without a visible window. If the parse pool is selected, its guardian and workers SHALL follow the Windows launch requirements of `026-add-parse-pool`.
   - It SHALL be created outside the caller's job object when that job allows breakaway.
   - When the caller's job object kills its processes on close and does not allow breakaway, the output SHALL hold a `job_may_end_crawl` warning whose hint suggests running the Command from a normal terminal.
 - **On macOS and Linux:** it SHALL run in a new session, with standard input from the null device.
@@ -384,8 +384,12 @@ Secrets are never stored in clear:
 - **THEN** the `crawl` table of `crawl.config` has `concurrency` = 2
 
 ### Requirement: One writer per Crawl
+**In short:** One process holds the writer claim throughout a Crawl, and continuation uses the file verified at selection.
+
 A Crawl's writer claim SHALL be an operating-system lock on the file `<crawl id>.lock` next to its crawl file, taken without waiting. The operating system releases it when its process ends, however it ends.
 - Every process that creates, runs or resumes a Crawl SHALL take the claim before it creates or opens the crawl file for writing, and SHALL hold it for as long as it runs.
+- An existing crawl file selected through a symbolic link SHALL use its resolved path for the writer claim and SQLite connections. The writer-claim operation SHALL refuse an existing crawl file with multiple hard links before opening SQLite for a run. The refusal SHALL use exit code 7 and `crawl_not_writable`, with `details.file` naming the selected path.
+- Continuation SHALL use the file verified at selection for the claim, the admission read and every writer. A changed file or resolved target SHALL be refused with exit code 7 and `crawl_not_writable` before any Crawl write. A different stored Crawl id SHALL be refused with `crawl_file_invalid`.
 - A second such process SHALL be refused with exit code 5 and error code `crawl_locked`, whose hint names `linx status`.
 - A process that takes the claim for another purpose, such as recording `interrupted` or `crawls rm`, SHALL hold it only for that operation.
 
@@ -426,6 +430,14 @@ A Crawl's writer claim SHALL be an operating-system lock on the file `<crawl id>
 #### Scenario: A continuing Crawl keeps its writer claim
 - **WHEN** the Crawl Service continues a stopped Crawl created by this build and is serving a request
 - **THEN** a separate process cannot acquire that Crawl's writer claim until the service returns and its writers have closed
+
+#### Scenario: Continuing a replaced selection is refused
+- **WHEN** a stopped Crawl is selected and its file is replaced by a copy with the same Crawl id before the Service continues it
+- **THEN** continuation fails with `crawl_not_writable` and exit code 7, both files keep their original Crawl State and URL outcomes, and the site receives no further requests
+
+#### Scenario: Both names of a hard-linked crawl file are refused
+- **WHEN** a stopped Crawl's SQLite file has two hard links in different folders and the Crawl Service attempts to continue it through either name
+- **THEN** each attempt fails with `crawl_not_writable` and exit code 7 before opening SQLite or fetching a URL
 
 #### Scenario: Two resumes at the same time
 - **WHEN** two `linx resume --crawl <id>` processes start at the same time for a `stopped` Crawl of the slow fixture site

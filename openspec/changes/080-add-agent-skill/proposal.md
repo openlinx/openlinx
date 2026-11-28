@@ -6,7 +6,7 @@ AI agents are OpenLinx's main users, but a CLI alone does not tell an agent when
 
 > **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the generated Skill, `skill install`, the outdated-Skill notice, the repository copy, `doctor`, and an SQL cookbook (`sql` recipes over the public schema); its install line is `uv tool install`. **Deferred to v0.2:** the Full audit workflow (it needs `070`), the dry-run guardrail and Hand-off (they need `060`), the install-script one-liners (`100`), Segments and their recipes, `doctor --proxy`, and the plugin marketplace manifests.
 >
-> **Large-Crawl guardrail in v0.1:** the Skill starts a large Crawl with `crawl --detach`, follows it with `status`, reads `issues` and `sql` while it runs, stops it with `stop` and continues it with `resume`. Whether it also passes `--max-urls` is open until 080 is re-grounded.
+> **Large-Crawl guardrail in v0.1:** the Skill always passes `--max-urls`; decided when 080 is re-grounded.
 
 - **Skill generation.** One generator module renders the Skill from the CLI's own metadata (Commands, Page data columns, Rules, the crawl store schema) and Markdown templates, and stamps it with the CLI version. Two callers use it:
   - `linx skill install`
@@ -39,7 +39,7 @@ AI agents are OpenLinx's main users, but a CLI alone does not tell an agent when
   - `.claude-plugin/plugin.json`
   - `.claude-plugin/marketplace.json`, with one plugin whose source is `./`
 
-  With these, `claude plugin marketplace add`, `codex plugin marketplace add` and `npx skills add` all work from the GitHub repo. The generated repository copy ships in v0.1. Marketplace distribution follows in v0.2 and includes the MCP configuration from 090.
+  With these, `claude plugin marketplace add`, `codex plugin marketplace add` and `npx skills add` all work from the GitHub repo. The plugin ships without an MCP config in v0.1. `090-add-mcp-server` adds it in v0.1.1.
 - **New Command `linx doctor [--url <url>] [--proxy <url>]`.** It runs diagnostic checks. Each check reports a status (`ok`, `warn` or `fail`), a message and a hint.
   - It checks:
     - the Python version

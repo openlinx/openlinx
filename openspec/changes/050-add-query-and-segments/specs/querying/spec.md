@@ -6,7 +6,7 @@ Lets agents and people read a Crawl through stable, token-efficient Commands: an
 
 ### Requirement: Query Commands read the selected Crawl without changing it
 
-The `summary`, `pages`, `page`, `issues`, `issue`, `sql` and, from v0.2, `export` Commands SHALL read the Crawl that the `--crawl` option selects. That option, `latest|<id>|<path>` with the default `latest`, is defined by `015-add-crawl-store`. The Commands SHALL NOT modify the crawl store, they SHALL work while the selected Crawl is still running, and each invocation SHALL read one consistent snapshot of the store.
+The `summary`, `pages`, `page`, `issues`, `sql` and, from v0.2, `export` Commands SHALL read the Crawl that the `--crawl` option selects. That option, `latest|<id>|<path>` with the default `latest`, is defined by `015-add-crawl-store`. The Commands SHALL NOT modify the crawl store, they SHALL work while the selected Crawl is still running, and each invocation SHALL read one consistent snapshot of the store.
 
 #### Scenario: The latest Crawl is used by default
 - **WHEN** the Workspace holds Crawl A, started first and `completed`, and Crawl B, started second
@@ -24,15 +24,17 @@ The `summary`, `pages`, `page`, `issues`, `issue`, `sql` and, from v0.2, `export
 - **THEN** the output has `"state": "running"` in `crawl` and `"pages": 4` in `totals`
 
 #### Scenario: Queries leave the store unchanged
-- **WHEN** `linx summary`, `linx pages`, `linx page https://example.com/`, `linx issues`, `linx issue title-missing` and `linx sql "SELECT 1"` each run once against a `completed` Crawl that records the Rule `title-missing`
+- **WHEN** `linx summary`, `linx pages`, `linx page https://example.com/`, `linx issues` and `linx sql "SELECT 1"` each run once against a `completed` Crawl
 - **THEN** a SQL dump of the crawl store taken afterwards is identical to one taken before they ran
 
 ### Requirement: Query Commands are self-described
 
-`linx commands --format json`, the self-description defined by `010-add-workspace-and-cli-contract`, SHALL describe the `summary`, `pages`, `page`, `issues`, `issue`, `sql` and `export` Commands. The description SHALL include each Command's output kind, every flag this capability defines for it, and every diagnostic code it can emit. The output kinds SHALL be:
+`linx commands --format json`, the self-description defined by `010-add-workspace-and-cli-contract`, SHALL describe the `summary`, `pages`, `page`, `issues`, `sql` and `export` Commands. The description SHALL include each Command's output kind, every flag this capability defines for it, and every diagnostic code it can emit. The output kinds SHALL be:
 - `document` for `summary`, `page` and `sql`
-- `list` for `pages`, `issues` and `issue`
+- `list` for `pages` and `issues`
 - `rows` for `export` (v0.2)
+
+The single `issues` entry SHALL describe `rule_id` as an optional argument. Its `fields` member SHALL describe the Issue list used when that argument is absent. Its `fields_by_argument.rule_id` member SHALL describe the Affected URL fields used when the argument is supplied, using the same `{available, default}` structure. Both descriptions SHALL match the fields each form accepts and returns by default.
 
 #### Scenario: The flags of pages are listed
 - **WHEN** `linx commands --format json` runs
@@ -42,10 +44,10 @@ The `summary`, `pages`, `page`, `issues`, `issue`, `sql` and, from v0.2, `export
 - **WHEN** `linx commands --format json` runs
 - **THEN** the entries for `summary`, `pages` and `sql` have the output kinds `document`, `list` and `document`
 
-#### Scenario: Issue Commands publish separate field sets
-- **WHEN** in the thin slice, `linx commands --format json` runs
-- **THEN** `issues` and `issue` have separate entries, each with output kind `list`
-- **AND** the available and default fields for `issues` are `["rule_id", "category", "issue_type", "priority", "affected_count", "description"]`, and for `issue` they are `["url", "detail"]`
+#### Scenario: Field discovery for both forms of issues
+- **WHEN** `linx commands --format json` runs
+- **THEN** the `issues` entry lists `rule_id` as an optional argument, `fields.default` contains `affected_count`, and `fields_by_argument.rule_id.default` is `["url", "detail"]`
+- **AND** `fields_by_argument.rule_id.available` lists the fields accepted by `--fields` when a rule id is supplied
 
 #### Scenario: The diagnostic codes of sql are listed
 - **WHEN** `linx commands --format json` runs
@@ -145,7 +147,7 @@ Where the values come from SHALL follow the Crawl State, as the Issues of `040-a
 - `completed` or `stopped`: the derived fields of the `crawl` row that `040-add-rules`' post-crawl pass wrote, `health_score` as `score`, `health_internal_page_count` as `internal_pages` and `health_affected_page_count` as `affected_pages`.
 - every other state (`running`, `failed` or `interrupted`): computed at query time with the Health Score function of `040-add-rules`, over the Affected URLs that its Issues reader computes live.
 
-The `issues` member, and every Issue that `issues`, `issue <rule-id>` and `page <url>` show, SHALL be read through the Issues reader of `040-add-rules`, which reads the materialised Issues of a `completed` or `stopped` Crawl and computes them live in every other Crawl State.
+The `issues` member, and every Issue that `issues`, `issues <rule-id>` and `page <url>` show, SHALL be read through the Issues reader of `040-add-rules`, which reads the materialised Issues of a `completed` or `stopped` Crawl and computes them live in every other Crawl State.
 
 The `issues` member SHALL be `{total, by_type_priority, top}`:
 - `total` is the number of Issues.
@@ -207,7 +209,7 @@ The summary SHALL always have exactly these top-level members: `summary_version`
 
 ### Requirement: Where filter language
 
-The `--where` option of `pages`, `issue <rule-id>` and `export`, and every Segment definition, SHALL accept an expression in this grammar:
+The `--where` option of `pages`, `issues <rule-id>` and `export`, and every Segment definition, SHALL accept an expression in this grammar:
 
 ```
 expression = or_expr
@@ -464,14 +466,10 @@ A column name in `--where` or `--sort` that the queried view does not have SHALL
 
 ### Requirement: Cursors are bound to the query
 
-Cursors returned by `pages`, `issues` and `issue <rule-id>` SHALL follow the cursor rule of `010-add-workspace-and-cli-contract`. Each cursor SHALL be bound to the Command and the resolved Crawl id, the Rule id for `issue`, and the applicable filters and sort keys. For `issues` the list filters SHALL be compared after splitting, case normalisation, deduplication and sorting. `--where`, `--sort` and `--segment` are part of that binding where applicable. A cursor used with a different binding SHALL fail with `invalid_cursor`.
+Cursors returned by `pages` and `issues <rule-id>` SHALL follow the cursor rule of `010-add-workspace-and-cli-contract`. The Crawl, `--where`, `--sort` and `--segment` SHALL count as filters that the cursor is bound to, so a cursor used with any other value of them SHALL fail with `invalid_cursor`.
 
 #### Scenario: A cursor is reused with another filter
 - **WHEN** a `next_cursor` from `linx pages --where "status_code = 200"` is passed to `linx pages --where "status_code = 404" --cursor <that cursor>`
-- **THEN** the exit code is 2, and the error has the code `invalid_cursor`
-
-#### Scenario: A cursor is reused with the other Issue Command
-- **WHEN** for a Crawl with multiple Issues and multiple Affected URLs for `title-missing`, a `next_cursor` from `linx issues --limit 1` is passed to `linx issue title-missing`, or a `next_cursor` from `linx issue title-missing --limit 1` is passed to `linx issues` for the same Crawl
 - **THEN** the exit code is 2, and the error has the code `invalid_cursor`
 
 #### Scenario: A cursor is reused with another Segment
@@ -570,7 +568,7 @@ The given URL SHALL be normalised with the URL normalisation of `020-add-crawl-c
 
 ### Requirement: Issue list
 
-`linx issues` SHALL take no positional arguments and return the paging envelope with one item per Issue: `{rule_id, category, issue_type, priority, affected_count, description}`.
+`linx issues` SHALL return the paging envelope with one item per Issue: `{rule_id, category, issue_type, priority, affected_count, description}`.
 - `category` is the Rule category id of `040-add-rules`.
 - Issue Types are `issue`, `warning` and `opportunity`. Priorities are `high`, `medium` and `low`.
 - `affected_count` is the number of the Issue's Affected URLs.
@@ -588,7 +586,7 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 #### Scenario: Item fields
 - **WHEN** a Crawl's only Issue is `title-missing` in category `titles` (issue, high) with 4 Affected URLs
 - **AND** `linx issues` runs
-- **THEN** its item contains `"rule_id": "title-missing"`, `"category": "titles"`, `"issue_type": "issue"`, `"priority": "high"` and `"affected_count": 4`, and its `description` equals the description recorded for `title-missing` in that Crawl
+- **THEN** its item contains `"rule_id": "title-missing"`, `"category": "titles"`, `"issue_type": "issue"`, `"priority": "high"` and `"affected_count": 4`, and its `description` equals the description that `linx rules show title-missing` prints
 
 #### Scenario: Filters combine
 - **WHEN** a Crawl has the Issues A (warning, high), B (issue, low), C (issue, high) and D (opportunity, high)
@@ -607,13 +605,8 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 
 #### Scenario: Issues of a fixture Crawl on every OS
 - **WHEN** on Windows, macOS and Linux, `linx crawl {site}/e2e/` runs as a real subprocess, where `/e2e/` has a title and an `<h1>` and links to `/e2e/notitle`, which has an `<h1>` and no `<title>`, and to `/e2e/gone`, which responds 404
-- **AND** `linx issues` and then `linx issue internal-4xx` run as separate subprocesses
-- **THEN** the list items include `internal-4xx` and `title-missing`, each with `"affected_count": 1`
-- **AND** the detail items are `[{"url": "{site}/e2e/gone", "detail": {"status_code": 404}}]`
-
-#### Scenario: A Rule id is passed to the Issue list
-- **WHEN** `linx issues` is called with `title-missing` as a positional argument
-- **THEN** the exit code is 2, and the error has the code `usage_error` and a non-empty hint directing the caller to `linx issue <rule-id>`
+- **AND** `linx issues` then runs as a real subprocess
+- **THEN** its items include `internal-4xx` and `title-missing`, each with `"affected_count": 1`
 
 #### Scenario: Unknown Issue Type
 - **WHEN** `linx issues --type critical` runs
@@ -621,50 +614,55 @@ The Issues SHALL be read through the Issues reader of `040-add-rules`, so a Craw
 
 ### Requirement: Issue detail
 
-`linx issue <rule-id>` SHALL take exactly one positional Rule id and return `{rule, total, items, next_cursor}`:
-- `rule` is `{rule_id, category, issue_type, priority, description, why_it_matters, how_to_fix, thresholds, reproduce_sql}`, taken from the Crawl's `rules` table (`040-add-rules`). `thresholds` maps each threshold name to the value that applied to the Crawl, and `reproduce_sql` is the recorded query text, available for manual reproduction with `linx sql`.
-- The items are the Issue's Affected URLs, read through the Issues reader of `040-add-rules`. Without `--fields`, each item SHALL be `{url, detail}`, where `detail` is the JSON object of measured values that `040-add-rules` recorded for that Affected URL, or `null`. The available fields in the thin slice are `url` and `detail`. Group 6 adds the `pages` columns, and `segment` is added with Segments in v0.2. Page columns and `segment` are `null` for an Affected URL without a `pages` row.
-- The default order SHALL be `url` in the thin slice, and `unique_inlinks` descending then `url` after group 6. `--limit` and `--cursor` SHALL work as they do for `pages`. After group 6, `--where` and `--sort` SHALL also work as they do for `pages`, as SHALL `--segment` when Segments are available.
+`linx issues <rule-id>` SHALL return `{rule, total, items, next_cursor}`:
+- `rule` is `{rule_id, category, issue_type, priority, description, why_it_matters, how_to_fix, thresholds, reproduce_sql}`, taken from the Crawl's `rules` table (`040-add-rules`). `thresholds` maps each threshold name to the value that applied to the Crawl, and `reproduce_sql` is the Rule's query, which `linx sql` runs.
+- The items are the Issue's Affected URLs, read through the Issues reader of `040-add-rules`. Without `--fields`, each item SHALL be `{url, detail}`, where `detail` is the JSON object of measured values that `040-add-rules` recorded for that Affected URL, or `null`. The available fields are `url`, `detail`, the `pages` columns and `segment`. Page columns and `segment` are `null` for an Affected URL without a `pages` row.
+- The default order SHALL be `unique_inlinks` descending, then `url`. `--where`, `--sort`, `--limit`, `--cursor` and `--segment` SHALL work as they do for `pages`.
 
 A Rule that has no Affected URL in the Crawl SHALL return `total` 0 and empty `items`. An unknown rule id SHALL be rejected with the error code `rule_not_found` of `040-add-rules`. The hint SHALL mention `linx rules list`, and `details.suggestions` SHALL list the closest rule ids.
 
+With a rule id, an explicit `--type`, `--priority` or `--category` SHALL be rejected with `invalid_value` before selecting a Crawl. The diagnostic SHALL identify the incompatible option and explain that it filters the Issue list.
+
 #### Scenario: Most-linked Affected URLs first
 - **WHEN** the Issue `title-too-long` has the Affected URLs A (unique_inlinks 5), B (12) and C (null)
-- **AND** `linx issue title-too-long` runs
+- **AND** `linx issues title-too-long` runs
 - **THEN** the `url` values of the items are B, A and C, in that order
 
 #### Scenario: Thresholds recorded for the Crawl
-- **WHEN** a completed Crawl records the threshold `max_chars` of `title-too-long` as 70
-- **AND** `linx issue title-too-long` runs
-- **THEN** `rule.thresholds` is `{"max_chars": 70}`
+- **WHEN** a Crawl ran with the threshold `max_hops` of the Rule `redirect-chain` set to 3
+- **AND** `linx issues redirect-chain` runs
+- **THEN** `rule.thresholds` is `{"max_hops": 3}`
 
 #### Scenario: Guidance of the Rule
-- **WHEN** a Crawl records guidance for `title-too-long` and a later installed version changes that Rule’s guidance
-- **AND** `linx issue title-too-long` reads that Crawl
-- **THEN** `rule.how_to_fix` equals the text recorded for `title-too-long` in that Crawl
+- **WHEN** `linx issues title-too-long` runs
+- **THEN** `rule.how_to_fix` equals the `how_to_fix` text that `linx rules show title-too-long` prints
 
 #### Scenario: The reproducing query of the Rule
-- **WHEN** `linx issue title-missing` runs
+- **WHEN** `linx issues title-missing` runs
 - **THEN** `rule.reproduce_sql` equals the `reproduce_sql` of the Crawl's `rules` row for `title-missing`
 
 #### Scenario: Detail of an Affected URL
-- **WHEN** a completed Crawl records `https://example.com/gone` as a 404 and the only Affected URL of `internal-4xx`
-- **AND** `linx issue internal-4xx` runs
-- **THEN** `items` is `[{"url": "https://example.com/gone", "detail": {"status_code": 404}}]`
+- **WHEN** the Issue `title-too-long` has the single Affected URL `https://example.com/a`, recorded with `detail` `{"length": 61}`
+- **AND** `linx issues title-too-long` runs
+- **THEN** `items` is `[{"url": "https://example.com/a", "detail": {"length": 61}}]`
 
 #### Scenario: Page columns for Affected URLs
 - **WHEN** the Issue `title-too-long` has the single Affected URL `https://example.com/a`, whose title_1_length is 81
-- **AND** `linx issue title-too-long --fields url,title_1_length` runs
+- **AND** `linx issues title-too-long --fields url,title_1_length` runs
 - **THEN** `items` is `[{"url": "https://example.com/a", "title_1_length": 81}]`
 
 #### Scenario: A Rule that did not fire
 - **WHEN** no Page of the Crawl is an Affected URL of the Rule `h1-missing`
-- **AND** `linx issue h1-missing` runs
+- **AND** `linx issues h1-missing` runs
 - **THEN** the exit code is 0, `total` is `0` and `items` is `[]`
 
 #### Scenario: Unknown rule id
-- **WHEN** `linx issue title-mising` runs
+- **WHEN** `linx issues title-mising` runs
 - **THEN** the exit code is 4, the error has the code `rule_not_found`, and its `details.suggestions` starts with `title-missing`
+
+#### Scenario: A list filter is supplied with a rule id
+- **WHEN** `linx issues title-missing --type issue`, `linx issues title-missing --priority high` or `linx issues title-missing --category content` runs
+- **THEN** each invocation exits with code 2 and `invalid_value`, names the supplied option and tells the caller to omit the rule id to filter the Issue list
 
 ### Requirement: Read-only SQL
 

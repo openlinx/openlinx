@@ -10,11 +10,9 @@ from sqlalchemy import text
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.rules.model import Rule
 from openlinx.rules.registry import RULES
-from openlinx.rules.settings import RulesSettings
-from openlinx.services.rules import rule_rows
 from openlinx.store.crawls import record_state
 from openlinx.store.issues import affected_urls_unit
-from openlinx.store.links import inlink_counts, inlink_ranges, pages_with_status_200, write_links
+from openlinx.store.links import write_links
 from openlinx.store.page_records import PageRow
 from openlinx.store.pages import write_pages
 from openlinx.store.records import (
@@ -89,21 +87,17 @@ def _rules(examples: tuple[IssueExample, ...]) -> tuple[tuple[Rule, ...], tuple[
 def crawl_store(
     temp_workspace: TempWorkspace,
     *,
-    pages: Mapping[str, str | None] | None = None,
-    rule_settings: Mapping[str, Mapping[str, int | bool]] | None = None,
-    completed: bool = True,
+    pages: Mapping[str, str] | None = None,
     journal_setting: JournalSetting = "wal",
+    completed: bool = True,
     example_issues: tuple[IssueExample, ...] = _ORDERED_ISSUES,
 ) -> Path:
     """Record linked HTML Pages with the installed Rules, completing the Crawl by default.
 
-    Supply Rule settings with explicit URLs. A URL with a None body records a non-HTML
-    404. With no explicit URLs, record those 404s for example Issues.
+    Without explicit Pages, record non-HTML 404s for the example Issues of later Rules.
     """
     responses: Mapping[str, str | None]
     if pages is None:
-        if rule_settings is not None:
-            raise ValueError("Rule settings require explicit Pages.")
         rules, snapshots = _rules(example_issues)
         crawl_file = create_any_crawl(
             temp_workspace, rules=snapshots, journal_setting=journal_setting
@@ -115,15 +109,13 @@ def crawl_store(
         }
     else:
         rules = RULES
-        configured = RulesSettings().model_dump() if rule_settings is None else rule_settings
-        snapshots = rule_rows(configured)
-        crawl_file = create_any_crawl(
-            temp_workspace, rules=snapshots, journal_setting=journal_setting
-        )
+        crawl_file = create_any_crawl(temp_workspace, journal_setting=journal_setting)
         responses = pages
 
     root = NormalizedUrl("https://example.com/")
-    body = "<title>Home</title><h1>Home</h1><h2>Pages</h2>" + "".join(
+    body = (
+        '<title>Home</title><meta name="description" content="Home"><h1>Home</h1><h2>Pages</h2>'
+    ) + "".join(
         f'<a href="/{url.removeprefix("https://example.com/")}">Page</a>' for url in responses
     )
 
@@ -189,13 +181,8 @@ def crawl_store(
                 )
             )
         if completed:
-            pages_200 = writer.run(pages_with_status_200)
-            for first, last in writer.run(inlink_ranges):
-                writer.run(inlink_counts(first, last, pages_200))
-            enabled = {row.id for row in snapshots if row.enabled}
             for rule in rules:
-                if rule.id in enabled:
-                    writer.run(affected_urls_unit(rule))
+                writer.run(affected_urls_unit(rule))
             writer.run(record_state("completed", STARTED_AT + timedelta(seconds=len(queued) + 2)))
     return crawl_file.path
 

@@ -4,37 +4,6 @@ Measured capacity, and the machine each number was measured on. Benchmarks run b
 hand, outside the regular CI gate and `scripts/check.py`. The TLS measurement also
 uses the one-off throwaway workflow required by 022 task 6.4.
 
-## HTTP Crawl measurement
-
-Run `uv run --locked python -m scripts.crawl_500k --pages 3 --keep /path/to/new-workspace`
-from the repository root for a smoke check. The driver starts a seeded HTTP site on
-loopback, runs the installed Crawl Command in a separate process, and samples the RSS
-of that process and the size of its live SQLite write-ahead log every 200 ms.
-`wal_peak_bytes` reports the largest observed WAL size before SQLite closes it. It checks each URL against the seeded site, including
-its fetch and parse outcomes and whether the response should have a stored HTML Page.
-It rejects missing and unexpected URLs. The report gives counts by kind, alongside
-the independent server count of requested Pages. `urls_per_second` divides all
-verified URLs by wall time from starting the Crawl Command until it exits.
-`file_bytes` measures the closed crawl file. `table_bytes` attributes every
-secondary index to its table and is null when SQLite lacks the dbstat module.
-
-`--seed` selects the same graph and faults for a repeat run. The default size is
-500,000 Pages. Without `--keep`, the temporary Workspace is removed after verification.
-The baseline fixture excludes the two faults that need a separate parse worker.
-The driver uses the Command's default executor. Task 026 1.2 still needs a recorded
-in-process run with the remaining measurements from task 1.1.
-
-### Accounting smoke, 2026-11-25
-
-On Linux, `--pages 105 --seed 83` requested all 105 generated Page addresses.
-One returned a bodyless HTTP 500 and was retried. The crawl file contained
-104 HTML Page rows and 2,275 URL rows. Those URL rows accounted for the 105
-generated addresses, 1,870 Resources, 99 missing targets and 201 targets linked
-by types the Crawl records without following. The driver compared their exact
-URLs and outcomes with the fixture. The test suite uses a three-address case
-with the same bodyless response and changes a stored Resource URL while keeping
-all row counts constant to verify that substitution is detected.
-
 ## Writer capacity
 
 `scripts/writer_throughput.py` measures the writer's capacity, not a Crawl's ([crawl-store.md](crawl-store.md)).

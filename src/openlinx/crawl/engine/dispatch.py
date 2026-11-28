@@ -42,6 +42,8 @@ _ABOVE_NO_DEPTH = -1
 # Clock seconds that the requests in flight at a stop may still take.
 STOP_GRACE_SECONDS = 10
 
+type _Started = Literal["go_on", "stopped", "limit", "host_full"]
+
 
 async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     seed_chain = SeedChain(context.planned_scope, seed)
@@ -56,7 +58,7 @@ async def run_crawl(context: CrawlContext, seed: NormalizedUrl) -> None:
     cap = global_cap(concurrency)
     # The URLs a continued Crawl fetched before count toward its limit.
     limits = RequestLimits(
-        cap, context.pages.backlog, context.settings.max_urls, started=counts.fetched
+        concurrency, context.pages.backlog, context.settings.max_urls, started=counts.fetched
     )
     gate = RateGate(context.clock, context.settings.rate)
 
@@ -243,14 +245,35 @@ async def _start_depth(
     # The cursor of this pass: a URL in flight is never read twice.
     after = 0
     while limits.limit_reached() is None:
+        task_ended = limits.watch_task_ends()
         started = await _start_again(run, running, checked_in_flight)
-        if started == "stopped":
+        if started in {"stopped", "limit"}:
             return dispatched
         batch = await context.writer.run_async(
             queued_batch(depth, after, _FRONTIER_BATCH, context.settings.max_redirects)
         )
-        if started == "limit" or not batch:
+        if not batch:
+            if started == "host_full" and await _wait_for_task_end(run, task_ended):
+                continue
             return dispatched
+        after = batch[-1].id
+        started, attempted = await _start_batch(run, batch, running, checked_in_flight)
+        dispatched |= attempted
+        if started != "go_on":
+            return dispatched
+    return dispatched
+
+
+async def _start_batch(
+    run: Run,
+    batch: Sequence[QueuedUrl],
+    running: set[asyncio.Task[None]],
+    checked_in_flight: set[int],
+) -> tuple[_Started, bool]:
+    dispatched = False
+    while batch:
+        task_ended = run.limits.watch_task_ends()
+        deferred: list[QueuedUrl] = []
         for queued in batch:
             # A URL whose unit failed is still queued until its fallback is in.
             if queued.id in checked_in_flight or run.outcomes.is_pending(queued.id):
@@ -258,13 +281,26 @@ async def _start_depth(
             if not run.redispatch.claim(queued.id):
                 continue
             started = await _start_again(run, running, checked_in_flight)
-            if started == "go_on":
-                started = await _start(run, queued, running, checked_in_flight)
-                dispatched = True
+            if started in {"stopped", "limit"}:
+                return started, dispatched
+            started = await _start(run, queued, running, checked_in_flight)
+            if started == "host_full":
+                # Keep only this batch in memory. A saturated host leaves room for
+                # other hosts in the batch to start before the dispatcher waits.
+                deferred.append(queued)
+                continue
+            dispatched = True
             if started != "go_on":
-                return dispatched
-        after = batch[-1].id
-    return dispatched
+                return started, dispatched
+        if deferred and not await _wait_for_task_end(run, task_ended):
+            return "stopped", dispatched
+        batch = deferred
+    return "go_on", dispatched
+
+
+async def _wait_for_task_end(run: Run, task_ended: asyncio.Event) -> bool:
+    await first_of(task_ended.wait(), run.context.stop.wait(), run.limits.refused())
+    return not _stopping(run) and run.limits.limit_reached() is None
 
 
 async def _wait_for_the_pause_count(run: Run, running: set[asyncio.Task[None]]) -> None:
@@ -314,38 +350,46 @@ async def _wait_out(run: Run, tasks: set[asyncio.Task[None]]) -> None:
             break
 
 
-type _Started = Literal["go_on", "stopped", "limit"]
-
-
 async def _start_again(
     run: Run, running: set[asyncio.Task[None]], checked_in_flight: set[int]
 ) -> _Started:
-    """Dispatches what a network pause re-queued or left queued, ahead of the frontier read,
-    each at the depth it was found at."""
+    """Dispatches what a network pause re-queued or left queued at its original depth.
+    Saturated hosts stay on the redispatch list while other hosts can start."""
     urls = run.redispatch.take()
+    result: _Started = "go_on"
     for index, queued in enumerate(urls):
         started = await _start(run, queued, running, checked_in_flight)
-        if started != "go_on":
+        if started == "host_full":
+            run.redispatch.put_back((queued,))
+            result = started
+        elif started != "go_on":
             run.redispatch.put_back(urls[index:])
             return started
-    return "go_on"
+    return result
 
 
 async def _start(
     run: Run, queued: QueuedUrl, running: set[asyncio.Task[None]], checked_in_flight: set[int]
 ) -> _Started:
-    context, limits = run.context, run.limits
-    if not await _reserve_task(run):
+    limits = run.limits
+    if _stopping(run):
         return "stopped"
-    if context.stop.is_set or run.task_failure.is_set:
-        limits.task_ended()
+    host = limits.task_host(queued.url)
+    if limits.host_full(host):
+        return "host_full"
+    if not await _reserve_task(run, host):
+        return "stopped"
+    if _stopping(run):
+        limits.task_ended(host)
         return "stopped"
     if limits.limit_reached() is not None:
-        limits.task_ended()
+        limits.task_ended(host)
         return "limit"
     in_chain = run.seed_chain.holds(queued)
     decision = run.seed_chain.decide(queued.url, in_chain=in_chain)
     task = asyncio.create_task(_crawl_url(run, queued, decision))
+    # A cancellation before the coroutine first runs must also return its capacity.
+    task.add_done_callback(lambda _: limits.task_ended(host))
     # A checked URL never holds the barrier; the sweep in run_crawl reads what one
     # finds after its depth has closed. The chain's last URL closes it before depth 0 ends,
     # even a checked one, such as a URL off the Seed's site or its folder.
@@ -360,10 +404,10 @@ async def _start(
     return "go_on"
 
 
-async def _reserve_task(run: Run) -> bool:
+async def _reserve_task(run: Run, host: str | None) -> bool:
     """Room for a URL's task, or False once the Crawl stops: the tasks that fill the bound may
     wait for a host's slot that a hanging request holds, and the grace must not wait for it."""
-    reserved = await first_of(run.limits.reserve_task(), run.context.stop.wait())
+    reserved = await first_of(run.limits.reserve_task(host), run.context.stop.wait())
     return not reserved.cancelled()
 
 
@@ -395,14 +439,11 @@ def _discard(ids: set[int], url_id: int, _: object) -> None:
 
 
 async def _crawl_url(run: Run, queued: QueuedUrl, decision: ScopeDecision) -> None:
-    try:
-        recorded = await unit_of(run, queued, decision)
-        # The task ends at submit; its outcome arrives at commit (020-add-crawl-core D2).
-        if recorded is not None:
-            await run.outcomes.submit(recorded)
-        else:
-            # Still queued: one the re-dispatch list owns waits there, since no frontier read
-            # dispatches it again.
-            run.redispatch.put_back([queued])
-    finally:
-        run.limits.task_ended()
+    recorded = await unit_of(run, queued, decision)
+    # The task ends at submit; its outcome arrives at commit (020-add-crawl-core D2).
+    if recorded is not None:
+        await run.outcomes.submit(recorded)
+    else:
+        # Still queued: one the re-dispatch list owns waits there, since no frontier read
+        # dispatches it again.
+        run.redispatch.put_back([queued])

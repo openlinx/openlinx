@@ -33,6 +33,10 @@ def rule_not_computable(rule_id: str) -> OpenLinxError:
     return OpenLinxError(
         RULE_NOT_FOUND,
         f"This version of {COMMAND_NAME} cannot compute the recorded Rule {rule_id} live.",
-        hint=f"Run the Rule's reproduce_sql from this Crawl's rules table with {COMMAND_NAME} sql.",
+        hint=(
+            'Open the file for this Crawl with sqlite3 -readonly "<crawl-file>". '
+            "Find the Rule by id in the rules table, review its reproduce_sql, "
+            "and run the query in the same SQLite session."
+        ),
         details={"id": rule_id},
     )

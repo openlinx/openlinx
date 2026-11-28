@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Only pull requests: every run on main finishes, so each merge gets a full result.
+  # A new PR run cancels the active one. On main, the active run can finish.
+  # A newer pending run can still replace an older pending run on the same ref.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -64,7 +65,11 @@ jobs:
         run: uv run mypy
 
       - name: Tests and coverage
-        run: uv run pytest
+        run: uv run pytest --junitxml="$RUNNER_TEMP/pytest-ci.xml"
+
+      - name: Native Windows repeat-interrupt acceptance (026 4.2c)
+        if: runner.os == 'Windows'
+        run: uv run --locked python scripts/check_windows_owner_death.py "$RUNNER_TEMP/pytest-ci.xml"
 
       - name: Build
         run: uv build
@@ -90,16 +95,3 @@ jobs:
 
       - name: Report script (seam 9)
         run: node --test "tests/js/**/*.test.mjs"
-
-      - name: Native Windows Ctrl+Break acceptance
-        if: >-
-          github.event_name == 'workflow_dispatch'
-          && github.ref == 'refs/heads/ci/v01-windows-interrupt-nov27'
-          && matrix.os == 'windows-latest'
-        timeout-minutes: 8
-        env:
-          EXPECTED_PYTHON: ${{ matrix.python }}
-        run: |
-          if [[ "$GITHUB_REF" == 'refs/heads/ci/v01-windows-interrupt-nov27' ]]; then
-            uv run --locked --no-sync python scripts/windows_interrupt_proof.py
-          fi

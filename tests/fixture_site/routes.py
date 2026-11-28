@@ -19,6 +19,7 @@ class RouteOptions:
     content_type: str | None = None
     delay: float = 0.0
     hang: bool = False
+    reset_before_headers: bool = False
     # Send the headers and this many bytes of the body, then reset the connection.
     reset_after: int | None = None
     # Send the headers, then never the body.
@@ -50,11 +51,6 @@ class Status(RouteOptions):
 
 
 @dataclass(frozen=True)
-class Bytes(RouteOptions):
-    body: bytes
-
-
-@dataclass(frozen=True)
 class Redirect(RouteOptions):
     location: str
     status: int = 301
@@ -82,7 +78,7 @@ class LargeFile(RouteOptions):
     size: int
 
 
-Answer = Page | Status | Bytes | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
+Answer = Page | Status | Redirect | Robots | Sitemap | SitemapIndex | LargeFile
 
 
 @dataclass(frozen=True)

@@ -23,7 +23,7 @@ from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
 
 _AT = datetime(2026, 11, 19, 16, tzinfo=UTC)
-_CATALOGUE = (TITLE_MISSING,)
+_CATALOGUE = (TITLE_MISSING, INTERNAL_4XX)
 
 
 def test_one_url_reads_stored_then_live_issues(
@@ -37,20 +37,23 @@ def test_one_url_reads_stored_then_live_issues(
                 ),
                 "/present": Page(
                     body='<title>Present</title><meta name="description" content="Present">'
-                    '<a href="/future">Future</a>'
+                    '<a href="/gone">Gone</a><a href="/future">Future</a>'
                 ),
+                "/gone": Status(404, content_type="text/plain"),
                 "/future": Page(body="<p>Not fetched yet</p>"),
             }
         )
     )
-    result = crawl_result(server.url("/"), max_urls=2, concurrency=1)
+    result = crawl_result(server.url("/"), max_urls=3, concurrency=1)
     assert (result.summary.state, result.summary.stop_reason) == ("stopped", "max_urls")
     file = result.crawl_file
     [(root_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/"),))
     [(present_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/present"),))
+    [(gone_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/gone"),))
     assert query(file, "SELECT url, fetch_state FROM urls ORDER BY id") == [
         (server.url("/"), "fetched"),
         (server.url("/present"), "fetched"),
+        (server.url("/gone"), "fetched"),
         (server.url("/future"), "queued"),
     ]
 
@@ -69,14 +72,30 @@ def test_one_url_reads_stored_then_live_issues(
                 .values(title_count=0, title_1=None, title_1_length=None)
             )
         )
+        # Keep the detail from the last Pass at 404 while the current URL records 410.
+        writer.run(executing(update(urls).where(urls.c.id == gone_id).values(status_code=410)))
         writer.flush()
 
     assert read_url_issues(file, root_id, _CATALOGUE) == [
         UrlIssue(rule_id="title-missing", url_id=root_id, detail=None),
+        UrlIssue(rule_id="canonical-missing", url_id=root_id, detail=None),
         UrlIssue(rule_id="h1-missing", url_id=root_id, detail=None),
+        UrlIssue(rule_id="h2-missing", url_id=root_id, detail=None),
+        UrlIssue(rule_id="http-url", url_id=root_id, detail={"status_code": 200}),
+        UrlIssue(rule_id="low-word-count", url_id=root_id, detail={"word_count": 1}),
+        UrlIssue(rule_id="meta-description-too-short", url_id=root_id, detail={"length": 4}),
     ]
     assert read_url_issues(file, present_id, _CATALOGUE) == [
-        UrlIssue(rule_id="h1-missing", url_id=present_id, detail=None)
+        UrlIssue(rule_id="canonical-missing", url_id=present_id, detail=None),
+        UrlIssue(rule_id="h1-missing", url_id=present_id, detail=None),
+        UrlIssue(rule_id="h2-missing", url_id=present_id, detail=None),
+        UrlIssue(rule_id="http-url", url_id=present_id, detail={"status_code": 200}),
+        UrlIssue(rule_id="low-word-count", url_id=present_id, detail={"word_count": 1}),
+        UrlIssue(rule_id="meta-description-too-short", url_id=present_id, detail={"length": 7}),
+        UrlIssue(rule_id="title-too-short", url_id=present_id, detail={"length": 7}),
+    ]
+    assert read_url_issues(file, gone_id, _CATALOGUE) == [
+        UrlIssue(rule_id="internal-4xx", url_id=gone_id, detail={"status_code": 404})
     ]
 
     with CrawlWriter(file, SystemClock()) as writer:
@@ -86,6 +105,9 @@ def test_one_url_reads_stored_then_live_issues(
     assert read_url_issues(file, root_id, _CATALOGUE) == []
     assert read_url_issues(file, present_id, _CATALOGUE) == [
         UrlIssue(rule_id="title-missing", url_id=present_id, detail=None)
+    ]
+    assert read_url_issues(file, gone_id, _CATALOGUE) == [
+        UrlIssue(rule_id="internal-4xx", url_id=gone_id, detail={"status_code": 410})
     ]
 
 
@@ -122,7 +144,14 @@ def test_live_url_issues_share_one_result_snapshot(
         UrlIssue(rule_id="h1-missing", url_id=other_id, detail=None),
         UrlIssue(rule_id="title-missing", url_id=other_id, detail=None),
     ]
-    assert read_url_issues(file, other_id, catalogue) == other_issues
+    assert read_url_issues(file, other_id, catalogue) == [
+        *other_issues,
+        UrlIssue(rule_id="canonical-missing", url_id=other_id, detail=None),
+        UrlIssue(rule_id="h2-missing", url_id=other_id, detail=None),
+        UrlIssue(rule_id="http-url", url_id=other_id, detail={"status_code": 200}),
+        UrlIssue(rule_id="low-word-count", url_id=other_id, detail={"word_count": 1}),
+        UrlIssue(rule_id="meta-description-too-short", url_id=other_id, detail={"length": 5}),
+    ]
     reader_thread = threading.get_ident()
     result_statements = 0
 
@@ -177,39 +206,3 @@ def test_live_url_issues_share_one_result_snapshot(
     assert read_url_issues(file, url_id, catalogue) == both
     assert during == ([] if journal_mode == "wal" else both)
     assert result_statements == 1
-
-
-def test_one_url_keeps_the_rule_detail_from_each_source(
-    temp_workspace: TempWorkspace, fixture_site: StartSite
-) -> None:
-    server = fixture_site(
-        Site(
-            {
-                "/": Page(body='<a href="/gone">Gone</a><a href="/next">Next</a>'),
-                "/gone": Status(404),
-                "/next": Page(body="<p>Next</p>"),
-            }
-        )
-    )
-    result = crawl_result(server.url("/"), max_urls=2, concurrency=1)
-    assert (result.summary.state, result.summary.stop_reason) == ("stopped", "max_urls")
-    file = result.crawl_file
-    [(url_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/gone"),))
-    catalogue = (INTERNAL_4XX,)
-
-    # Keep the last Pass at 404 so the reader must use the current row only after Continue.
-    with CrawlWriter(file, SystemClock()) as writer:
-        writer.run(executing(update(urls).where(urls.c.id == url_id).values(status_code=410)))
-        writer.flush()
-
-    assert read_url_issues(file, url_id, catalogue) == [
-        UrlIssue(rule_id="internal-4xx", url_id=url_id, detail={"status_code": 404})
-    ]
-
-    with CrawlWriter(file, SystemClock()) as writer:
-        writer.run(record_continue(read_recorded(file).config, _AT))
-        writer.flush()
-
-    assert read_url_issues(file, url_id, catalogue) == [
-        UrlIssue(rule_id="internal-4xx", url_id=url_id, detail={"status_code": 410})
-    ]

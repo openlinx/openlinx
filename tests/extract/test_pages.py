@@ -18,7 +18,7 @@ from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Site, Status
 from tests.support.clock import FakeClock
-from tests.support.crawling import crawl_result
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.page_data import LATER_PAGE_COLUMNS
@@ -36,6 +36,30 @@ def test_html_response_becomes_a_page(
     crawl_file = crawl_result(server.url("/about")).crawl_file
 
     assert query(crawl_file, "SELECT address FROM pages") == [(server.url("/about"),)]
+
+
+def test_crawl_stores_the_width_of_the_normalised_first_meta_description(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body="<title>First</title><title>Second</title>"
+                    '<meta name="description" content="  Buy &#32; shoes ">'
+                    '<meta name="description" content="Another description">'
+                )
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT meta_description_1, meta_description_1_length, meta_description_1_width_px, "
+        "meta_description_2_width_px, title_1_width_px, title_2_width_px FROM pages",
+    ) == [("Buy shoes", 9, 65, None, None, None)]
 
 
 def test_error_page_keeps_response_data(
@@ -88,6 +112,41 @@ def test_http_redirect_with_an_html_body(
     assert [
         request.path for request in server.requests if request.path in ("/meta", "/refresh")
     ] == []
+
+
+@pytest.mark.parametrize(
+    "first_content",
+    ["0; url=http://[::1", "0; url=javascript:void(0)"],
+    ids=["malformed-authority", "unsupported-scheme"],
+)
+def test_an_unresolvable_first_meta_refresh_uses_the_next_link(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, first_content: str
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/old": Page(
+                    body=f'<meta http-equiv="refresh" content="{first_content}">'
+                    '<meta http-equiv="refresh" content="0; url=/next">'
+                ),
+                "/next": Page(body="<title>New</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/old")).crawl_file
+
+    assert [(request.method, request.path) for request in server.requests] == [
+        ("GET", "/robots.txt"),
+        ("GET", "/old"),
+        ("GET", "/next"),
+    ]
+    assert query(
+        crawl_file,
+        "SELECT status_code, meta_refresh, redirect_type, redirect_url, "
+        "indexability, indexability_status FROM pages WHERE address = ?",
+        [server.url("/old")],
+    ) == [(200, first_content, "meta_refresh", server.url("/next"), "non_indexable", "redirected")]
 
 
 @pytest.mark.parametrize(

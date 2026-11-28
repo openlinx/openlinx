@@ -123,7 +123,7 @@ class _Worker:
     results: _PipeEnd
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True, eq=False, slots=True)
 class _Held:
     url: NormalizedUrl
     future: asyncio.Future[PreparedPage]

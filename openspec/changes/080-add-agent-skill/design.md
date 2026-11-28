@@ -93,13 +93,13 @@ If any rename fails (for example, Windows refuses to rename a folder while a fil
 
 ### D7. The repository copy changes only in release commits
 The plugin marketplace and `npx skills add` read the default branch. If the copy were regenerated on every pull request, `main` would describe Commands that are not on PyPI yet.
-- The release commit regenerates `skills/openlinx/` and, from v0.2, bumps `.claude-plugin/plugin.json`.
+- The release commit regenerates `skills/openlinx/` and bumps `.claude-plugin/plugin.json`.
 - The release workflow of `085-add-release` regenerates into a temporary folder with `scripts/generate_skill.py`, and fails if the committed copy differs.
 - A `.gitattributes` line `skills/** text eol=lf` keeps Windows checkouts byte-identical.
 
-### D8. Plugin manifests (v0.2)
+### D8. Plugin manifests
 - `plugin.json` carries `version`. `marketplace.json` leaves `version` out of its entry, so it is maintained in one place.
-- Marketplace distribution includes the `.mcp.json` supplied by `090-add-mcp-server`.
+- The plugin ships without `.mcp.json` in v0.1. `090-add-mcp-server` adds it at the plugin root in v0.1.1.
 - *Alternative:* a `plugin/` subfolder as the source. It would hide `src/` from the plugin cache, but it moves the Skill away from the standard `skills/` path that `npx skills add` expects.
 
 ### D9. Naming: "guardrails", not "rules"
@@ -172,7 +172,7 @@ The draft checked only that each recipe's SQL exits with code 0. A wrong join, a
   JOIN urls AS u ON u.id = r.url_id, json_each(r.headers) AS h
   WHERE lower(json_extract(h.value, '$[0]')) = 'x-robots-tag'
   ```
-- **The running-Crawl recipe** reads `rules.reproduce_sql` for one Rule and runs it with `linx sql`, as `050`'s `issue <rule-id>` suggests.
+- **The running-Crawl recipe** reads `rules.reproduce_sql` for one Rule and runs it with `linx sql`, as `050`'s `issues <rule-id>` suggests.
 - *Alternative:* exit code 0 only, as the draft had. Rejected for the reason above.
 
 ## Test seams

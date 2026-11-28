@@ -23,12 +23,12 @@ This change adds to that contract the `csv` format, the CSV policy, `--no-bom` a
 
 All query logic lives in the **Query Service** (`src/openlinx/services/query.py` plus `src/openlinx/query/`). The CLI modules only parse flags and serialise, and `090-add-mcp-server` wraps the same service calls.
 
-The scenarios use the column names that 030 publishes (`address`, `status_code`, `title_1`, `title_1_length`, `meta_description_1`, `word_count`, `crawl_depth`, `unique_inlinks`, `indexability`, `indexability_status`), the table names `pages`, `links`, `urls`, `issues` and `affected_urls`, and rule ids from 040's catalogue (`title-missing`, `title-too-long`, `h1-missing`, `meta-description-too-long`, `image-broken`). The summary's `crawl.completed_at` is `015`'s `crawl.completed_at`. Rule ids in the scenarios come from `040`'s 42-Rule catalogue; v0.1 ships 15 of them, and a scenario's stored Issues need not be ones v0.1 evaluates.
+The scenarios use the column names that 030 publishes (`address`, `status_code`, `title_1`, `title_1_length`, `meta_description_1`, `word_count`, `crawl_depth`, `unique_inlinks`, `indexability`, `indexability_status`), the table names `pages`, `links`, `urls`, `issues` and `affected_urls`, and rule ids from 040's catalogue (`title-missing`, `title-too-long`, `h1-missing`, `meta-description-too-long`, `image-broken`). The summary's `crawl.completed_at` is `015`'s `crawl.completed_at`. A new v0.1 Crawl evaluates the 42 Rules in `040`'s catalogue. Queries on an existing Crawl use the Rules it recorded.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Stable, documented JSON contracts: the summary model (shared with 070), the `--where` grammar (shared with Segments, 070, 080 and 090), and the item shapes of `pages`, `page`, `issues`, `issue` and `export`.
+- Stable, documented JSON contracts: the summary model (shared with 070), the `--where` grammar (shared with Segments, 070, 080 and 090), and the item shapes of `pages`, `page`, `issues` and `export`.
 - Every query stays in SQLite. Filtering, sorting, paging and Segment membership are compiled to SQL, so memory stays flat at 500k Pages.
 - Crawled text never becomes SQL or code: `--where` is parsed and compiled, and `sql` is sandboxed.
 
@@ -57,7 +57,7 @@ Values are passed as `CAST(col AS TEXT)`, so `status_code ~ '^4'` works. Pattern
 - *Alternatives:* SQLite `LIKE` folds case only for ASCII, which is wrong for Cyrillic titles. The ICU extension is not available in every Python build. Filtering in Python after fetching would break paging and streaming.
 
 ### D4. Keyset paging inside 010's opaque cursor
-The sort keys, followed by a unique tie-breaker, form the keyset: `address` for Pages and `urls.url` for Affected URLs, which may have no corresponding Page. The cursor payload is the last row's key values. 010's cursor rule binds the cursor to the Command, its arguments and its filters, and this change passes the Crawl, `--where`, `--sort` and `--segment` to that binding. "Nulls last" is compiled as `(col IS NULL), col` for each key, which avoids relying on the SQLite version for `NULLS LAST`.
+The sort keys, followed by `address` as the tie-breaker, form the keyset. The cursor payload is the last row's key values. 010's cursor rule binds the cursor to the Command, its arguments and its filters, and this change passes the Crawl, `--where`, `--sort` and `--segment` to that binding. "Nulls last" is compiled as `(col IS NULL), col` for each key, which avoids relying on the SQLite version for `NULLS LAST`.
 - *Alternative:* OFFSET paging. Walking 500k rows costs O(n²), and rows shift or repeat while the Crawl is still writing.
 
 ### D5. Segments are a `[segments]` table, checked at load time and compiled to one CASE expression
@@ -105,7 +105,7 @@ The `resources` view is one SQL query:
 ### D11. Output and error details local to query Commands
 - `page --html` (v0.2) adds `html` (the `page_sources` bytes decoded with their `encoding`) and `encoding` to the normal JSON, as G4 decided. `--headers` adds `headers` the same way, so agents get everything in one call and both flags combine.
 - The default `pages` fields are six compact columns, for token economy.
-- Until group 6, `issue <rule-id>` orders Affected URLs by `url`. Group 6 changes the default order to Unique Inlinks, descending, which matches the Report's top-N tables. The Report and the Command then show the same "most important first" Affected URLs. `unique_inlinks` is derived, so it is NULL until `030`'s post-crawl pass, and a `running` Crawl's Affected URLs come in `url` order.
+- The default order of `issues <rule-id>` is by Unique Inlinks, descending, which matches the Report's top-N tables. The Report and the Command then show the same "most important first" Affected URLs. `unique_inlinks` is derived, so it is NULL until `030`'s post-crawl pass, and a `running` Crawl's Affected URLs come in `url` order.
 - The codes defined here, their exit-code classes, and `details.suggestions` / `details.accepted` are listed in the spec. The diagnostic shape, the exit-code table and the codes `usage_error`, `invalid_value`, `invalid_cursor`, `unknown_field` and `settings_invalid` are 010's. `output_not_writable` and `output_written` belong to this change's `cli-contract` spec, and `rule_not_found` is 040's.
 
 ### D12. The CSV policy
@@ -133,21 +133,19 @@ Moved from the `-o` bullet of 010's D3. 010's `Output` object holds the optional
 - *Alternative:* writing the target in place. A failing Command, or one stopped halfway, would leave a truncated file behind.
 
 ### D14. Issues are read through 040's reader
-Every Issue that `summary`, `issues`, `issue <rule-id>` and `page <url>` show comes from `040`'s Issues reader, which this change never bypasses:
-- **One read snapshot per response.** After Crawl selection, the Query Service uses `reading(..., snapshot=True)` so choosing live or materialised Issues and reading their data and recorded Rule metadata all see the same snapshot in WAL and in rollback-journal mode. With a rollback journal this read may delay a Writer commit until the response data has been collected. The Service releases the read before formatting and between requests for pages. The default Store read behavior used by `015` and `040` remains unchanged.
+Every Issue that `summary`, `issues`, `issues <rule-id>` and `page <url>` show comes from `040`'s Issues reader, which this change never bypasses:
+- **One read snapshot per response.** The Query Service opens the selected Crawl with its file identity and requests `reading(..., snapshot=True)`. The Issue source, results and recorded Rule metadata share a snapshot in WAL and rollback-journal mode. A rollback-journal read can delay a Writer commit while the Service collects the response data. The Service releases the read before formatting and between requests for pages.
 - **Materialised** when `crawl.state` is `completed` or `stopped`: the `issues` view, whose `affected_count` is a COUNT over `affected_urls`, and `affected_urls` by its key prefix or by `affected_urls_url_id`.
-- **Live** in every other state (`running`, `failed`, `interrupted`): the installed reader evaluates registered Rules that the Crawl recorded as enabled, using the recorded thresholds (040 D16). `affected_urls` is ignored, because after a resume it holds the previous pass's rows.
-- `issue <rule-id>` includes the recorded `reproduce_sql` in `rule` for manual reproduction with `linx sql`.
-- **The rule id is checked against the Crawl's own `rules` table,** not the installed registry: a crawl file explains its own Issues even when another tool version wrote it (`040` D6), and `rule`, `thresholds` and `reproduce_sql` come from that table anyway. `rule_not_found`'s `details.suggestions` are the closest ids of that table. A recorded, enabled Rule that this tool cannot evaluate live also gives `rule_not_found`, with a reason and a reproduction hint (040 D16).
-- **Separate Commands:** `issues` takes no positional arguments and `issue` takes one Rule id. Each declares its own `@command_meta(output="list")` and item fields. `090` uses the same pairing for its tools.
-- **Cursors:** the fingerprint includes the resolved Crawl id and the Command name. `issues` adds normalised list filters (split at commas, lower-cased, deduplicated and sorted). `issue` adds the Rule id. Later filter and sort options are included where they apply (D4). A cursor from the other Command fails with `invalid_cursor`.
-- **Shapes:** `issues` returns a `Page` of at most one item per Rule, paged with `paginate()`. `issue <rule-id>` returns a `Page` whose `header` is `{"rule": ...}`, and pages its Affected URLs by keyset (D4): in `url` order until task group 6, then by `unique_inlinks` and `url`.
+- **Live** in every other state (`running`, `failed`, `interrupted`): every enabled Rule's `reproduce_sql`, run read-only over the stored rows. `affected_urls` is ignored, because after a resume it holds the previous pass's rows.
+- `issues <rule-id>` adds the Rule's `reproduce_sql` to its `rule`, so an agent can rerun it with `sql` and read the Affected URLs as they are now.
+- **The rule id is checked against the Crawl's own `rules` table,** not the installed registry: a crawl file explains its own Issues even when another tool version wrote it (`040` D6), and `rule`, `thresholds` and `reproduce_sql` come from that table anyway. `rule_not_found`'s `details.suggestions` are the closest ids of that table.
+- **Shapes:** `issues` returns a `Page` of at most one item per Rule, paged with `paginate()`. `issues <rule-id>` returns a `Page` whose `header` is `{"rule": ...}`, and pages its Affected URLs by keyset (D4): in `url` order until `030`'s `unique_inlinks` exists, then by `unique_inlinks` and `url`.
 
 ### D15. Paging and index use
 At about 500k URLs, what an index serves decides whether a call takes milliseconds or seconds. `docs/querying.md` lists this for each Command, and `080` documents it for agents.
 - **`pages`:** the default order is `address`, served by `pages_address` (`030`, ruling Q6), so each page of a keyset walk reads only its rows. Any other `--sort`, and every `--where`, scans `pages` (there are no per-column indexes) and sorts the matches, once per page of results. Walking a large Crawl in another order is better done with a larger `--limit` or with `sql`. `contains` and, from v0.2, `~` call a Python function on every scanned row.
 - **`issues`:** materialised, one scan of `affected_urls`' primary key grouped by Rule; live, every Rule's query.
-- **`issue <rule-id>`:** materialised, the Rule's key prefix in `affected_urls` joined to `urls` for paging by URL. Group 6 adds the join to `pages` and orders by `unique_inlinks` and `url`. The cost grows with the Issue's size. Live, the Rule's query on every call.
+- **`issues <rule-id>`:** materialised, the Rule's key prefix in `affected_urls`, joined to `pages` by key and sorted by `unique_inlinks`: the cost grows with the Issue's size, not the Crawl's. Live, the Rule's query on every call.
 - **`page <url>`:** `urls_url` for the URL, then keys: `pages`, `response_headers`, the `redirect_url_id` hops, and `affected_urls_url_id` for its Issues when materialised. Live, every Rule's query for one URL, which `026`'s 500k run must keep under 1 s (`040` D16).
 - **`summary`:** scans `urls` and `pages` (status classes, content types, Crawl Depth, Indexability) and sorts `response_time_ms` once (D8). No count over `urls` is stored, so this is seconds at 500k URLs, paid on every call.
   - *Hint:* the reads of `urls` (the totals, status classes, content types, Crawl Depth, and the count, min, max, mean and histogram of D8) can be one `GROUP BY` pass with conditional aggregates (`SUM(CASE …)`, `COUNT(*) FILTER (WHERE …)`) instead of one scan each. The breakdowns use different keys, so the pass may group by their combination and fold the small result in Python. The implementer measures it against the separate scans at 500k and keeps the faster. The percentile sort of D8 and the read of `pages` stay separate.

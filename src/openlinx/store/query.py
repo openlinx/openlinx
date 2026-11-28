@@ -1,11 +1,13 @@
 """Read Issues and their recorded Rule metadata for the Query Service."""
 
-import json
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Connection, bindparam, case, func, select
 
+from openlinx.json_numbers import decode_json_object
+from openlinx.store.crawls import check_rule_schema
 from openlinx.store.issues import affected_urls_in, decode_detail, issues_in
 from openlinx.store.rule_queries import RuleQuery
 from openlinx.store.schema import rules, urls
@@ -25,6 +27,7 @@ _RECORDED_RULE = select(
 
 def ordered_issues_in(
     connection: Connection,
+    path: Path,
     catalogue: Sequence[RuleQuery],
     *,
     issue_types: tuple[str, ...] = (),
@@ -32,6 +35,7 @@ def ordered_issues_in(
     categories: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Join the reader's Issues to the Rule descriptions recorded for this Crawl."""
+    check_rule_schema(connection, path)
     source = issues_in(connection, catalogue).subquery()
     statement = (
         select(source, rules.c.description)
@@ -57,16 +61,22 @@ def ordered_issues_in(
 
 def issue_detail_in(
     connection: Connection,
+    path: Path,
     rule_id: str,
     catalogue: Sequence[RuleQuery],
     *,
     after: str | None,
     limit: int,
 ) -> tuple[dict[str, Any], int, list[dict[str, Any]]]:
-    """Read the recorded Rule, total before paging, and at most limit Affected URLs."""
-    # The Issues reader validates the recorded Rule id and selects the live or stored source.
+    """Collect the Rule header, total, and bounded URL results within the caller's snapshot."""
+    check_rule_schema(connection, path)
     source = affected_urls_in(connection, rule_id, catalogue).subquery()
+    row = connection.execute(_RECORDED_RULE, {"rule_id": rule_id}).mappings().one()
+    rule = {str(key): value for key, value in row.items()}
+    rule["thresholds"] = decode_json_object(row["thresholds"])
     total: int = connection.execute(select(func.count()).select_from(source)).scalar_one()
+    if limit == 0:
+        return rule, total, []
     statement = (
         select(urls.c.url, source.c.detail)
         .join_from(source, urls, urls.c.id == source.c.url_id)
@@ -79,8 +89,4 @@ def issue_detail_in(
         {"url": url, "detail": decode_detail(detail)}
         for url, detail in connection.execute(statement)
     ]
-    row = connection.execute(_RECORDED_RULE, {"rule_id": rule_id}).mappings().one()
-    header = {str(key): value for key, value in row.items()}
-    # Recorded thresholds can exceed the range that orjson reads as exact integers.
-    header["thresholds"] = json.loads(row["thresholds"])
-    return header, total, items
+    return rule, total, items

@@ -1,22 +1,19 @@
-"""Expose the Issue list and detail Commands for a selected Crawl."""
+"""List Issues or show the Affected URLs of one Rule in a selected Crawl."""
 
 from pathlib import Path
 from typing import Annotated
 
 import typer
-from typer.core import TyperCommand
 
-from openlinx.cli.click_compat import Context
 from openlinx.cli.meta import Example, command_meta
 from openlinx.cli.options import CrawlOpt, CursorOpt, FieldsOpt, FormatOpt, LimitOpt, WorkspaceOpt
 from openlinx.naming import COMMAND_NAME
-from openlinx.output.codes import USAGE_ERROR
+from openlinx.output.codes import INVALID_VALUE
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.paging import Page
 from openlinx.output.writer import Format
 from openlinx.services.query import (
     AFFECTED_URL_FIELDS,
-    ISSUE,
     ISSUE_FIELDS,
     ISSUES,
     QueryRequest,
@@ -48,32 +45,18 @@ CategoryOpt = Annotated[
 ]
 
 
-class IssueListCommand(TyperCommand):
-    """Point a caller who passed a Rule id to the detail Command."""
-
-    allow_extra_args = True
-
-    def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
-        extra = super().parse_args(ctx, args)
-        if extra and not ctx.resilient_parsing:
-            raise OpenLinxError(
-                USAGE_ERROR,
-                f"{COMMAND_NAME} {ISSUES} takes no positional arguments.",
-                hint=f"Pass the Rule id to {COMMAND_NAME} {ISSUE} <rule-id>.",
-            )
-        return extra
-
-
 @command_meta(
     name=ISSUES,
     output="list",
     formats=[Format.JSON, Format.JSONL, Format.TABLE],
     fields=ISSUE_FIELDS,
+    fields_by_argument={"rule_id": AFFECTED_URL_FIELDS},
     examples=[
         Example(
             f"{COMMAND_NAME} {ISSUES} --type issue,warning --priority high",
             "List high Priority Issues and Warnings.",
-        )
+        ),
+        Example(f"{COMMAND_NAME} {ISSUES} title-missing", "Show the Rule and its Affected URLs."),
     ],
 )
 def issues(
@@ -86,44 +69,31 @@ def issues(
     limit: LimitOpt = 50,
     cursor: CursorOpt = None,
     fields: FieldsOpt = None,
+    rule_id: Annotated[
+        str | None, typer.Argument(metavar="RULE-ID", help="Show this Rule and its Affected URLs.")
+    ] = None,
 ) -> Page:
-    """List the Issues of a Crawl with their Affected URL counts."""
+    """List the Issues of a Crawl or show the Affected URLs of one Rule."""
+    request = QueryRequest(cwd=Path.cwd(), home=Path.home(), workspace=workspace_dir, crawl=crawl)
+    if rule_id is not None:
+        for flag, values in (
+            ("--type", issue_types),
+            ("--priority", priorities),
+            ("--category", categories),
+        ):
+            if values is not None:
+                raise OpenLinxError(
+                    INVALID_VALUE,
+                    f"{flag} filters the Issue list and cannot be used with a Rule id.",
+                    hint="Omit the Rule id to filter the Issue list.",
+                    details={"flag": flag},
+                )
+        return issue_detail(request, rule_id, limit=limit, cursor=cursor, fields=fields)
     return issue_list(
-        QueryRequest(cwd=Path.cwd(), home=Path.home(), workspace=workspace_dir, crawl=crawl),
+        request,
         issue_types=issue_types or (),
         priorities=priorities or (),
         categories=categories or (),
-        limit=limit,
-        cursor=cursor,
-        fields=fields,
-    )
-
-
-@command_meta(
-    name=ISSUE,
-    output="list",
-    formats=[Format.JSON, Format.JSONL, Format.TABLE],
-    fields=AFFECTED_URL_FIELDS,
-    examples=[
-        Example(
-            f"{COMMAND_NAME} {ISSUE} internal-4xx --fields url",
-            "List the URLs affected by the internal-4xx Rule.",
-        )
-    ],
-)
-def issue(
-    rule_id: Annotated[str, typer.Argument(metavar="RULE_ID", help="The recorded Rule id.")],
-    workspace_dir: WorkspaceOpt = None,
-    crawl: CrawlOpt = LATEST,
-    output_format: FormatOpt = Format.JSON,
-    limit: LimitOpt = 50,
-    cursor: CursorOpt = None,
-    fields: FieldsOpt = None,
-) -> Page:
-    """Show the Rule as recorded for the Crawl and page its Affected URLs."""
-    return issue_detail(
-        QueryRequest(cwd=Path.cwd(), home=Path.home(), workspace=workspace_dir, crawl=crawl),
-        rule_id,
         limit=limit,
         cursor=cursor,
         fields=fields,

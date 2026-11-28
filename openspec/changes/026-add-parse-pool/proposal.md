@@ -1,6 +1,6 @@
 ## Why
 
-`020-add-crawl-core` prepares each Page in the crawl process: it decodes, parses, runs the link extractor and the registered extractors, and normalises the discovered targets. At the scale target of about 500k URLs, that CPU work blocks the event loop (`030` adds many extractors), and the Crawl stalls while sockets sit idle. So page preparation runs in a process pool in v0.1, unconditionally (the user's decision of 2026-10-11): in the writer prototype of 2026-10-11, preparing one Page in the loop (about 474 Links resolved and normalised, plus the parse) took about 26 ms, which alone caps a Crawl at a few dozen Pages per second, whatever the writer does. `020` already calls page preparation through an executor seam, so the pool plugs in without changing the engine or the extractors. This change also makes the pool safe:
+`020-add-crawl-core` prepares each Page in the crawl process: it decodes, parses, runs the link extractor and the registered extractors, and normalises the discovered targets. At the scale target of about 500k URLs, that CPU work blocks the event loop (`030` adds many extractors), and the Crawl stalls while sockets sit idle. In the writer prototype of 2026-10-11, preparing one Page in the loop (about 474 Links resolved and normalised, plus the parse) took about 26 ms, which alone caps a Crawl at a few dozen Pages per second, whatever the writer does. `020` already calls page preparation through an executor seam, so the pool plugs in without changing the engine or the extractors. This change also makes the pool safe:
 - memory stays bounded when page preparation falls behind
 - a crashing worker costs one URL, not the Crawl
 - a Page that takes too long to prepare, such as deeply nested HTML, costs one URL and one worker, not the Crawl
@@ -9,15 +9,15 @@
 
 ## What Changes
 
-- **The ~500k-URL benchmark comes first:** a script and a synthetic fixture site, run by hand on a stated machine and never in CI. Its first run is the baseline, against `020`'s in-process executor. It is also the soak test of the robustness rule: the site injects a share of the hostile fixtures' faults. Its results are recorded in `docs/benchmarks.md`.
-- **Page preparation moves into `spawn` worker processes of our own** behind `020`'s executor seam, one Page per worker at a time, with one worker per physical core minus 2, at least 1, on every OS. `020`'s extractors run unchanged in the workers; the per-response handlers stay in the crawl process and get the records back.
+- **The ~500k-URL benchmark** uses a script and a synthetic fixture site. Run it by hand on a stated machine. Its first run measures `020`'s in-process executor. It is also the soak test of the robustness rule: the site injects a share of the hostile fixtures' faults. Its results are recorded in `docs/benchmarks.md`.
+- **An opt-in process pool** prepares one Page per worker at a time in fresh interpreters behind `020`'s executor seam. The default remains in-process. Enabling automatic pool selection is a separate step after native shutdown qualification and the in-process baseline. `020`'s extractors run unchanged in the workers; the per-response handlers stay in the crawl process and get the records back.
 - **The settings snapshot reaches each worker once,** as an argument the worker starts with, together with the registered extractors. A work item carries only the fetched response.
 - **`crawl_started` event:** its `data` gains `parse_workers`.
 - **A bounded queue:** when page preparation falls behind, fetching waits. At most `020`'s global request cap + 2 × `parse_workers` Pages are requested but not yet prepared (`--concurrency` + 2 × `parse_workers` on one host).
 - **A crashed worker is replaced.** The URL it was preparing gets `parse_error` = `worker_crashed`, a value `020` already lists, and the Crawl goes on.
 - **A deadline of 30 seconds per Page,** from the moment a worker takes it: a worker over it is killed and replaced, the URL gets `parse_error` = `parse_timeout`, a value `020` lists, and no other Page is charged. It is a constant, with no flag (the user's decision of 2026-10-14, over a depth pre-scan in `020`).
 - **Workers end with their Crawl,** after a normal end, a stop or an interrupt.
-- **Windows:** parse workers and their guardian start outside the Crawl's console. The foreground Crawl handles both forms of Ctrl+Break from the moment the children are created, and neither the workers nor their guardian open visible console windows.
+- On **Windows**, the guardian, workers and replacements start outside the Crawl owner's console, without visible windows and with redirected streams available. The foreground owner handles keyboard interrupts and programmatic Ctrl+Break, including during child bootstrap.
 - **The benchmark is run again** with the pool, and its results are recorded next to the baseline. The re-run on the full v0.1 pipeline after `080` (ROADMAP, Build order) uses the same script to size the pool.
 - **Flags:** none new. **MCP tools:** none.
 
@@ -43,7 +43,7 @@
 - **Used by:**
   - `030-add-page-data`, whose Page extractor runs in the pool, and whose `links` layout this change's benchmark may settle (ROADMAP, 026).
   - `040-add-rules`, whose live Issues latency the 500k run measures (`040` D16).
-  - `060-add-crawl-control`, whose background process uses CREATE_NO_WINDOW for the Crawl itself.
-- **Code:** `scripts/crawl_500k.py` and its synthetic site, and `openlinx.crawl.parse_pool` with the pool executor and its workers behind `020`'s seam.
-- **New dependencies:** `psutil` becomes a runtime dependency (it is a test dependency today), to count physical cores; `openlinx.crawl.parse_pool` imports it, never the startup path.
+  - `060-add-crawl-control`, whose background process starts away from the caller's console. The parse pool applies its own console isolation.
+- **Code:** `scripts/crawl_500k.py` and its synthetic site, and `openlinx.crawl.pages.parse_pool` with the pool executor and its workers behind `020`'s seam.
+- **New dependencies:** `psutil` is used to track process identity in the pool. Automatic selection will also use it to count physical cores. It stays off the CLI startup path.
 - **Docs:** the benchmark results in `docs/benchmarks.md`, and the parse pool in `docs/architecture.md`.

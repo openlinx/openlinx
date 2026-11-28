@@ -14,7 +14,6 @@ from time import monotonic, monotonic_ns, sleep
 import psutil
 import pytest
 
-from openlinx.crawl.pages.parse_guard import _worker_candidates
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import ServerHandle
@@ -453,20 +452,128 @@ def test_ctrl_break_ends_the_parse_tree_during_windows_bootstrap(
         _windows_bootstrap_case(fixture_site, tmp_path, phase, delivery)
 
 
+def _windows_bootstrap_site(site: StartSite) -> ServerHandle:
+    seed = '<a href="/die">Crash</a><a href="/held">Pending</a>'
+    return site(
+        Site(
+            routes={
+                "/": Page(body=seed),
+                "/die": Page(body="Crash"),
+                "/held": Page(body="Pending", after="/die"),
+            }
+        )
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(sys.platform != "win32", reason="Ctrl+Break is a Windows console event")
+@pytest.mark.parametrize("delivery", ["targeted", "broadcast"])
+@pytest.mark.parametrize("phase", ["worker", "replacement", "guardian"])
+def test_a_second_ctrl_break_ends_the_parse_tree_during_windows_bootstrap(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    tmp_path: Path,
+    phase: str,
+    delivery: str,
+) -> None:
+    """End the owner while the spawn handoff and the child's native bootstrap are held."""
+    if sys.platform == "win32":
+        _windows_owner_death_case(fixture_site, tmp_path, phase, delivery)
+
+
+if sys.platform == "win32":
+
+    def _windows_owner_death_case(
+        fixture_site: StartSite, tmp_path: Path, phase: str, delivery: str
+    ) -> None:
+        from tests.crawl.parse_windows_console import bootstrap_probe, private_console, read_record
+
+        site = _windows_bootstrap_site(fixture_site)
+        guardian, initial, replacement = "parse-worker-guard", "parse-worker-0", "parse-worker-1"
+        held = {"guardian": guardian, "worker": initial, "replacement": replacement}[phase]
+        argv, env = _fixture_command(site.url("/"), tmp_path, f"windows_{phase}")
+        bootstrap_probe(tmp_path, env, held, "")
+        env["OPENLINX_TEST_SPAWN_HANDOFF"] = held
+        urls = "SELECT url, fetch_state, parsed, parse_error FROM urls ORDER BY url"
+        pages = (
+            "SELECT urls.url, urls.parsed FROM pages JOIN urls ON urls.id = pages.url_id "
+            "ORDER BY urls.url"
+        )
+        if phase == "replacement":
+            expected_urls = [
+                (site.url("/"), "fetched", 1, None),
+                (site.url("/die"), "fetched", 0, "worker_crashed"),
+                (site.url("/held"), "queued", 0, None),
+            ]
+            expected_pages = [(site.url("/"), 1), (site.url("/die"), 0)]
+        else:
+            expected_urls = [(site.url("/"), "queued", 0, None)]
+            expected_pages = []
+
+        with private_console(tmp_path, argv, env, delivery, repeat=True) as console:
+            file = Path(_observed(tmp_path / "crawl_file"))
+            members = {console.owner_pid, console.broker.pid}
+            roles = {
+                "guardian": (guardian,),
+                "worker": (guardian, initial),
+                "replacement": (guardian, initial, replacement),
+            }[phase]
+            watched = {}
+            pids = {}
+            for role in roles:
+                probe = json.loads(read_record(tmp_path / role))
+                pid = probe["pid"]
+                pids[role] = pid
+                watched[role] = console.watch(pid)
+                assert not (members & set(probe["console_pids"])), probe
+                assert not probe["window_visible"], probe
+                if phase == "replacement" and role == initial:
+                    (tmp_path / "crash_worker").touch()
+                    assert console.exit_status(watched[role], 10) == 3
+            assert int(read_record(tmp_path / "spawn_handoff")) == pids[held]
+            assert len(set(pids.values())) == len(roles)
+            assert {p.pid for p in psutil.Process(console.owner_pid).children(recursive=True)} == {
+                pid for role, pid in pids.items() if phase != "replacement" or role != initial
+            }
+            committed_by = monotonic() + 5
+            while (rows := query(file, urls)) != expected_urls:
+                assert monotonic() < committed_by, rows
+                sleep(0.01)
+            assert query(file, pages) == expected_pages
+            before = crawl_row(file)
+            assert (before["state"], before["stop_reason"]) == ("running", None)
+            assert _winapi.WaitForSingleObject(watched[held], 0) == _winapi.WAIT_TIMEOUT
+
+            (tmp_path / "send_break").touch()
+            assert _observed(tmp_path / "stopping") == "interrupt"
+            assert _winapi.WaitForSingleObject(console.owner_handle, 0) == _winapi.WAIT_TIMEOUT
+            assert _winapi.WaitForSingleObject(watched[held], 0) == _winapi.WAIT_TIMEOUT
+
+            (tmp_path / "send_second_break").touch()
+            group = 0 if delivery == "broadcast" else console.owner_pid
+            assert json.loads(read_record(tmp_path / "second_break_sent", seconds=5)) == group
+            assert console.exit_status(console.owner_handle, 10) == 130
+            exits = console.child_exits(watched, 10)
+            assert set(json.loads(read_record(tmp_path / "console_pids"))) == members
+            assert set(json.loads(read_record(tmp_path / "second_console_pids"))) == members
+            assert crawl_row(file) == before
+            assert query(file, "SELECT url FROM seeds") == [(site.url("/"),)]
+            assert query(file, urls) == expected_urls
+            assert query(file, pages) == expected_pages
+            late = {
+                role: result for role, result in exits.items() if result is None or result[1] > 10
+            }
+            if not late:
+                assert console.broker.wait(timeout=5) == 130
+        assert _assert_recovery_pages(fixture_site, tmp_path / "recovery") != file
+        assert not late, f"parse children exceeded 10 s after owner exit: {late}; observed {exits}"
+
+
 def _windows_bootstrap_case(site: StartSite, folder: Path, phase: str, delivery: str) -> None:
     if sys.platform == "win32":
         from tests.crawl.parse_windows_console import bootstrap_probe, private_console, read_record
 
-        seed = '<a href="/die">Crash</a><a href="/held">Pending</a>'
-        server = site(
-            Site(
-                routes={
-                    "/": Page(body=seed),
-                    "/die": Page(body="Crash"),
-                    "/held": Page(body="Pending", after="/die"),
-                }
-            )
-        )
+        server = _windows_bootstrap_site(site)
         first_worker, guardian = "parse-worker-0", "parse-worker-guard"
         blocked = "parse-worker-1" if phase == "replacement" else first_worker
         argv, env = _fixture_command(server.url("/"), folder, f"windows_{phase}")
@@ -567,10 +674,6 @@ def _await_windows_interrupt(folder: Path, owner: int, worker: int, worker_pid: 
             sleep(0.01)
 
 
-def test_a_group_sweep_excludes_pid_zero_and_its_guardian() -> None:
-    assert list(_worker_candidates([0, 21, 25, 39], leader=21)) == [25, 39]
-
-
 @pytest.mark.slow
 @pytest.mark.skipif(sys.platform not in {"linux", "darwin"}, reason="Uses a POSIX bootstrap FIFO")
 @pytest.mark.parametrize(
@@ -593,6 +696,35 @@ import os
 import sys
 from pathlib import Path
 
+def observe_group_sweep(folder):
+    import psutil
+
+    guardian = os.getpid()
+    process_init = psutil.Process.__init__
+    getpgid = os.getpgid
+
+    def candidates():
+        worker = int((folder / "worker_sitecustomize").read_text(encoding="ascii"))
+        (folder / "swept").touch()
+        return [0, guardian, worker]
+
+    def check(pid):
+        if pid in (0, guardian):
+            (folder / "invalid_sweep_pid").write_text(str(pid), encoding="ascii")
+            raise ProcessLookupError(pid)
+
+    def observe_process(process, pid=None):
+        check(pid)
+        process_init(process, pid)
+
+    def observe_group(pid):
+        check(pid)
+        return getpgid(pid)
+
+    psutil.pids = candidates
+    psutil.Process.__init__ = observe_process
+    os.getpgid = observe_group
+
 if "--multiprocessing-fork" in sys.argv:
     folder = Path(os.environ["OPENLINX_PROBE_BOOTSTRAP"])
     try:
@@ -607,6 +739,9 @@ if "--multiprocessing-fork" in sys.argv:
         finally:
             # site ignores ordinary exceptions. An unexpected return must abort startup.
             raise SystemExit("The bootstrap gate returned before worker shutdown.")
+    else:
+        # Model macOS enumeration without looking up PID 0 or inspecting foreign processes.
+        observe_group_sweep(folder)
 """,
         encoding="utf-8",
     )
@@ -671,6 +806,9 @@ if "--multiprocessing-fork" in sys.argv:
                 stderr_text = (tmp_path / "stderr").read_text(encoding="utf-8", errors="replace")
                 error.add_note(f"Process stderr:\n{stderr_text[-8192:]}")
                 raise
+            assert (tmp_path / "swept").exists(), "the guardian did not sweep for workers"
+            unexpected = tmp_path / "invalid_sweep_pid"
+            assert not unexpected.exists(), f"the guardian inspected PID {unexpected.read_text()}"
             record = crawl_row(file)
             if second_interrupt:
                 assert (record["state"], record["stop_reason"]) == ("running", None)

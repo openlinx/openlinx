@@ -1,12 +1,17 @@
 """Verify Crawl Depth and the depth barrier over HTTP and stored rows."""
 
+import json
+import os
+from pathlib import Path
+
 import pytest
 
 from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
+from tests.support.cli import CRAWL_PROCESS_TIMEOUT, run_cli_process
 from tests.support.crawling import crawl_result, crawled
-from tests.support.crawls import query
+from tests.support.crawls import crawl_row, query
 from tests.support.sites import LATE_SHORTER_PATH
 from tests.support.workspace import TempWorkspace
 
@@ -183,6 +188,52 @@ def test_links_beyond_the_limit_are_not_requested(
     assert query(crawl_file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/b")]) == [
         ("max_depth",)
     ]
+
+
+@pytest.mark.parametrize(
+    ("source", "flags"),
+    [
+        pytest.param("[Crawl]\nmax_depth = {decimal}", ("--max-depth", "0"), id="decimal"),
+        pytest.param("[Crawl]\nmax_depth = {hexadecimal}", ("--max-depth", "0"), id="hex"),
+        pytest.param(
+            "[Crawl]\nmax_depth = 0\nconcurrency = {decimal}",
+            ("--concurrency", "5"),
+            id="explicit-default",
+        ),
+        pytest.param(
+            "[Crawl]\nmax_depth = 0\n[crawl]\nmax_depth = {decimal}", (), id="shadowed-table"
+        ),
+    ],
+)
+def test_a_discarded_wide_decimal_does_not_block_the_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, source: str, flags: tuple[str, ...]
+) -> None:
+    server = fixture_site(
+        Site(routes={"/": Page(body='<a href="/child">Child</a>'), "/child": Page(body="Child")})
+    )
+    (temp_workspace.root / "openlinx.toml").write_text(
+        source.format(decimal="9" * 4301, hexadecimal=f"{10**4301 - 1:#x}") + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_cli_process(
+        "crawl",
+        server.url("/"),
+        *flags,
+        env={**os.environ, "PYTHONINTMAXSTRDIGITS": "640"},
+        timeout=CRAWL_PROCESS_TIMEOUT,
+    )
+
+    assert result.exit_code == 0, result.stderr
+    output = result.json()
+    assert output["state"] == "completed"
+    file = Path(output["crawl_file"])
+    config = json.loads(crawl_row(file)["config"])["crawl"]
+    assert (config["max_depth"], config["concurrency"]) == (0, 5)
+    assert query(file, "SELECT skip_reason FROM urls WHERE url = ?", [server.url("/child")]) == [
+        ("max_depth",)
+    ]
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
 
 
 @pytest.mark.slow

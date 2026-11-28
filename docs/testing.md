@@ -61,47 +61,32 @@ does not add it to the direct test seams.
 | Folder | Seam |
 |---|---|
 | `tests/cli/` | 1, CLI |
-| `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API (including Writer [connection](../tests/store/writer/test_connections.py) and [unit result](../tests/store/writer/test_unit_results.py) tests); 4, the store's pure logic, such as crawl ids |
+| `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API (including Writer [connection](../tests/store/writer/test_connections.py), [unit result](../tests/store/writer/test_unit_results.py) and [loop commit deadline](../tests/store/writer/test_loop_deadline.py) tests); 4, the store's pure logic, such as crawl ids |
 | `tests/output/` | 4, the output layer's pure logic |
 | `tests/crawl/` | 4, the crawler's pure logic, such as URL normalisation; 3 and 3+6, Crawls of the fixture site; 2, the Crawl Service, and its reporter, the warning log (`test_warning_log.py`) |
-| `tests/rules/` | 2, Rule evaluation on a real Crawl of the fixture site; 3+6, Crawls of the fixture site read through the Rule tables |
+| `tests/rules/` | 2, Rule evaluation on real Crawl Stores, including [HTTP responses](../tests/rules/test_http_url.py); 3+6, Crawls of the fixture site read through the Rule tables, including stored and live [redirect loops](../tests/rules/test_redirect_loop.py) |
+| `tests/query/` | 2, the Query Service reading the [Issue list](../tests/query/test_issue_list.py) and [Rule detail](../tests/query/test_issue_detail.py) from a real crawl store |
 | `tests/extract/` | 4, the Page extractor and the Page handler; 3+6, Crawls of the fixture site read through the Page data tables |
 | `tests/contract/` | 6, the store contract (`test_schema.py`, which reads `docs/schema.md` with `openlinx.services.schema_doc.parse_tables`), and the hand-written expected JSON of the CLI contract tests (`commands/`) |
 | `tests/js/` | 9, the Report script |
 | `tests/` | the repository's own guards: dependencies, naming, line endings, docs links, isolation |
 
+The [URL Rule tests](../tests/rules/test_urls.py) rerun the saved queries in plain SQLite.
+The [image Rule tests](../tests/rules/test_images.py) exercise Link measurement, Resource
+requests and Store write failures using the fixture site.
+
 The ALPN capability-probe tests in [tests/crawl/alpn/](../tests/crawl/alpn/)
-cover admission, deadlines, lifecycle and system DNS.
+cover admission, deadlines, lifecycle and system DNS, plus the
+[capability recorded for an origin](../tests/crawl/alpn/test_capability.py)
+and [probes through a proxy](../tests/crawl/alpn/test_proxy.py).
+See [proxy identity](../tests/crawl/test_proxy_identity.py) for ordinary
+CONNECT authority and origin identity checks.
 
 [tests/crawl/hooks/](../tests/crawl/hooks/) contains the tests for
 [post-Crawl Pass lifecycle](../tests/crawl/hooks/test_post_crawl_passes.py) and
 [Handler persistence](../tests/crawl/hooks/test_handler_persistence.py), which checks the
 values Handlers receive and how their rows reach the Store. Other Hook cases are in
 [test_hooks.py](../tests/crawl/test_hooks.py).
-
-[test_parse_pool.py](../tests/crawl/test_parse_pool.py) exercises the spawn executor through
-the Crawl Service, HTTP fixture and read-only crawl file.
-[test_parse_shutdown.py](../tests/crawl/test_parse_shutdown.py) exercises its public executor
-lifecycle with real workers. [test_parse_process_tree.py](../tests/crawl/test_parse_process_tree.py)
-observes the same worker identities through normal completion, foreground interrupts and
-abrupt owner death. On Linux and macOS a FIFO holds a spawned worker in the interpreter before
-its target while the foreground Crawl receives SIGINT. The second-interrupt case also holds the
-return from the real process start so the guardian has not been given the worker PID. The worker
-reports its PID after opening the FIFO reader, and Linux also checks the native wait via `/proc`.
-On Windows a hidden private console contains a sender and the foreground Crawl.
-The sender issues one targeted or broadcast Ctrl+Break while an initial worker,
-replacement or guardian is held in `sitecustomize`. The test observes native
-console membership, window visibility and redirected streams before bootstrap.
-It retains process handles through the exit check, and records raw status before
-cleanup. A worker held in startup exits with the pool's CPython termination status
-(`0x10000`) or the guardian's psutil termination status (`15`). The guardian
-exits normally. The test reads unfinished URLs and stored Pages, then checks both
-Pages from a subsequent Crawl. [Private console fixture](../tests/crawl/parse_windows_console.py)
-The executor seam also covers
-[delivery](../tests/crawl/test_parse_transport.py),
-[spawn cancellation](../tests/crawl/test_parse_spawn_cancel.py),
-[inherited descriptors](../tests/crawl/test_parse_inherited.py) and
-[cancelled queued Pages](../tests/crawl/test_parse_queue.py).
 
 Shared helpers are in `tests/support/` and the fixture site in `tests/fixture_site/` (see [Helpers](#helpers)).
 
@@ -114,6 +99,7 @@ These fakes stand in for things outside our code. They are the only test doubles
 - **DNS:** a DNS resolver hook
 - **Proxy:** a real local forward proxy with HTTP relay, CONNECT tunnels, optional tunnel Basic authentication and separate CONNECT target/header logs; see the [fixture README](../tests/fixture_site/README.md#fixtures) for ownership and teardown
 - **TLS trust:** a test CA (trustme) passed into the crawler's TLS setup, so no test installs a CA into the OS trust store; and truststore's import made to fail, for the certifi fallback
+- **File system:** inject OS errors at the `stat` or file-locking call, using real files and SQLite without replacing any OpenLinx modules.
 - **Processes:** the OS process-spawn call (not our own launcher function)
 - **`doctor`:** network and trust-store probes
 - **SQLite's report of a held `-shm` file:** `SQLITE_IOERR_TRUNCATE`, which a killed writer whose process is still exiting causes on Windows only at random
@@ -176,7 +162,6 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **Proxy isolation** (`no_proxy_from_the_environment`): `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and `ALL_PROXY`, in both cases, are removed before every test. A test that needs a proxy sets them with `monkeypatch.setenv`.
 - **`loop_factory`** (`openlinx.aio`): every async test runs on the loop it makes (Proactor on Windows, Selector elsewhere), through the `pytest_asyncio_loop_factories` hook in `tests/conftest.py`. No test sets an event-loop policy; ruff bans them.
 - **Fixture site** (`tests/fixture_site/`, see its [README](../tests/fixture_site/README.md)): the local HTTP server that tests crawl, at seam 3.
-  - The [synthetic benchmark site](../tests/fixture_site/README.md#synthetic-benchmark-site) serves seeded Pages with injected faults, an expected-count manifest and a separate server process.
   - A site is data: a `Site` maps request paths to routes, such as `Page`, `Redirect` and `Robots`.
   - `server = fixture_site(site)` starts it on `127.0.0.1`, on a given port with `fixture_site(site, port=port)` (over https with `fixture_site(site, tls)`), such as one where a failed Crawl found nothing listening, and returns a `ServerHandle` with `base_url`, `url(path)` and the request log. `module_fixture_site` is the variant for hypothesis tests.
   - `hosts = fixture_hosts(site, other)` starts two instances for multi-host Crawls: `site.test` and `www.site.test` name the first, `other.test` the second, through `hosts.resolver`, the DNS resolver hook, on port 80; every other name or port fails as a DNS error.
@@ -193,7 +178,7 @@ Shared test code lives in `tests/support/`. `tests/` is a package, so tests impo
 - **`BackloggedPool(backlog)`** (same module): a page executor that may hold `backlog` Pages beyond the requests in flight, as `026`'s pool does; politeness tests that must see the global cap pass it as `pages=`, since without a backlog the task bound equals the cap and hides it.
 - **Shared fixture sites** (`tests/support/sites.py`): sites that several test modules crawl, named after the spec's examples, such as `NINE_PAGES`, where `/` links to `/p1` to `/p9`.
 - **`closed_port()`** (`tests/support/network.py`): a loopback port that nothing listens on when it returns, for a refused connection, or for a site a test starts there later.
-- **`disk_full_after(pages=n, include_creation=False)`** (`tests/support/sqlite_faults.py`): the full-disk double above, as a context manager: SQLite reports `SQLITE_FULL` once the crawl file grows `n` pages from its size at connection open. By default, files without the `crawl` table are not capped, preserving initialization. `include_creation=True` also caps schema initialization. Each new connection gets its own allowance, as if disk space had been freed before a fallback writer opens.
+- **`disk_full_after(pages=n)`** (`tests/support/sqlite_faults.py`): the full-disk double above, as a context manager: SQLite reports `SQLITE_FULL` once the crawl file grows `n` pages.
 - **`FakeClock`** (`tests/support/clock.py`): implements `openlinx.clock.Clock`.
   - `now()` starts at `2026-01-01T00:00:00+00:00`, or at the `start` given, as in `FakeClock(start=datetime(2026, 9, 27, 14, 3, 12, tzinfo=UTC))`. `monotonic()` starts at `0.0`.
   - `advance(seconds)` moves both, and wakes the sleeps that are due.

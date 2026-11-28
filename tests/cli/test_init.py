@@ -8,6 +8,7 @@ import pytest
 
 from tests.support.app import example_app
 from tests.support.cli import run_cli
+from tests.support.rules import V01_RULE_IDS
 from tests.support.workspace import TempWorkspace
 
 
@@ -201,22 +202,34 @@ def test_a_table_of_named_tables_in_the_template(shop: Path) -> None:
     assert description.startswith("# ")
     assert "characters" in description
     assert default == "# max_chars = 60"
-    assert all(settings == {} for settings in tomllib.loads(template)["rules"].values())
+    tables = tomllib.loads(template)["rules"]
+    assert tables.keys() == V01_RULE_IDS
+    assert all(settings == {} for settings in tables.values())
 
 
-def test_editing_a_generated_rule_threshold(shop: Path) -> None:
+@pytest.mark.parametrize(
+    ("rule_id", "key", "default", "value", "unit"),
+    [
+        ("title-too-long", "max_chars", 60, 70, "characters"),
+        ("low-word-count", "min_words", 200, 300, "words"),
+    ],
+)
+def test_editing_a_generated_rule_threshold(
+    shop: Path, rule_id: str, key: str, default: int, value: int, unit: str
+) -> None:
     result = run_cli("init")
     assert result.exit_code == 0, result.stderr
     settings = shop / "openlinx.toml"
     lines = settings.read_text(encoding="utf-8").splitlines()
-    lines[lines.index("# max_chars = 60")] = "max_chars = 70"
+    header = lines.index(f"[rules.{rule_id}]")
+    lines[lines.index(f"# {key} = {default}", header)] = f"{key} = {value}"
     settings.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    shown = run_cli("rules", "show", "title-too-long")
+    shown = run_cli("rules", "show", rule_id)
 
     assert shown.exit_code == 0, shown.stderr
-    assert shown.json()["thresholds"]["max_chars"] == {
-        "value": 70,
-        "default": 60,
-        "unit": "characters",
+    assert shown.json()["thresholds"][key] == {
+        "value": value,
+        "default": default,
+        "unit": unit,
     }
