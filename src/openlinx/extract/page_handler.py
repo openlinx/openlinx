@@ -139,8 +139,8 @@ def _redirect(result: UrlResult, data: PageData | None) -> _RedirectColumns:
 
 
 def _first_meta_refresh_names_a_url(data: PageData | None) -> bool:
-    # A browser acts on the first meta refresh only, so one without a URL, such as a reload,
-    # stops a later one. Without the Page extractor's output, the first Link has to do.
+    # The first declaration must contain a URL reference before a discovered Link can be used.
+    # If Page extraction failed, use the first discovered Link.
     if data is None:
         return True
     return data.meta_refresh is not None and refresh_url(data.meta_refresh) is not None

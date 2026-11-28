@@ -115,6 +115,41 @@ def test_http_redirect_with_an_html_body(
 
 
 @pytest.mark.parametrize(
+    "first_content",
+    ["0; url=http://[::1", "0; url=javascript:void(0)"],
+    ids=["malformed-authority", "unsupported-scheme"],
+)
+def test_an_unresolvable_first_meta_refresh_uses_the_next_link(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, first_content: str
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/old": Page(
+                    body=f'<meta http-equiv="refresh" content="{first_content}">'
+                    '<meta http-equiv="refresh" content="0; url=/next">'
+                ),
+                "/next": Page(body="<title>New</title>"),
+            }
+        )
+    )
+
+    crawl_file = crawl_result(server.url("/old")).crawl_file
+
+    assert [(request.method, request.path) for request in server.requests] == [
+        ("GET", "/robots.txt"),
+        ("GET", "/old"),
+        ("GET", "/next"),
+    ]
+    assert query(
+        crawl_file,
+        "SELECT status_code, meta_refresh, redirect_type, redirect_url, "
+        "indexability, indexability_status FROM pages WHERE address = ?",
+        [server.url("/old")],
+    ) == [(200, first_content, "meta_refresh", server.url("/next"), "non_indexable", "redirected")]
+
+
+@pytest.mark.parametrize(
     ("status", "headers"),
     [(301, []), (301, [("Location", "mailto:help@example.test")]), (300, [("Location", "/new")])],
     ids=["missing-location", "unsupported-location", "non-followable-status"],
