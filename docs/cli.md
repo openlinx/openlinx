@@ -207,6 +207,16 @@ Use `--type`, `--priority` and `--category` to select Issues. Values can be comm
 its Affected URLs in URL order. Use `--fields`, `--limit` and `--cursor` with
 either form. Omit the Rule ID to use `--type`, `--priority` or `--category`.
 
+## Requesting a graceful stop
+
+`linx stop [--crawl <ref>] [--wait <seconds>]` records a stop request for a running Crawl.
+Selection defaults to `latest`. After the request commits, the Command waits up to 60 seconds
+by default. Set `--wait 0` to return as soon as the request commits. The result has `crawl_id`,
+`state`, `stop_reason` and `stop_requested`. If the wait ends while the Crawl is still running,
+the request remains recorded and the result has `stop_requested: true`. If the selected Crawl
+has already ended, the Command returns its state without recording a request. See
+[Crawl control](crawl-control.md#stop-a-foreground-crawl).
+
 ## Exit codes
 
 The meaning of a code never changes. Codes 9 to 63 are reserved.

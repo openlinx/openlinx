@@ -399,3 +399,28 @@ One row per Rule with at least one Affected URL in the last post-crawl pass.
 | `issue_type` | TEXT | no | | | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues. |
 | `priority` | TEXT | no | | | `high`, `medium`, `low` | The Priority of the Rule's Issues. |
 | `affected_count` | INTEGER | no | | | | The number of the Rule's rows in affected_urls. |
+
+## Table `crawl_runs`
+
+One row per run of the Crawl.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | INTEGER | no | PK | | | The run number, starting at 1. |
+| `started_at` | TEXT | no | | `timestamp` | | When the run started. |
+| `command_argv` | TEXT | no | | `json` | | The run's command line as a JSON array, with secrets redacted; [] without a command line. |
+| `detached` | INTEGER | no | | `boolean` | | 1 for a detached run, otherwise 0. |
+| `pid` | INTEGER | no | | | | Process id of the run. |
+
+## Table `control_requests`
+
+Requests from a separate process to control the Crawl.
+
+| Column | Type | Null | Key | Format | Values | Description |
+|---|---|---|---|---|---|---|
+| `id` | INTEGER | no | PK | | | The request id. |
+| `kind` | TEXT | no | | | `stop` | What is requested. |
+| `requested_at` | TEXT | no | | `timestamp` | | When the request was written. |
+| `requested_by_pid` | INTEGER | no | | | | Process id of the Command that wrote the request. |
+| `handled_at` | TEXT | yes | | `timestamp` | | When the crawl process acted on it; NULL until then. |
+| `handled_by_run_id` | INTEGER | yes | → `crawl_runs.id` | | | The run that acted on the request; NULL until then. |

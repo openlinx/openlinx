@@ -26,7 +26,7 @@ SHM_RELEASE_CHECK_SECONDS = 0.05
 WRITER_CACHE_KIB = 65_536
 WRITER_MMAP_BYTES = 268_435_456
 
-type ConnectionRole = Literal["create", "read", "write"]
+type ConnectionRole = Literal["create", "read", "write", "control"]
 
 # SQLite's primary result codes for a file or folder that cannot be written.
 NOT_WRITABLE = {
@@ -50,6 +50,12 @@ def is_busy(error: BaseException) -> bool:
     _, code = _sqlite_code(error)
     # Masked to the primary code, so BUSY_RECOVERY and BUSY_SNAPSHOT count too.
     return code is not None and code & 0xFF == sqlite3.SQLITE_BUSY
+
+
+def is_read_only(error: BaseException) -> bool:
+    """Include extended SQLite READONLY codes without classifying other I/O errors."""
+    _, code = _sqlite_code(error)
+    return code is not None and code & 0xFF == sqlite3.SQLITE_READONLY
 
 
 def _sqlite_code(error: BaseException) -> tuple[object, int | None]:
@@ -81,6 +87,7 @@ def connect(
     read_only: bool = False,
     busy_seconds: float | None = None,
     identity: CrawlFileIdentity | None = None,
+    single_link: bool = False,
 ) -> sqlite3.Connection:
     # rw, not SQLite's default rwc: a missing crawl file is an error, never a new empty file.
     resolved = path.resolve() if identity is None else identity.path
@@ -89,22 +96,23 @@ def connect(
     if busy_seconds is None:
         busy_seconds = READER_BUSY_SECONDS if read_only else WRITER_BUSY_SECONDS
     deadline = time.monotonic() + busy_seconds
+    verify_identity = identity is not None or single_link
     while True:
-        if identity is not None:
-            verify_file_identity(path, identity, at=resolved)
+        if verify_identity:
+            verify_file_identity(path, identity, at=resolved, single_link=single_link)
         try:
             connection = sqlite3.connect(uri, uri=True, timeout=busy_seconds)
         except sqlite3.Error as error:
             # A missing or changed file can fail the open before the post-open check.
-            if identity is not None:
+            if verify_identity:
                 try:
-                    verify_file_identity(path, identity, at=resolved)
+                    verify_file_identity(path, identity, at=resolved, single_link=single_link)
                 except OpenLinxError as changed:
                     raise changed from error
             raise
         try:
-            if identity is not None:
-                verify_file_identity(path, identity, at=resolved)
+            if verify_identity:
+                verify_file_identity(path, identity, at=resolved, single_link=single_link)
             connection.execute("PRAGMA foreign_keys = ON")
             # The first read opens the WAL index (-shm), where a killed writer can still hold it.
             connection.execute("PRAGMA schema_version").fetchone()
@@ -140,7 +148,12 @@ def opening(
     engine = create_engine(
         "sqlite://",
         creator=lambda: connect(
-            path, read_only=read_only, busy_seconds=busy_seconds, identity=identity
+            path,
+            read_only=read_only,
+            busy_seconds=busy_seconds,
+            identity=identity,
+            # The control role writes without the claim that normally checks hard links.
+            single_link=role == "control",
         ),
         poolclass=NullPool,
     )
@@ -152,6 +165,8 @@ def opening(
     # (017-speed-up-crawl-writer D8).
     if role == "write":
         event.listen(engine, "connect", partial(_writer_settings, disk_temp_store=disk_temp_store))
+    if role == "control":
+        event.listen(engine, "connect", _control_writes_only)
     # Disposed at once, so no handle outlives the operation: Windows could not delete the file.
     try:
         yield engine
@@ -189,3 +204,28 @@ def _writer_settings(connection: sqlite3.Connection, _: Any, *, disk_temp_store:
 def _begin_immediate(connection: Connection) -> None:
     # IMMEDIATE takes the write lock at once, so a busy file fails at BEGIN, not mid-unit.
     connection.exec_driver_sql("BEGIN IMMEDIATE")
+
+
+def _control_writes_only(connection: sqlite3.Connection, _: Any) -> None:
+    from openlinx.store.schema import public_tables
+
+    allowed = {table.name for table in public_tables() if table.info.get("control")}
+
+    def authorize(
+        action: int,
+        table: str | None,
+        _column: str | None,
+        database: str | None,
+        _source: str | None,
+    ) -> int:
+        if action in (sqlite3.SQLITE_READ, sqlite3.SQLITE_SELECT, sqlite3.SQLITE_TRANSACTION):
+            return sqlite3.SQLITE_OK
+        if (
+            action in (sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE)
+            and database == "main"
+            and table in allowed
+        ):
+            return sqlite3.SQLITE_OK
+        return sqlite3.SQLITE_DENY
+
+    connection.set_authorizer(authorize)

@@ -188,7 +188,8 @@ recorded state and when opening each writer before its first write.
 | `crawl_not_writable` | 7 | the claim cannot be opened or acquired because of a filesystem error, the selected file or symlink target has changed or become unavailable, or the file has multiple hard links |
 
 All three diagnostics name the originally selected path in `details.file`.
-The check for multiple hard links runs before opening SQLite for the run.
+Crawl writers and control writes check for multiple hard links before opening SQLite for writing.
+Control writes use the same protection without taking the writer claim.
 SQLite uses the filename to locate its rollback journal or WAL. Keep one name
 for each SQLite file and keep it in place while it is in use.
 [SQLite on multiple links](https://sqlite.org/howtocorrupt.html#multiple_links_to_the_same_file).
@@ -261,6 +262,10 @@ Commands that only read a Crawl open its file read-only, for one operation at a 
 - **Reading while a Crawl is written.** In WAL mode, the default on local disks ([the journal mode](#the-journal-mode)), a reader sees every committed row while another process writes, and is not held up by the write (only by SQLite's brief recovery after a killed writer). In rollback-journal mode a write shuts readers out: a reader waits up to 5 seconds, then fails with `crawl_busy` (exit code 5) and `details.file`. `--crawl` resolution reads the same way.
 - **Multiple reads in one operation.** In WAL mode, all statements on one read-only connection opened by `reading()` see the same committed snapshot. In rollback-journal mode each statement normally releases its read lock. The Query Service's Issue list requests one snapshot, so the choice of Issue source, the results and recorded Rule descriptions agree in both modes. A Writer commit can wait for this read to finish in rollback-journal mode. The Service releases the lock before formatting the response.
 - **Right after a killed writer, on Windows.** While the process of a killed writer is still exiting, it can still hold the crawl file's `-shm` companion; since SQLite 3.50 that shows up as a disk I/O error. Opening the file waits for it like for a lock, 5 seconds for a reader and 30 for the writer, then fails with `crawl_busy`. The file itself is sound.
+
+A running Crawl checks for committed stop requests in a short read-only snapshot that verifies
+the selected Crawl. If SQLite is busy, the Crawl releases the connection and checks on the next
+tick. This read is separate from the writer's transaction and replay batch.
 
 ## The journal mode
 

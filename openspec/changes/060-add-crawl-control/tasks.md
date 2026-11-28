@@ -41,7 +41,7 @@ Seams (docs/testing.md):
 - [ ] 1.1 [Subprocess] Drive "A foreground Crawl in another terminal is stopped", after `020`'s `stopped` end (task 9.7 or 13.1, whichever lands first) and post-crawl passes on a stop (task 9.16). It covers:
   - the `stop` Command
   - the `control_requests` table (`id`, `kind`, `requested_at`, `requested_by_pid`) declared with `info={"control": True}`, and `write_control` in `openlinx.store.control` over the `control` connection role (design D12)
-  - the crawl process checking for requests every second through a read-only unit on `run_async`, and calling `context.stop.set("requested")` (design D6)
+  - after `050`'s selected-Crawl reader, the crawl process checking committed requests every second through `reading_selected`, checking again at the next tick if the Store is busy, and entering the ordinary graceful-stop path (design D6). Exercise the independent read, the committed requests during post-crawl passes and before terminal commit, and unchanged writer replay in WAL and rollback-journal mode.
 - [ ] 1.2 [Services] Drive "A control write cannot change other tables": the authorizer of `write_control`.
 - [ ] 1.3 [3+6] Drive "A stop request is recorded as handled": the `handled_at` column.
 - [ ] 1.4 [3+6] Drive "A stop request names who wrote it and which run handled it": the `crawl_runs` table (`id`, `started_at`, `command_argv`, `detached`, `pid`), and `handled_by_run_id`.

@@ -1,10 +1,11 @@
 """Create Crawl files under the writer claim and update run metadata (060 D12)."""
 
+import os
 import platform
 import sqlite3
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,11 +16,12 @@ from sqlalchemy.exc import DBAPIError
 
 from openlinx import __version__
 from openlinx.json_numbers import decode_json_object
+from openlinx.naming import COMMAND_NAME
 from openlinx.output.codes import CRAWL_FILE_INVALID, WORKSPACE_NOT_WRITABLE
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.claim import claim_writer
 from openlinx.store.connections import connect, not_writable_name, opening
-from openlinx.store.identity import check_crawl_id
+from openlinx.store.identity import check_crawl_id, identify_file
 from openlinx.store.ids import Choice, crawl_path, new_crawl_id
 from openlinx.store.journal import JournalChoice, confirm_journal_mode
 from openlinx.store.preview import is_historical_preview, missing_health_columns
@@ -37,6 +39,7 @@ from openlinx.store.schema import (
     SCHEMA_VERSION,
     affected_urls,
     crawl,
+    crawl_runs,
     issues,
     metadata,
     rules,
@@ -45,6 +48,12 @@ from openlinx.store.schema import (
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import requeue_for_a_continue
 from openlinx.workspace.creation import as_workspace_not_writable, create_data_folder
+
+FIRST_RUN_ID = 1
+_FIRST_RUN = insert(crawl_runs).values(id=FIRST_RUN_ID, detached=False)
+_CONTINUED_RUN = (
+    insert(crawl_runs).values(command_argv=[], detached=False).returning(crawl_runs.c.id)
+)
 
 _SUMMARY = select(
     crawl.c.state,
@@ -70,6 +79,7 @@ def create_crawl_file(
                 _claim_new_file(workspace.crawls_dir, started_at, choice)
             )
             try:
+                crawl_file = replace(crawl_file, identity=identify_file(crawl_file.path))
                 with _sqlite_not_writable(crawl_file.path):
                     journal, granted = _set_journal_mode(
                         crawl_file.path, journal, workspace.data_dir
@@ -182,14 +192,26 @@ def _check_health_columns(connection: Connection, path: Path) -> None:
         )
 
 
-def record_continue(config: Mapping[str, Any], at: datetime) -> Callable[[Connection], None]:
-    """A unit that runs the Crawl again, with the settings it now runs with in crawl.config,
-    and queues again the URLs whose outcome is usually transient."""
+def record_continue(
+    config: Mapping[str, Any], at: datetime, *, run_pid: int | None = None
+) -> Callable[[Connection], int | None]:
+    """Restore the Crawl to running, persist its settings and requeue transient outcomes.
 
-    def unit(connection: Connection) -> None:
+    With an owning PID, record a run in the same transaction and return its id. The
+    internal Continue Service has no command line to record.
+    """
+
+    def unit(connection: Connection) -> int | None:
         set_state(connection, "running", at)
         connection.execute(update(crawl).values(config=dict(config)))
         requeue_for_a_continue(connection)
+        if run_pid is None:
+            return None
+        # The owner holds the claim, so replay will allocate the same id.
+        run_id: int = connection.execute(
+            _CONTINUED_RUN, {"started_at": at, "pid": run_pid}
+        ).scalar_one()
+        return run_id
 
     return unit
 
@@ -258,7 +280,11 @@ def _write_new_file(
     crawl_file: CrawlFile, request: NewCrawl, started_at: datetime, journal_mode: str
 ) -> None:
     settings_file = request.settings_file
-    with opening(crawl_file.path, role="create") as engine, engine.begin() as connection:
+    run_argv = [COMMAND_NAME, *request.command_argv[1:]] if request.command_argv else []
+    with (
+        opening(crawl_file.path, role="create", identity=crawl_file.identity) as engine,
+        engine.begin() as connection,
+    ):
         metadata.create_all(connection)
         connection.exec_driver_sql(f"PRAGMA user_version = {SCHEMA_VERSION}")
         connection.execute(
@@ -287,6 +313,14 @@ def _write_new_file(
                 {"position": position, "url": url}
                 for position, url in enumerate(request.seeds, start=1)
             ],
+        )
+        connection.execute(
+            _FIRST_RUN,
+            {
+                "started_at": started_at,
+                "command_argv": run_argv,
+                "pid": os.getpid(),
+            },
         )
         if request.rules:
             connection.execute(insert(rules), [asdict(rule) for rule in request.rules])

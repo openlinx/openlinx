@@ -9,7 +9,7 @@ from pathlib import Path
 from openlinx.naming import COMMAND_NAME
 from openlinx.output.codes import CRAWL_LOCKED, CRAWL_NOT_WRITABLE
 from openlinx.output.diagnostics import OpenLinxError
-from openlinx.store.identity import verify_file_identity
+from openlinx.store.identity import check_single_link, verify_file_identity
 from openlinx.store.records import CrawlFile
 
 if sys.platform == "win32":
@@ -41,15 +41,8 @@ def claim_writer(crawl_file: CrawlFile, *, exclusive: bool = False) -> Iterator[
                     raise
                 raise _unwritable_claim(crawl_file) from error
             # On newer Python versions, non-strict resolve leaves a loop for stat to reject.
-            # Hard links give SQLite different journal paths for the same inode.
             with suppress(FileNotFoundError):
-                if crawl_path.stat().st_nlink > 1:
-                    raise OpenLinxError(
-                        CRAWL_NOT_WRITABLE,
-                        f"The crawl file {crawl_file.path} has multiple hard links.",
-                        hint="Remove the extra hard links while the Crawl is closed.",
-                        details={"file": str(crawl_file.path)},
-                    )
+                check_single_link(crawl_file.path, crawl_path.stat().st_nlink)
             if crawl_file.identity is not None:
                 verify_file_identity(crawl_file.path, crawl_file.identity, at=crawl_path)
         lock_path = crawl_path.with_name(f"{crawl_file.id}.lock")

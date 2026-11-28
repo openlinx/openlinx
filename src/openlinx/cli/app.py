@@ -10,6 +10,7 @@ from typer.core import TyperGroup, TyperOption
 from openlinx import __version__
 from openlinx.cli.click_compat import Context
 from openlinx.cli.commands import commands
+from openlinx.cli.control import stop
 from openlinx.cli.crawl import crawl
 from openlinx.cli.init import init
 from openlinx.cli.issues import issues
@@ -66,7 +67,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered = [commands, crawl, init, issues, RULES_GROUP, schema, *extra.commands]
+    registered = [commands, crawl, init, issues, RULES_GROUP, schema, stop, *extra.commands]
     # Typer would silently keep the last registration of a name.
     taken: set[str] = set()
     for entry in registered:
