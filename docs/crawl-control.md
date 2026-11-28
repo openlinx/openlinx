@@ -9,6 +9,17 @@ which puts it back into `running` and clears its stop reason. A process that die
 records an end leaves the file `running`. Detecting these Crawls as `interrupted` and
 continuing them with `linx resume` are planned separately.
 
+## Read Crawl status
+
+Run `linx status` for the latest Crawl, or use `linx status --crawl <ref>` with a Crawl ID
+or a crawl file path. This reads the selected Store without writing to it.
+
+For a completed Crawl, `completed_at` gives the recorded completion time and `eta_s` is null.
+`urls` gives the exact discovered, fetched, error, skipped and queued counts.
+`status_classes` groups recorded HTTP responses by class, so a fetched 404 contributes
+to `fetched` and `4xx`. While a Crawl is running, `urls`, `status_classes` and `eta_s`
+are null.
+
 ## Stop a foreground Crawl
 
 From another terminal in the Workspace, run:

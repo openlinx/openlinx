@@ -9,7 +9,6 @@ from sqlalchemy.exc import DBAPIError, MultipleResultsFound, NoResultFound
 
 from openlinx.naming import COMMAND_NAME
 from openlinx.output.codes import (
-    CRAWL_FILE_INVALID,
     CRAWL_NOT_FOUND,
     CRAWL_NOT_WRITABLE,
     INVALID_VALUE,
@@ -18,7 +17,7 @@ from openlinx.output.codes import (
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.identity import check_crawl_id, identify_file
 from openlinx.store.ids import CRAWL_FILE_SUFFIX, crawl_path, is_crawl_id, start_second
-from openlinx.store.reading import read_metadata
+from openlinx.store.reading import invalid_crawl_file, read_metadata
 from openlinx.store.records import LATEST, CrawlFile
 from openlinx.workspace.discovery import Workspace
 
@@ -72,9 +71,9 @@ def _selected(path: Path, crawl_id: str | None = None) -> tuple[CrawlFile, dict[
         # Keep the reader's schema and busy diagnostics. Only identity loss is stage-specific.
         if error.code != CRAWL_NOT_WRITABLE.code:
             raise
-        raise _unreadable(path) from error
+        raise invalid_crawl_file(path) from error
     except (OSError, DBAPIError, NoResultFound, MultipleResultsFound) as error:
-        raise _unreadable(path) from error
+        raise invalid_crawl_file(path) from error
     found_id: str = metadata["id"]
     if crawl_id is not None:
         check_crawl_id(path, crawl_id, found_id)
@@ -88,16 +87,7 @@ def _is_crawl_file(path: Path) -> bool:
     except (FileNotFoundError, NotADirectoryError, ValueError):
         return False
     except OSError as error:
-        raise _unreadable(path) from error
-
-
-def _unreadable(path: Path) -> OpenLinxError:
-    return OpenLinxError(
-        CRAWL_FILE_INVALID,
-        f"{path} is not a readable crawl file.",
-        hint=f"Give another crawl file, or crawl again with: {COMMAND_NAME} crawl <url>",
-        details={"file": str(path)},
-    )
+        raise invalid_crawl_file(path) from error
 
 
 def _latest(workspace: Workspace) -> str:

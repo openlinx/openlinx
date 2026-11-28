@@ -58,9 +58,10 @@ Seams (docs/testing.md):
 
 - [ ] 2.1 [CLI] Drive "Status of a completed Crawl": the `status` Command over `--crawl` (`CrawlOpt`, `resolve_crawl`), with counts from `020`'s `url_counts()` for a Crawl that is not running, `seed_count`, `status_classes` and `completed_at`.
 - [ ] 2.2 [CLI] Drive "Status defaults to the latest Crawl".
-- [ ] 2.3 [Services + Fake clock] Drive "The heartbeat records the progress counters", after `020` task 12.4: a heartbeat every 5 seconds writing `heartbeat_at`, `020`'s progress counters with the status classes added, and `urls_per_second` (design D7).
+- [ ] 2.2a [Services] Drive "Requeue preserves committed URL outcomes": declare `urls.ever_processed` in the Store schema and `docs/schema.md`. Test the first committed outcome, a rolled-back outcome, requeue and retry. Drive counts from first committed transitions of the flag and seed them from the Store at run admission (D7).
+- [ ] 2.3 [Services + Fake clock] Drive "The heartbeat records the progress counters", after `020` task 12.4 and 2.2a. Declare `crawl_runs.processed_count` in the Store schema and `docs/schema.md`, seed it at admission and write it at each five-second heartbeat with `heartbeat_at`, the other progress counters, the status classes and `urls_per_second` (D7).
 - [ ] 2.4 [Services] Drive "Rate and ETA from recent progress": `rate` and the counts of a running Crawl from its last heartbeat.
-- [ ] 2.5 [Pure] Drive "The average rate covers every run".
+- [ ] 2.5 [Services + Fake clock] Drive "The average rate covers every run", "An interrupted run counts through its last heartbeat", "A resumed Crawl keeps its approximate timings", "A completed continuation keeps its approximate timings" and "An interruption before the first heartbeat contributes zero time" with recorded run rows. Give earlier heartbeats nonzero counts and verify that `status` uses the current run's `processed_count` while running and the stored URL flags in other states. Check both approximation flags.
 - [ ] 2.6 [Pure] Drive "The URL limit caps the ETA".
 - [ ] 2.7 [Pure] Drive "The ETA of a Spider-mode Crawl is a lower bound" and "The ETA of a List-mode Crawl is not a lower bound".
 - [ ] 2.8 [Subprocess] Drive "A running Crawl hints how to stop it": the next-step hints per Crawl State.
@@ -68,14 +69,14 @@ Seams (docs/testing.md):
 - [ ] 2.10 [Subprocess] Drive "A pending stop request is reported".
 - [ ] 2.11 [CLI] Drive "Status of a failed Crawl shows its error": the `crawl_runs.error` column, after `020` task 12.7.
 - [ ] 2.12 [Subprocess] Drive "Status of a Crawl waiting for the network": the `crawl_runs.paused_since` column, written by the heartbeat during `020`'s network pause, and `paused_since` in `status`, after `020` task 12.17.
-- [ ] 2.13 Docs: document every `status` field, where its counts come from, the rate window, the average rate and ETA semantics in `docs/crawl-control.md`.
+- [ ] 2.13 Docs: document every `status` field, the source of its counts, the rate window, elapsed time across runs, the average rate's count of distinct URLs, both approximation flags and ETA in `docs/crawl-control.md`.
 - [ ] 2.14 Review: run the code-review skill on group 2's commits, then refactor with the whole suite green.
 
 ## 3. Dead processes
 
 - [ ] 3.1 [Subprocess] Drive "A killed Crawl is reported as interrupted". Reuse group 0's writer claim and add `check_writer`, which records `interrupted` under the claim through `020`'s `set_state` with `running` → `interrupted` added to `TRANSITIONS` (design D12).
 - [ ] 3.2 [Subprocess, Windows in CI] Drive "A Crawl ended with TerminateProcess is reported as interrupted (Windows)".
-- [ ] 3.3 [3+6] Drive "The interrupted state is recorded": the `crawl_runs.end_state` column.
+- [ ] 3.3 [3+6] Drive "The interrupted state is recorded": verify `crawl_runs.end_state` = `interrupted` and `ended_at` remains NULL.
 - [ ] 3.4 [Services + Fake clock] Drive "A stale heartbeat is reported as a warning", with the test process holding the claim through `openlinx.store.claim`.
 - [ ] 3.5 [Services] Drive "A Crawl being created is not the latest" (`crawl-store`): `_latest` skips a newest file whose `user_version` is 0 while its claim is held, with the test process holding the claim through `openlinx.store.claim`; `015`'s "A broken newest file is reported, not skipped" still passes (design D12).
 - [ ] 3.6 Docs: document dead-process detection, `heartbeat_stale` and a Crawl being created in `docs/crawl-control.md`.
@@ -85,6 +86,7 @@ Seams (docs/testing.md):
 
 - [ ] 4.1 [Subprocess] Drive "A stopped Crawl is completed by resume", after `020` task 14.2: the `resume` Command on `020`'s continue operation, with a new run row and the `run` field, and `interrupted` → `running` added to `TRANSITIONS`.
 - [ ] 4.2 [HTTP] Drive "Fetched URLs are not requested again".
+- [ ] 4.2a [HTTP + Services + Fake clock] Drive "The average rate counts URLs retried on resume once". Hold the resumed fixture's robots.txt response until `status` observes the requeue. Verify the fixture's requests per URL on each run, the Store states and the three status snapshots.
 - [ ] 4.3 [HTTP] Drive "robots.txt is fetched again on resume", after `020` task 10.4.
 - [ ] 4.4 [Subprocess] Drive "A failed Crawl can be resumed", after `020` task 14.5.
 - [ ] 4.5 [CLI] Drive "A completed Crawl cannot be resumed": `crawl_completed` with the re-run hint.

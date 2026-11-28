@@ -46,3 +46,15 @@ While a process creates a Crawl, its file `<id>.sqlite` exists before its schema
 #### Scenario: A Crawl being created is not the latest
 - **WHEN** `latest` is resolved in a Workspace holding a valid `20260927-100000-aaaa` and a file `20260927-110000-bbbb.sqlite` whose schema is not written yet, while a process holds the writer claim `20260927-110000-bbbb.lock`
 - **THEN** the Crawl `20260927-100000-aaaa` is selected
+
+### Requirement: Historical URL outcomes
+**In short:** A URL stays marked as processed after its first committed fetch or error outcome.
+
+`urls.ever_processed` SHALL be a non-null INTEGER flag, 0 for a new URL and 1 once a `fetched` or `error` outcome for that URL commits. The flag SHALL be written in the same transaction as that outcome. Once set, it SHALL stay 1 for the life of the URL row, including during network recovery, resume and any later outcome. Merely queueing a URL, starting a request, skipping a URL or rolling back an outcome SHALL NOT set the flag.
+
+#### Scenario: Requeue preserves committed URL outcomes
+- **GIVEN** a Crawl has one URL with a committed `error` outcome and one queued URL that has never recorded an outcome
+- **WHEN** the error is requeued and the Store is read before another outcome commits
+- **THEN** both URLs are queued, with `ever_processed` = 1 for the former error and 0 for the other URL
+- **WHEN** the former error is fetched successfully
+- **THEN** its `ever_processed` remains 1 and the Crawl still has only one processed URL

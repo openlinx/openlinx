@@ -213,6 +213,13 @@ Use `--type`, `--priority` and `--category` to select Issues. Values can be comm
 its Affected URLs in URL order. Use `--fields`, `--limit` and `--cursor` with
 either form. Omit the Rule ID to use `--type`, `--priority` or `--category`.
 
+## Reading Crawl status
+
+`linx status [--crawl <ref>]` reports a Crawl's recorded state as JSON. Omit `--crawl`
+to read the latest Crawl. You can also pass a Crawl ID or a crawl file path.
+For a Crawl that has ended, the result includes URL counts and HTTP status classes
+from the Store. [Crawl control](crawl-control.md#read-crawl-status) describes the result.
+
 ## Requesting a graceful stop
 
 `linx stop [--crawl <ref>] [--wait <seconds>]` records a stop request for a running Crawl.

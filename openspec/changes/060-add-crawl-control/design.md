@@ -92,10 +92,13 @@ No moment exists in which a Crawl exists without a live writer, so a concurrent 
 - **Marking it handled:** the unit that handles it sets `handled_at` and `handled_by_run_id`.
 
 ### D7. Status computation
+**In short:** Use the run snapshot while it is live and count distinct processed URLs across all runs.
 - **Counts of a running Crawl** come from the heartbeat (ruling Q1 of the schema blueprint). `urls` has no index for counts by `fetch_state` (`020` D18), so a `GROUP BY` over it scans the whole table, and an agent may poll `status` every few seconds during a Crawl of about 500k URLs. The crawl process keeps `020`'s progress counters (D10, `020` task 12.4), seeded once per run by a counting query and updated as units commit. This change adds the status classes to them, as `UrlCounts` already holds them for the result, and the heartbeat writes them to the run's row every 5 seconds. They are control data of the run, like `heartbeat_at`, not counts of the Crawl's data (ADR-0005).
 - **Counts of a Crawl that is not running** are counted over `urls` once, with `020`'s `url_counts()`: no process is writing, and the result is exact.
 - **Rate** (ruling Q2): the run's `urls_per_second`, which the crawl process computes from its 60-second window, the `rate` of its progress events, and writes with the heartbeat. `fetched_at` gets no index.
-- **Average rate:** the URLs requested in all runs (`fetched` plus `error`) divided by `elapsed_s`, the time spent in all runs. It shows whether the current `rate` is typical, and it is what a user compares with another crawler's average.
+- **Elapsed time:** sum the duration of each run. A normally ended run contributes `ended_at - started_at`. A running run contributes the time from `started_at` to the current clock time, even before its first heartbeat. An interrupted run contributes `heartbeat_at - started_at`, or zero before the first heartbeat. The heartbeat confirms the time observed for that run. `ended_at` stays NULL for the interrupted run, and time between runs is excluded.
+- **Processed URLs:** `urls.ever_processed` records whether this URL has committed a `fetched` or `error` outcome in any run. The outcome unit sets the flag in the same transaction as the outcome. Only a committed 0-to-1 change increments the progress count. Requeues preserve the flag. The existing count query seeds this total once per run. Resume publishes its seeded snapshot with the new run's admission, after requeue. Each heartbeat stores the total as `crawl_runs.processed_count` alongside the other counters. The per-URL flag uses the existing row and its key, with no extra index or in-memory set of URLs.
+- **Average rate:** divide the Crawl-wide processed count by `elapsed_s`, with null for a zero denominator. While running, read the current run's last heartbeat or its seeded counters before the first heartbeat. In other states, count the flags in the same Store query as the other URL counts. Earlier run snapshots and request attempts do not enter the numerator. If any run was interrupted, `status` sets both `elapsed_is_approximate` and `average_rate_is_approximate` to true, including while a resumed run is active and after it ends. Otherwise both are false.
 - **ETA:** a pure function of rate, queued, `max_urls` and requested.
 - **A network pause** (`020`, decided 2026-10-14): while the Crawl waits for the network, it requests nothing but its probes of the Seed. The heartbeat keeps running and writes `paused_since`, and `status` prints it, so an agent tells a waiting Crawl from a slow one. A stop request ends the pause at once, because no request is in flight to wait for.
 - **`error`:** the `error` of the last run of a `failed` Crawl.
@@ -161,6 +164,7 @@ Everything that decides which URLs belong to the Crawl stays fixed: the Crawl Mo
 - *Alternative:* byte-range locks on the crawl file. POSIX `fcntl` locks are per process, so they would clash with SQLite's own locks on the same file. Rejected.
 
 ### D13. The tables under ADR-0005
+**In short:** Use declared Store columns for run history, stop requests and processed URL counts.
 Both tables go through `018`'s `public_table()`, so they are `STRICT`, with CHECKs on their enumerations and flags.
 - **`crawl_runs.id`** (was `run`): the run number is the entity's own key (ADR-0005 rule 2). The Commands' output keeps the field name `run`.
 - **`control_requests.handled_by_run_id`** (was `handled_by_run`): a declared reference to `crawl_runs.id` (rule 3).
@@ -169,6 +173,7 @@ Both tables go through `018`'s `public_table()`, so they are `STRICT`, with CHEC
   - `crawl_runs.end_state` lists the Crawl States without `running` (rule 7: one value set per enumeration), because a run never ends as `running`.
   - `crawl_runs.error` is a JSON diagnostic in `010`'s full shape (rule 10: a code column plus `_message`), because it records the diagnostic the run ended with, as `crawl.warnings` records warnings, and `status` prints it whole.
 - **The counters** end in `_count` (rule 5) and are NOT NULL: the run's row is inserted with the counters seeded at the start of the run. `urls_per_second` is NULL until the first heartbeat. `paused_since` is NULL whenever the Crawl is not paused, like `ended_at` while a run runs.
+- **`urls.ever_processed`** is a NOT NULL flag (rule 6). A new URL has 0 until the first committed `fetched` or `error` outcome sets it to 1. The nonnegative `crawl_runs.processed_count` records the count of these flags at admission and each heartbeat, separately from the counts by current `fetch_state` (D7).
 
 ### D14. Codes
 Declared as `DiagnosticCode` constants in `openlinx.output.codes`, as `020` D17 does, each by the slice that first raises it. Exit codes follow `010`'s classes and naming rule; every warning has the level `warning` and no exit code.
@@ -226,7 +231,7 @@ Boundary doubles, all from the approved list:
 
 ## Migration Plan
 
-None. Before v0.1 the schema is not yet public: this change adds `crawl_runs` and `control_requests` to the declared schema and `docs/schema.md`, each in the slice that needs it, and `schema_version` stays `1` (`015` D5). `control_requests` carries `info={"control": True}`.
+None. Before v0.1 the schema is not yet public: this change adds `urls.ever_processed`, `crawl_runs` and `control_requests` to the declared schema and `docs/schema.md` in the slices that need them, and `schema_version` stays `1` (`015` D5). `control_requests` carries `info={"control": True}`.
 
 ## Open Questions
 

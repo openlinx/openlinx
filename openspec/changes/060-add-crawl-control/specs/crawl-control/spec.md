@@ -192,20 +192,28 @@ For a Crawl that is not `running`, `stop` SHALL change nothing, print its Crawl 
 - **THEN** it exits with code 0 and prints `"state": "completed"`
 
 ### Requirement: The status Command
+**In short:** Report the Crawl State, progress and elapsed time across runs.
 `linx status [--crawl <ref>]` (default `latest`) SHALL print, for a Crawl in any Crawl State, one JSON object with these fields:
 - `crawl_id`, `state`, `stop_reason`, `stop_requested`, `crawl_mode`, `seed`, `seed_count`, `section_crawl`
 - `paused_since`: while a `running` Crawl is paused waiting for the network (`020-add-crawl-core`), when the pause began, as its last heartbeat recorded it; otherwise null
-- `started_at`, `completed_at`, `elapsed_s` (seconds spent in all runs, including the current run up to now)
+- `started_at`, `completed_at`, `elapsed_s` and `elapsed_is_approximate`
 - `urls`: `discovered`, `fetched`, `errors`, `skipped` and `queued`
 - `status_classes`: `2xx`, `3xx`, `4xx`, `5xx` and `other`
-- `rate`, `average_rate`, `eta_s`, `eta_is_lower_bound`, `max_urls`
+- `rate`, `average_rate`, `average_rate_is_approximate`, `eta_s`, `eta_is_lower_bound`, `max_urls`
 - `pid`, `detached`, `heartbeat_age_s` (for the current or last run)
 - `error`: the diagnostic of a `failed` Crawl in the full shape, and null otherwise
 - `log_file`, `warnings`, `hint`
 
 Where `urls` and `status_classes` come from depends on the Crawl State:
-- **`running`:** from the progress counters that the crawl process recorded at its last heartbeat (see "Recorded runs"), so they trail the process by up to 5 seconds. `status` SHALL NOT count over `urls` while a Crawl runs: `urls` has no index for such counts (`020-add-crawl-core`), so each count would scan the table.
+- **`running`:** from the progress counters that the current run recorded at its last heartbeat, or the counters seeded at its start before the first heartbeat (see "Recorded runs"). The snapshot can trail the process by up to 5 seconds. `status` SHALL NOT count over `urls` while a Crawl runs: `urls` has no index for such counts (`020-add-crawl-core`), so each count would scan the table.
 - **Any other state:** counted over the stored `urls` table.
+
+`elapsed_s` SHALL sum the time in seconds from `started_at` to the applicable endpoint of each run:
+- For a run with a known end time, use its `ended_at`.
+- For the current running run, use the current clock time, including before its first heartbeat.
+- For an interrupted run, use its last recorded `heartbeat_at`. An interrupted run with no recorded heartbeat contributes zero seconds.
+
+Time between runs SHALL be excluded. `elapsed_is_approximate` and `average_rate_is_approximate` SHALL both be `true` if any run was interrupted, including after a resume and when `average_rate` is null, and SHALL both be `false` otherwise.
 
 `hint` SHALL be a next-step command:
 - `running`: `linx stop --crawl <crawl id>`
@@ -240,9 +248,10 @@ Where `urls` and `status_classes` come from depends on the Crawl State:
 - **THEN** it prints `"state": "failed"` and an `error` whose `code` is `seed_unreachable`
 
 ### Requirement: Rate and ETA
+**In short:** Use recent activity for ETA and count each processed URL once for the average rate.
 The Commands of this capability SHALL compute four values:
 - **`rate`:** the run's `urls_per_second` at its last heartbeat: the URLs requested (`fetched` or `error`) in the last 60 seconds, divided by 60, or by the run's age when it is younger than 60 seconds. It is the `rate` of `020-add-crawl-core`'s progress events. It SHALL be null unless the state is `running`.
-- **`average_rate`:** the URLs requested so far in all runs, divided by `elapsed_s`. It SHALL be null when `elapsed_s` is 0.
+- **`average_rate`:** the number of distinct URLs with a committed `fetched` or `error` outcome at any time in the Crawl, divided by `elapsed_s`. A URL counts once across all runs, including while it is queued again or being retried. A URL with no such outcome contributes zero. While running, `status` SHALL take the current run's `processed_count` from its last heartbeat or from run admission before its first heartbeat. In any other state, `status` SHALL count the current Store rows with `urls.ever_processed` = 1. Request attempts and earlier run snapshots SHALL be excluded. `average_rate` SHALL be null when `elapsed_s` is 0.
 - **`eta_s`:** the remaining URLs divided by `rate`, rounded to whole seconds. The remaining URLs are the `queued` URLs, capped by the number of requests that `--max-urls` still allows. It SHALL be null unless the state is `running` and `rate` is above 0.
 - **`eta_is_lower_bound`:** `true` when new URLs can still be discovered (Spider mode, or a `--max-depth` above 0), and `false` otherwise.
 
@@ -253,8 +262,33 @@ The Commands of this capability SHALL compute four values:
 - **THEN** `rate` is 2.0 and `eta_s` is 150
 
 #### Scenario: The average rate covers every run
-- **WHEN** a Crawl has 600 URLs requested across its runs and an `elapsed_s` of 300, and its status is computed
-- **THEN** `average_rate` is 2.0
+- **WHEN** a Crawl has processed 600 distinct URLs after two runs with known durations of 120 and 180 seconds and a gap between them, and its status is computed
+- **THEN** `elapsed_s` is 300, `average_rate` is 2.0, and both approximation flags are `false`
+
+#### Scenario: An interrupted run counts through its last heartbeat
+- **WHEN** a run started at 10:00, recorded its last heartbeat at 10:07, and is later found interrupted with 840 distinct URLs processed and no known end time
+- **THEN** `status` reports `elapsed_s` 420 and `average_rate` 2.0, and both approximation flags are `true`
+
+#### Scenario: A resumed Crawl keeps its approximate timings
+- **WHEN** a Crawl whose interrupted run started at 10:00 and last recorded a heartbeat at 10:07 resumes at 11:00, and the resumed run's last heartbeat at the 11:03 status check counts 900 distinct URLs processed across the Crawl
+- **THEN** `elapsed_s` is 600, `average_rate` is 1.5, and both approximation flags are `true`
+
+#### Scenario: A completed continuation keeps its approximate timings
+- **WHEN** a Crawl has one interrupted run with 420 seconds through its last heartbeat and a completed continuation with a recorded duration of 300 seconds, and the Store records 1,440 distinct URLs processed across the Crawl
+- **THEN** `elapsed_s` is 720, `average_rate` is 2.0, and both approximation flags are `true`
+
+#### Scenario: An interruption before the first heartbeat contributes zero time
+- **WHEN** a Crawl's only run is interrupted before recording a heartbeat and its status is computed
+- **THEN** `elapsed_s` is 0, `average_rate` is null, and both approximation flags are `true`
+
+#### Scenario: The average rate counts URLs retried on resume once
+- **GIVEN** a Crawl stopped after 20 seconds, with one fixture-site request to each of 100 distinct URLs, 90 stored as `fetched` and 10 as `error`
+- **WHEN** `status` runs before resume
+- **THEN** it reports `stopped`, 90 fetched URLs, 10 errors, `elapsed_s` 20 and `average_rate` 5.0
+- **WHEN** the Crawl resumes, requeues the 10 errors, and `status` runs five seconds into the new run before any retry has been sent
+- **THEN** it reports `running`, 90 fetched URLs, zero errors, 10 queued, `elapsed_s` 25 and `average_rate` 4.0
+- **WHEN** the 10 retries succeed and the resumed run completes after 30 seconds of its own run time
+- **THEN** the fixture site has recorded 110 requests to those 100 URLs, and `status` reports `completed`, 100 fetched URLs, zero errors, `elapsed_s` 50 and `average_rate` 2.0. Both approximation flags are `false` at all three checks.
 
 #### Scenario: The URL limit caps the ETA
 - **WHEN** the ETA is computed with `rate` 2.0, 300 URLs queued, `max_urls` 200 and 100 URLs requested so far
@@ -269,8 +303,9 @@ The Commands of this capability SHALL compute four values:
 - **THEN** `eta_is_lower_bound` is `false`
 
 ### Requirement: Detecting a dead crawl process
+**In short:** Record an unowned running Crawl as interrupted with an unknown end time.
 A crawl process SHALL write a heartbeat in its `crawl_runs` row at least every 5 seconds: `heartbeat_at` and its progress counters. When `status`, `stop`, `resume`, `crawls list` or `crawls show` meets a Crawl whose Crawl State is `running`, it SHALL try to take the Crawl's writer claim without waiting. When it gets the claim, no process is running the Crawl, and it SHALL:
-1. in one transaction under the claim, record the Crawl State `interrupted` (with `020-add-crawl-core`'s transition check) and set the last run's `end_state` to `interrupted`
+1. in one transaction under the claim, record the Crawl State `interrupted` (with `020-add-crawl-core`'s transition check) and set the last run's `end_state` to `interrupted`, leaving its `ended_at` NULL
 2. release the claim
 3. report the Crawl as `interrupted`
 
@@ -288,7 +323,7 @@ When a process holds the claim but its heartbeat is older than 60 seconds, the s
 
 #### Scenario: The interrupted state is recorded
 - **WHEN** `linx status --crawl <id>` has reported a killed Crawl as `interrupted`
-- **THEN** `crawl.state` in its crawl file is `interrupted`, and its last `crawl_runs` row has `end_state` = `interrupted`
+- **THEN** `crawl.state` in its crawl file is `interrupted`, and its last `crawl_runs` row has `end_state` = `interrupted` and `ended_at` NULL
 
 #### Scenario: A stale heartbeat is reported as a warning
 - **WHEN** a test process holds the writer claim of a `running` Crawl whose last `heartbeat_at` is 90 seconds old on the fake clock, and its status is computed
@@ -590,6 +625,7 @@ Secrets SHALL be redacted as in any recorded command.
 - **THEN** `crawl.command_argv` is `["linx", "crawl", "{site}/", "--max-depth", "2", "--detach"]`
 
 ### Requirement: Recorded runs
+**In short:** Store each run’s identity, progress snapshots and terminal result.
 Every run of a Crawl SHALL add one row to the table `crawl_runs`: the first `linx crawl`, and each `linx resume`, foreground or background. This change adds the table, under the conventions of `018-add-schema-conventions`, with these columns:
 
 | Column | Type | Null | Format / values | Description |
@@ -600,8 +636,9 @@ Every run of a Crawl SHALL add one row to the table `crawl_runs`: the first `lin
 | `command_argv` | TEXT | no | json | The run's command line as a JSON array that starts with `"linx"`, secrets redacted |
 | `detached` | INTEGER | no | boolean | 1 when the run was started with `--detach` |
 | `pid` | INTEGER | no | | Process id of the run |
-| `heartbeat_at` | TEXT | yes | timestamp | Last time the run's process reported that it is alive |
+| `heartbeat_at` | TEXT | yes | timestamp | Last time the run's process reported that it is alive; NULL before the first heartbeat |
 | `discovered_count`, `fetched_count`, `error_count`, `skipped_count`, `queued_count` | INTEGER | no | | The Crawl's URLs by `fetch_state`, all runs included, as the run's progress counters held them at the start of the run and then at its last heartbeat |
+| `processed_count` | INTEGER | no | nonnegative count | The Crawl's distinct URLs with `ever_processed` = 1, seeded from the Store at the start of the run and updated from committed outcomes at each heartbeat |
 | `status_2xx_count`, `status_3xx_count`, `status_4xx_count`, `status_5xx_count`, `status_other_count` | INTEGER | no | | The Crawl's responses by status class, counted the same way |
 | `urls_per_second` | REAL | yes | | URLs requested per second over the last 60 seconds at the last heartbeat; NULL before the first heartbeat |
 | `paused_since` | TEXT | yes | timestamp | When the run's Crawl paused to wait for the network (`020-add-crawl-core`), as the last heartbeat recorded it; NULL when it was not paused |
@@ -609,7 +646,7 @@ Every run of a Crawl SHALL add one row to the table `crawl_runs`: the first `lin
 | `stop_reason` | TEXT | yes | `max_urls`, `interrupt`, `requested`, `seed_unreachable`, `site_unreachable`, `write_failed` | Why a stopped or failed run ended: the value set of `crawl.stop_reason` (`020-add-crawl-core`) |
 | `error` | TEXT | yes | json | The error diagnostic of a failed run, in the full shape of `010-add-workspace-and-cli-contract`. An explicit exception to ADR-0005 rule 10: it is a recorded diagnostic, like `crawl.warnings`, not an error code with a message |
 
-The counters are control data of the run, not counts of the Crawl's data: `status` reads them while the Crawl runs, and every other count comes from the Crawl's tables.
+The counters are snapshots of the Crawl's data. Run admission SHALL publish the seeded counters with the new run. On resume, they SHALL reflect the Store after requeue. Each heartbeat SHALL write the counters together. `status` reads the current run's counters while the Crawl runs, and counts the Crawl's tables in other states.
 
 > **v0.1.**
 
@@ -619,7 +656,7 @@ The counters are control data of the run, not counts of the Crawl's data: `statu
 
 #### Scenario: The heartbeat records the progress counters
 - **WHEN** a Crawl on a fake clock has requested 30 URLs, all answering 200, by 15 seconds into its first run, and its heartbeat at 15 seconds is written
-- **THEN** its `crawl_runs` row with `id` 1 has `fetched_count` 30, `status_2xx_count` 30, `urls_per_second` 2.0 and `heartbeat_at` at 15 seconds
+- **THEN** its `crawl_runs` row with `id` 1 has `fetched_count` 30, `processed_count` 30, `status_2xx_count` 30, `urls_per_second` 2.0 and `heartbeat_at` at 15 seconds
 
 #### Scenario: Runs share the stop reasons of the Crawl
 - **WHEN** `linx schema crawl_runs` and `linx schema crawl` run
