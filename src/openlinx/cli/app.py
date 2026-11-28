@@ -15,6 +15,7 @@ from openlinx.cli.crawl import crawl
 from openlinx.cli.init import init
 from openlinx.cli.issues import issues
 from openlinx.cli.meta import CommandGroup, check_command, check_group
+from openlinx.cli.pages import pages
 from openlinx.cli.rules import RULES_GROUP
 from openlinx.cli.runner import Invocation, OpenLinxGroup, option_before_the_command
 from openlinx.cli.schema import schema
@@ -74,6 +75,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         crawl,
         init,
         issues,
+        pages,
         RULES_GROUP,
         schema,
         sql,

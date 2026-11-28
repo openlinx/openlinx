@@ -203,6 +203,18 @@ If the file becomes unreadable during selection, the diagnostic is
 from a newer version has its own `crawl_schema_too_new` diagnostic. For diagnostics
 after selection when continuing a Crawl, see [Writer ownership](crawl-store.md#writer-ownership).
 
+## Listing Pages
+
+`linx pages` reads the selected Crawl and lists its Pages in address order.
+The default fields are `address`, `status_code`, `indexability`, `indexability_status`,
+`title_1` and `crawl_depth`. Use `--fields address,title_1` for a smaller result,
+or `--fields all` for every column in the order shown by `linx schema pages`.
+Use `--limit` and `--cursor` to page through the results.
+
+Use `--where 'status_code = 404'` to list only Pages with a 404 response.
+The total counts every matching Page, including when `--limit 0` returns only the count.
+Keep the same `--where` value when following a cursor.
+
 ## Listing Issues
 
 `linx issues` returns one item per Issue, with its Rule ID, category, Issue Type, Priority, Affected URL count and recorded Rule description. It orders by Issue Type (issue, warning, opportunity), then Priority (high, medium, low), then by decreasing Affected URL count, then by ascending Rule ID.
@@ -263,6 +275,8 @@ Every code is declared once, with its level, its exit code and a description, an
 | `usage_error` | error | 2 | an unknown Command or flag, missing or conflicting arguments, or a global flag before the Command name |
 | `invalid_value` | error | 2 | a flag or argument value that is not allowed, or a value given with the settings that its setting refuses; `details.key` names the setting |
 | `secrets_required` | error | 2 | continuing a Crawl requires fresh secret input; the hint names the required flag or Workspace setting |
+| `invalid_where` | error | 2 | an invalid filter expression. For syntax errors the message gives the character position. For an integer outside the SQLite range it names the column. |
+| `unknown_column` | error | 2 | a column the queried view does not have. `details.suggestions` lists up to five closest names. Use `linx schema` to see available columns. |
 | `unknown_field` | error | 2 | a `--fields` name the Command does not have |
 | `invalid_cursor` | error | 2 | a `--cursor` made by a different request, or altered |
 | `settings_invalid` | error | 3 | `openlinx.toml` cannot be read or breaks the settings rules |

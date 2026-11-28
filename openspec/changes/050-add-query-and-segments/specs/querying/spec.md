@@ -407,7 +407,7 @@ A column name in `--where` or `--sort` that the queried view does not have SHALL
 - Without `--fields`, each item SHALL hold exactly the default fields `address`, `status_code`, `indexability`, `indexability_status`, `title_1` and `crawl_depth`.
 - The available fields SHALL be the columns of the `pages` table (`030-add-page-data`) in the order `linx schema` lists them, followed, from v0.2, by `segment`. `--fields all` selects all of them.
 
-#### Scenario: Default fields
+#### Scenario: Default Page fields
 - **WHEN** `linx pages` runs against a Crawl with one Page
 - **THEN** the keys of its item are exactly `address`, `status_code`, `indexability`, `indexability_status`, `title_1` and `crawl_depth`
 
@@ -419,7 +419,7 @@ A column name in `--where` or `--sort` that the queried view does not have SHALL
 - **WHEN** `linx pages --fields address,word_count` runs against a Page at `https://example.com/` with word_count 812
 - **THEN** its item is `{"address": "https://example.com/", "word_count": 812}`
 
-#### Scenario: All fields
+#### Scenario: All Page fields
 - **WHEN** `linx pages --fields all` runs
 - **THEN** the keys of each item are every `pages` column that `linx schema` lists, in that order
 

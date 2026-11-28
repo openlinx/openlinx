@@ -1,6 +1,6 @@
 """Define Page data rows without loading SQLAlchemy."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime
 from typing import Literal
 
@@ -137,6 +137,17 @@ class PageRow:
     structured_data_types: tuple[str, ...] | None = None
     structured_data_error_count: int | None = None
     structured_data_warning_count: int | None = None
+
+
+# The Store supplies Crawl Depth from the URL row. Include it at its schema position
+# without importing SQLAlchemy when the CLI describes the available fields.
+_page_row_columns = tuple(field.name for field in fields(PageRow))
+_crawl_depth_index = _page_row_columns.index("folder_depth")
+PAGE_COLUMNS = (
+    *_page_row_columns[:_crawl_depth_index],
+    "crawl_depth",
+    *_page_row_columns[_crawl_depth_index:],
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

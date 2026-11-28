@@ -18,6 +18,7 @@ from openlinx.output.paging import (
     project,
     select_fields,
 )
+from openlinx.store.page_records import PAGE_COLUMNS
 from openlinx.store.records import LATEST, CrawlFile, IssueType, Priority, RuleCategory
 from openlinx.workspace.discovery import resolve_workspace
 
@@ -25,6 +26,18 @@ if TYPE_CHECKING:
     from openlinx.store.sql import SqlResult
 
 ISSUES = "issues"
+PAGES = "pages"
+PAGE_FIELDS = Fields(
+    available=PAGE_COLUMNS,
+    default=(
+        "address",
+        "status_code",
+        "indexability",
+        "indexability_status",
+        "title_1",
+        "crawl_depth",
+    ),
+)
 _ISSUE_ITEM = ("rule_id", "category", "issue_type", "priority", "affected_count", "description")
 ISSUE_FIELDS = Fields(available=_ISSUE_ITEM, default=_ISSUE_ITEM)
 _AFFECTED_URL_ITEM = ("url", "detail")
@@ -112,6 +125,45 @@ def issue_detail(
         encode_cursor(bound, [items[-1]["url"]]) if limit > 0 and len(found) > limit else None
     )
     return Page(project(items, chosen), total, next_cursor, header={"rule": rule})
+
+
+def pages(
+    request: QueryRequest,
+    *,
+    limit: int = 50,
+    cursor: str | None = None,
+    fields: str | None = None,
+    where: str | None = None,
+) -> Page:
+    """Return one window and the total of matching Pages from the selected Crawl."""
+    from openlinx.query.where import parse
+    from openlinx.store.query_pages import pages_in
+    from openlinx.store.reading import reading_selected
+
+    chosen = select_fields(fields, PAGE_FIELDS)
+    expression = parse(where) if where is not None else None
+    crawl_file = _crawl_file(request)
+    selection = {"crawl": crawl_file.id}
+    if where is not None:
+        selection["where"] = where
+    bound = fingerprint(PAGES, selection)
+    after: str | None = None
+    if cursor is not None:
+        keyset = decode_cursor(cursor, bound)
+        if not isinstance(keyset, list) or len(keyset) != 1 or not isinstance(keyset[0], str):
+            raise invalid_cursor()
+        after = keyset[0]
+
+    window = limit + 1 if limit > 0 else 0
+    with reading_selected(crawl_file) as connection:
+        total, found = pages_in(
+            connection, after=after, limit=window, fields=chosen, where=expression
+        )
+    items = found[:limit]
+    next_cursor = (
+        encode_cursor(bound, [items[-1]["address"]]) if limit > 0 and len(found) > limit else None
+    )
+    return Page(project(items, chosen), total, next_cursor)
 
 
 def sql_query(request: QueryRequest, statement: str, *, limit: int, timeout: float) -> "SqlResult":
