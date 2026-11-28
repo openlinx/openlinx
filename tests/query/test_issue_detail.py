@@ -13,6 +13,7 @@ from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.rules.response_codes import INTERNAL_4XX
 from openlinx.rules.settings import RulesSettings
+from openlinx.rules.titles import TITLE_TOO_LONG
 from openlinx.services import query
 from openlinx.services.rules import rule_rows
 from openlinx.store.crawls import record_state
@@ -110,6 +111,42 @@ def test_the_reproducing_query_of_the_rule(temp_workspace: TempWorkspace) -> Non
     found = query.issue_detail(request, "title-missing")
 
     assert found.header["rule"]["reproduce_sql"] == recorded_sql
+
+
+def test_detail_of_an_affected_url(temp_workspace: TempWorkspace) -> None:
+    recorded_sql = """\
+SELECT id AS url_id,
+       CASE url WHEN 'https://example.com/a' THEN json_object('length', 61) END AS detail
+FROM urls
+WHERE url IN ('https://example.com/a', 'https://example.com/b')"""
+    rule = replace(TITLE_TOO_LONG, reproduce_sql=recorded_sql)
+    installed = next(
+        row for row in rule_rows(RulesSettings().model_dump()) if row.id == "title-too-long"
+    )
+    seeds = ["https://example.com/b", "https://example.com/unaffected", "https://example.com/a"]
+    file = create_any_crawl(
+        temp_workspace,
+        crawl_mode="list",
+        seeds=seeds,
+        rules=[replace(installed, reproduce_sql=recorded_sql)],
+    ).path
+    with CrawlWriter(file, FakeClock()) as writer:
+        for url in seeds:
+            writer.run(record_seed(NormalizedUrl(url), is_internal=True, in_scope=True))
+        writer.run(affected_urls_unit(rule))
+        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=1)))
+    request = query.QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file))
+
+    found = query.issue_detail(request, "title-too-long")
+
+    assert (found.total, found.items, found.next_cursor) == (
+        2,
+        [
+            {"url": "https://example.com/a", "detail": {"length": 61}},
+            {"url": "https://example.com/b", "detail": None},
+        ],
+        None,
+    )
 
 
 def test_pages_stored_affected_urls_in_url_order(temp_workspace: TempWorkspace) -> None:
