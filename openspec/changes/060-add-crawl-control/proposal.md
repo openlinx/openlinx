@@ -43,7 +43,7 @@ The v0.1 writer ownership slice takes the OS claim before creating a crawl file 
   - It reports:
     - the Crawl State and whether a stop request is pending, and since when a Crawl waits for the network (`020`'s network pause)
     - `urls` counts, `status_classes`, `seed_count`
-    - rate (from the heartbeat), average rate over all runs, ETA (and whether it is a lower bound), heartbeat age and PID
+    - rate (from the heartbeat), elapsed time and average rate over all runs (distinct URLs that have recorded a `fetched` or `error` outcome per second, with both fields marked approximate after an interruption), ETA (and whether it is a lower bound), heartbeat age and PID
     - the error of a failed Crawl, the log file, warnings and a next-step hint
   - It detects a dead crawl process and records `interrupted`.
 - **`linx stop [--crawl] [--wait <s>]`:** it writes a stop request row, and the Crawl stops gracefully and stays resumable.
@@ -56,6 +56,7 @@ The v0.1 writer ownership slice takes the OS claim before creating a crawl file 
   - `rm` also deletes the Crawl's reports folder and its Report Notes, and lists the removed paths.
 - **Crawls started without a command line,** such as by the MCP server, record a synthesised equivalent argv.
 - **New tables:** `crawl_runs` (one row per run, with its heartbeat and progress counters) and `control_requests` (a control table).
+- **Processed URL history:** `urls.ever_processed` survives requeue, and the current run's `crawl_runs.processed_count` gives running status the Crawl-wide count from its latest snapshot.
 - **Flags that go beyond the wording of ROADMAP.md.** All are small and plainly needed: `--no-estimate`, `stop --wait`, `crawls list --state`, and `resume --detach` together with the `resume` override flags.
 - **MCP tools:** none in this change. `090-add-mcp-server` mirrors these Commands through the same Crawl Service.
 
@@ -71,6 +72,7 @@ The v0.1 writer ownership slice takes the OS claim before creating a crawl file 
 
 ### Modified Capabilities
 - `crawl-store`: "Crawl ids" counts the writer claim's file and the log file as taking an id, and adds reserved and chosen ids with `crawl_id_taken`.
+- `crawl-store`: "Historical URL outcomes" records whether each URL ever reached a committed `fetched` or `error` outcome.
 
 ## Non-goals
 

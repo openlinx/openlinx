@@ -8,8 +8,8 @@ from typing import Any
 from sqlalchemy import Connection, select
 from sqlalchemy.exc import DBAPIError
 
-from openlinx.naming import PRODUCT_NAME
-from openlinx.output.codes import CRAWL_SCHEMA_TOO_NEW
+from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
+from openlinx.output.codes import CRAWL_FILE_INVALID, CRAWL_SCHEMA_TOO_NEW
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import READER_BUSY_SECONDS, busy_error, is_busy, opening
 from openlinx.store.identity import check_crawl_id
@@ -79,3 +79,12 @@ def read_metadata(path: Path, *, identity: CrawlFileIdentity | None = None) -> d
         if is_historical_preview(connection, missing_health_columns(connection)):
             statement = _PREVIEW_METADATA
         return dict(connection.execute(statement).mappings().one())
+
+
+def invalid_crawl_file(path: Path) -> OpenLinxError:
+    return OpenLinxError(
+        CRAWL_FILE_INVALID,
+        f"{path} is not a readable crawl file.",
+        hint=f"Give another crawl file, or crawl again with: {COMMAND_NAME} crawl <url>",
+        details={"file": str(path)},
+    )
