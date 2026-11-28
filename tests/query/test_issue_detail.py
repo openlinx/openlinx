@@ -98,6 +98,20 @@ def test_guidance_of_the_rule(temp_workspace: TempWorkspace) -> None:
     )
 
 
+def test_the_reproducing_query_of_the_rule(temp_workspace: TempWorkspace) -> None:
+    installed = next(
+        row for row in rule_rows(RulesSettings().model_dump()) if row.id == "title-missing"
+    )
+    recorded_sql = "SELECT url_id, NULL AS detail\nFROM pages\nWHERE title_count = 0"
+    recorded = replace(installed, reproduce_sql=recorded_sql)
+    file = create_any_crawl(temp_workspace, rules=[recorded]).path
+    request = query.QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file))
+
+    found = query.issue_detail(request, "title-missing")
+
+    assert found.header["rule"]["reproduce_sql"] == recorded_sql
+
+
 def test_pages_stored_affected_urls_in_url_order(temp_workspace: TempWorkspace) -> None:
     crawl_store(
         temp_workspace,

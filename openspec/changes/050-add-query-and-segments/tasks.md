@@ -23,7 +23,7 @@ Every group ends with a docs task and a review task.
 - [x] 1.7 Drive `Issue detail › A Rule that did not fire` (Services): `issues <rule-id>` returns a `Page` with `header` `{"rule": ...}`, its Affected URLs paged by keyset in `url` order (design D4, D14). Verify: red → green; one commit.
 - [x] 1.8 Drive `Issue detail › Thresholds recorded for the Crawl` (Services). Verify: red → green; one commit.
 - [x] 1.9 Drive `Issue detail › Guidance of the Rule` (Services). Verify: red → green; one commit.
-- [ ] 1.10 Drive `Issue detail › The reproducing query of the Rule` (Services): `reproduce_sql` in `rule`. Verify: red → green; one commit.
+- [x] 1.10 Drive `Issue detail › The reproducing query of the Rule` (Services): `reproduce_sql` in `rule`. Verify: red → green; one commit.
 - [ ] 1.11 Drive `Issue detail › Detail of an Affected URL` (Services). Verify: red → green; one commit.
 - [ ] 1.12 Drive `Issue detail › Unknown rule id` (CLI): 040's `rule_not_found`, checked against the Crawl's `rules` table, with `details.suggestions` from it (design D14). Verify: red → green; one commit.
 - [ ] 1.13 Drive `Issue list › Issues of a fixture Crawl on every OS` (CLI and 3, real subprocesses on the Windows, macOS and Linux CI jobs, through `run_cli_process`), after `040`'s group 4 (`internal-4xx` and `title-missing` with their queries) and `030`'s group 2 (the title columns): add the `/e2e/` fixture pages, with `/e2e/gone` a `Status(404)` route; `linx crawl` then `linx issues`. This is the thin slice's end-to-end test. Verify: red → green on all three OSes; one commit.
