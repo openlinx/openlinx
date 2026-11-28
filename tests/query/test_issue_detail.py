@@ -12,7 +12,9 @@ from sqlalchemy import Connection, Engine, event
 from openlinx.crawl.urls import NormalizedUrl
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.rules.response_codes import INTERNAL_4XX
+from openlinx.rules.settings import RulesSettings
 from openlinx.services import query
+from openlinx.services.rules import rule_rows
 from openlinx.store.crawls import record_state
 from openlinx.store.issues import affected_urls_unit
 from openlinx.store.records import FetchedUrl, JournalSetting, Provenance, RuleRow
@@ -68,6 +70,32 @@ def test_thresholds_recorded_for_the_crawl(temp_workspace: TempWorkspace, max_ho
     thresholds = found.header["rule"]["thresholds"]
     assert thresholds == {"max_hops": max_hops}
     assert type(thresholds["max_hops"]) is int
+
+
+def test_guidance_of_the_rule(temp_workspace: TempWorkspace) -> None:
+    installed = next(
+        row for row in rule_rows(RulesSettings().model_dump()) if row.id == "title-too-long"
+    )
+    recorded = replace(
+        installed,
+        description="The first title exceeds this Crawl's character limit.",
+        why_it_matters="Search results can truncate a long title.",
+        how_to_fix="Keep the topic in the first 70 characters of the title.",
+        thresholds={"max_chars": 70},
+    )
+    file = create_any_crawl(temp_workspace, rules=[recorded]).path
+    with CrawlWriter(file, FakeClock()) as writer:
+        writer.run(record_state("completed", STARTED_AT + timedelta(seconds=1)))
+    request = query.QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home, crawl=str(file))
+
+    found = query.issue_detail(request, "title-too-long")
+
+    rule = found.header["rule"]
+    assert (rule["description"], rule["why_it_matters"], rule["how_to_fix"]) == (
+        "The first title exceeds this Crawl's character limit.",
+        "Search results can truncate a long title.",
+        "Keep the topic in the first 70 characters of the title.",
+    )
 
 
 def test_pages_stored_affected_urls_in_url_order(temp_workspace: TempWorkspace) -> None:
