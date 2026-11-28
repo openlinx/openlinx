@@ -1,9 +1,9 @@
-"""Resolve a Crawl and read its Issues or the detail of one Rule."""
+"""Resolve a Crawl and query its snapshot."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import get_args
+from typing import TYPE_CHECKING, get_args
 
 from openlinx.output.codes import INVALID_VALUE
 from openlinx.output.diagnostics import OpenLinxError
@@ -20,6 +20,9 @@ from openlinx.output.paging import (
 )
 from openlinx.store.records import LATEST, CrawlFile, IssueType, Priority, RuleCategory
 from openlinx.workspace.discovery import resolve_workspace
+
+if TYPE_CHECKING:
+    from openlinx.store.sql import SqlResult
 
 ISSUES = "issues"
 _ISSUE_ITEM = ("rule_id", "category", "issue_type", "priority", "affected_count", "description")
@@ -109,6 +112,13 @@ def issue_detail(
         encode_cursor(bound, [items[-1]["url"]]) if limit > 0 and len(found) > limit else None
     )
     return Page(project(items, chosen), total, next_cursor, header={"rule": rule})
+
+
+def sql_query(request: QueryRequest, statement: str, *, limit: int, timeout: float) -> "SqlResult":
+    """Read SQL from the selected Crawl using the Store's restricted reader."""
+    from openlinx.store.sql import read_sql
+
+    return read_sql(_crawl_file(request), statement, limit=limit, timeout=timeout)
 
 
 def _crawl_file(request: QueryRequest) -> CrawlFile:

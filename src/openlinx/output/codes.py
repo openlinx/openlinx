@@ -93,7 +93,8 @@ USAGE_ERROR = _declare(
     "usage_error",
     "error",
     ExitCode.USAGE,
-    "An unknown Command or flag, a missing argument, or a global flag before the Command name.",
+    "An unknown Command or flag, missing or conflicting arguments, or a global flag before "
+    "the Command name.",
 )
 INVALID_VALUE = _declare(
     "invalid_value",
@@ -116,6 +117,18 @@ INVALID_CURSOR = _declare(
     "error",
     ExitCode.USAGE,
     "A --cursor made by a different request, or altered.",
+)
+SQL_NOT_ALLOWED = _declare(
+    "sql_not_allowed", "error", ExitCode.USAGE, "A SQL statement outside the read-only subset."
+)
+SQL_ERROR = _declare(
+    "sql_error",
+    "error",
+    ExitCode.USAGE,
+    "SQLite rejected the query. An unknown table or column includes details.suggestions.",
+)
+SQL_TIMEOUT = _declare(
+    "sql_timeout", "error", ExitCode.FAILED, "A SQL read exceeded its execution time limit."
 )
 SETTINGS_INVALID = _declare(
     "settings_invalid",

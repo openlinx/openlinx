@@ -20,6 +20,7 @@ from openlinx.output.codes import INTERNAL_ERROR, INTERRUPTED, INVALID_VALUE, US
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import CliReporter, Reporter
 from openlinx.output.writer import Document, Output, Rows
+from openlinx.query.sql import SQL_LIMIT_HINT, SQL_TIMEOUT_HINT
 from openlinx.workspace.tables import SettingsTables
 
 
@@ -49,6 +50,7 @@ class OpenLinxGroup(TyperGroup):
     ) -> NoReturn:
         # Not no_args_is_help: from Click 8.2 on it raises a usage error, which exits 2.
         args = list(sys.argv[1:] if args is None else args) or ["--help"]
+        command = next(iter(args[1:] if args[0] == "--" else args), None)
         # Click's own guess from argv[0] reads "python -m openlinx" or "openlinx.EXE".
         prog_name = invoked_command(sys.argv[0]) if prog_name is None else prog_name
         # The one place the process streams are read; openlinx.output only takes them.
@@ -82,22 +84,25 @@ class OpenLinxGroup(TyperGroup):
             elif isinstance(returned, Rows):
                 output.rows(returned)
                 returned = ExitCode.OK
-        except MissingParameter as error:
-            # A BadParameter subclass, but a missing argument is a usage error (cli-contract).
-            output.diagnostic(OpenLinxError(USAGE_ERROR, error.format_message()).diagnostic)
-            sys.exit(ExitCode.USAGE)
-        except typer.BadParameter as error:
-            output.diagnostic(_invalid_value(error).diagnostic)
-            sys.exit(ExitCode.USAGE)
+            elif command == "sql" and returned == ExitCode.INTERRUPTED:
+                # Typer can catch Ctrl+C during parsing, before invoke gets a context.
+                raise _interrupted(command)
         except ClickUsageError as error:
-            output.diagnostic(OpenLinxError(USAGE_ERROR, error.format_message()).diagnostic)
+            # MissingParameter is a BadParameter subclass that reports a usage error.
+            if isinstance(error, typer.BadParameter) and not isinstance(error, MissingParameter):
+                failure = _invalid_value(error, command)
+            else:
+                failure = OpenLinxError(
+                    USAGE_ERROR, error.format_message(), hint=_sql_usage_hint(error, command)
+                )
+            output.diagnostic(failure.diagnostic)
             sys.exit(ExitCode.USAGE)
         except OpenLinxError as error:
             output.diagnostic(error.diagnostic)
             sys.exit(error.exit_code)
         except (KeyboardInterrupt, typer.Abort):
             # Rows stream after invoke, so Ctrl+C can land here; Click's prompts raise Abort.
-            interrupted = _interrupted()
+            interrupted = _interrupted(command)
             output.diagnostic(interrupted.diagnostic)
             sys.exit(interrupted.exit_code)
         except Exception:
@@ -111,7 +116,7 @@ class OpenLinxGroup(TyperGroup):
         try:
             return super().invoke(ctx)
         except KeyboardInterrupt as error:
-            raise _interrupted() from error
+            raise typer.Abort() from error
 
 
 def commands_by_path(
@@ -156,8 +161,9 @@ def option_before_the_command(flag: str, command: str) -> OpenLinxError:
     )
 
 
-def _interrupted() -> OpenLinxError:
-    return OpenLinxError(INTERRUPTED, "Stopped with Ctrl+C.")
+def _interrupted(command: str | None) -> OpenLinxError:
+    hint = "Run the SQL query again when ready." if command == "sql" else None
+    return OpenLinxError(INTERRUPTED, "Stopped with Ctrl+C.", hint=hint)
 
 
 def _internal_error() -> OpenLinxError:
@@ -169,7 +175,7 @@ def _internal_error() -> OpenLinxError:
     )
 
 
-def _invalid_value(error: typer.BadParameter) -> OpenLinxError:
+def _invalid_value(error: typer.BadParameter, command: str | None) -> OpenLinxError:
     hint = None
     if error.param is not None and error.param.name == FORMAT_PARAMETER and error.ctx is not None:
         callback = error.ctx.command.callback
@@ -178,7 +184,24 @@ def _invalid_value(error: typer.BadParameter) -> OpenLinxError:
     setting = _setting_of(error)
     # The shape of a value refused when given to a service: its setting's key.
     details = {} if setting is None else {"key": setting}
-    return OpenLinxError(INVALID_VALUE, error.format_message(), hint=hint, details=details)
+    return OpenLinxError(
+        INVALID_VALUE,
+        error.format_message(),
+        hint=hint or _sql_usage_hint(error, command),
+        details=details,
+    )
+
+
+def _sql_usage_hint(error: ClickUsageError, command: str | None) -> str | None:
+    # Click omits the context when a token is missing its option value.
+    if (error.ctx.command.name if error.ctx is not None else command) != "sql":
+        return None
+    if isinstance(error, typer.BadParameter) and error.param is not None:
+        if error.param.name == "limit":
+            return SQL_LIMIT_HINT
+        if error.param.name == "timeout":
+            return SQL_TIMEOUT_HINT
+    return f"Run {COMMAND_NAME} sql --help to check the query and option syntax."
 
 
 def _setting_of(error: typer.BadParameter) -> str | None:

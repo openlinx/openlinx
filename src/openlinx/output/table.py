@@ -20,12 +20,13 @@ def _render(columns: Sequence[str], rows: Sequence[Sequence[Any]], width: int) -
     # Imported here: rich is too heavy for the CLI's startup path.
     from rich.console import Console
     from rich.table import Table
+    from rich.text import Text
 
     table = Table()
     for column in columns:
-        table.add_column(column, overflow="fold")
+        table.add_column(Text(column), overflow="fold")
     for row in rows:
-        table.add_row(*(_cell(value) for value in row))
+        table.add_row(*(Text(_cell(value)) for value in row))
     text = io.StringIO()
     Console(file=text, width=width, color_system=None, legacy_windows=False).print(table)
     return text.getvalue()
