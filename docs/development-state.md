@@ -1,12 +1,59 @@
 # Development state
 
-The 022 checkpoint was verified on 2026-11-18. Other stream checkpoints date
-from 2026-11-15. [README](../README.md) describes available behaviour;
-[ROADMAP](../ROADMAP.md) owns release scope and build order. Before continuing a
-stream, read [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) and
+## Release checkpoint
+
+[PR #83](https://github.com/openlinx/openlinx/pull/83) merged at `457a6d14`
+on 2026-11-28. The foreground Spider Crawl records the catalogue of 42 built-in
+Rules and evaluates the enabled Rules. `linx issues` lists Issues by Rule with
+Affected URL counts. `linx issues <rule-id>` lists that Rule's Affected URLs.
+The PR passed all nine Windows, macOS and Linux jobs across Python 3.12–3.14.
+That run included separate foreground Crawl and Issues processes with the default in-process Page preparation. Task 050.1.13 tracks formal acceptance.
+
+[PR #84](https://github.com/openlinx/openlinx/pull/84) merged at `5c4bce19`
+on 2026-11-28. The Issues Pass records the [Health Score](rules.md#health-score)
+after a Crawl completes or stops. Its [PR CI matrix](https://github.com/openlinx/openlinx/actions/runs/46102757046)
+passed all nine jobs.
+
+[PR #85](https://github.com/openlinx/openlinx/pull/85) merged at `fe2aabec` and covers [meta refresh](page-data.md#redirects). After successful
+Page extraction, the first declaration supplies the raw value and must contain
+a URL reference for a redirect. The first resolved Link can come from a later
+declaration. If Page extraction fails, the first discovered refresh Link can
+supply the target.
+
+[PR #86](https://github.com/openlinx/openlinx/pull/86) restored Continue for a Crawl
+from the original 18-Rule preview. It retains the recorded thresholds and schema.
+New Crawls record Health Score. The [Rules specification](../openspec/specs/rules/spec.md)
+contains 24 requirements and 140 scenarios.
+
+| Change | Status at this checkpoint |
+|---|---|
+| [024 Crawl Modes](../openspec/changes/024-add-list-and-sitemap-modes/tasks.md) | List (`--list`) and Sitemap (`--sitemap`) are v0.2 drafts. In v0.1, `linx crawl <url>` runs a foreground Spider Crawl from one URL Seed. |
+| [026 parse pool](../openspec/changes/026-add-parse-pool/tasks.md) | Page preparation runs in-process. The process pool, bounded worker shutdown and the approximately 500k-URL benchmark remain v0.1 work. |
+| [030 Page data](../openspec/changes/030-add-page-data/tasks.md) | Page data used by the 42 Rules is in main. Task 6.14 covers meta refresh at this checkpoint. The Links layout and writer-capacity benchmarks and whole-change review remain open. |
+| [040 Rules](../openspec/changes/archive/2026-11-28-040-add-rules/tasks.md) | The 42 Rules, their settings, catalogue Commands, saved and live Issue readers, and Health Score are in main. All 122 tasks are complete and the change is archived. |
+| [050 queries](../openspec/changes/050-add-query-and-segments/tasks.md) | Both Issues forms are in main. Tasks 1.13–1.15 and the remaining query Commands, including `summary`, `pages`, `page` and read-only `sql`, remain open. |
+| [060 Crawl control](../openspec/changes/060-add-crawl-control/tasks.md) | Writer ownership tasks 0.1–0.10 merged in [PR #82](https://github.com/openlinx/openlinx/pull/82). Task 0.11 and `crawl --detach`, `status`, `stop` and `resume` remain open. |
+| [080 Agent Skill](../openspec/changes/080-add-agent-skill/tasks.md) | The v0.1 Skill installation and `doctor` Commands are planned. |
+| [085 release](../ROADMAP.md#what-each-change-owns) | The v0.1 packaging and publication workflow is planned. |
+
+## Where to verify progress
+
+Use [README](../README.md) and `linx commands` for available behaviour, the
+[Roadmap](../ROADMAP.md) for release scope, and the OpenSpec task files for
+outstanding work. Check [public main](https://github.com/openlinx/openlinx/tree/main)
+and [pull requests](https://github.com/openlinx/openlinx/pulls) for merged work,
+[Actions](https://github.com/openlinx/openlinx/actions) for the checks on the
+specific revision, and [Releases](https://github.com/openlinx/openlinx/releases)
+for published releases. Before continuing a stream, read
+[AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) and
 [CONTEXT.md](../CONTEXT.md), then confirm its actual HEAD, diff and tasks.
 
-## Main and active streams
+## Historical checkpoints
+
+The 022 checkpoint was verified on 2026-11-18. Other stream checkpoints date
+from 2026-11-15. The records below describe those checkpoints.
+
+### Main and active streams
 
 At the 022 merge checkpoint, public
 [main at `62253122`](https://github.com/openlinx/openlinx/tree/62253122476f840e6ba15d3e2b0e1fd8404dab2c)
@@ -29,7 +76,7 @@ These static targets do not establish runtime compatibility on those operating s
 | 040 Rules | Public `330d5730` | Rule slice and reader refactor exist; current core/Page data integration and remaining v0.1 Rules are open. [Checkpoint tasks](https://github.com/openlinx/openlinx/blob/330d5730b3e4dad3ba6a5d9285fd89ef61213d98/openspec/changes/040-add-rules/tasks.md). |
 | 050 queries | Public `bd21fe41` | Groups 1–2 have implementation, with review fixes and 040 integration outstanding. [Checkpoint tasks](https://github.com/openlinx/openlinx/blob/bd21fe4164077076076c5e64805e9f80aeb4b434/openspec/changes/050-add-query-and-segments/tasks.md). |
 
-### Page data and ownership candidates
+#### Page data and ownership candidates
 
 030 findings **C01 and C02 are closed on public main**, through
 [PR #37](https://github.com/openlinx/openlinx/pull/37): the deferred structured-data
@@ -65,7 +112,7 @@ cross-OS CI remain open.
 Detached Crawls, `status`, `stop` and `resume` remain planned. Later draft task groups require
 reconciliation with the implemented lifecycle before they are built.
 
-### Archived fetching change
+#### Archived fetching change
 
 The change was archived and merged in [PR #42](https://github.com/openlinx/openlinx/pull/42).
 The archive includes the synced
@@ -83,7 +130,7 @@ The main run at merge commit `62253122` passed eight of nine jobs. The macOS
 Python 3.12 job failed the ALPN shared-deadline test in `Tests and coverage`.
 [Main matrix](https://github.com/openlinx/openlinx/actions/runs/44229494663).
 
-### Fetching implementation checkpoints
+#### Fetching implementation checkpoints
 
 Tasks 11.1–11.2 established header-aware secret recording, per-hop Internal
 headers, User-Agent precedence on continue and consistent Seed classification.
@@ -281,7 +328,7 @@ The integration branch also carries 030 Page data and developer-check changes.
 frozen at task 0.6. The continue Service accepts fresh auth, sensitive headers
 and explicit proxy credentials. Page capability population belongs to 030.
 
-### Next quality work
+#### Next quality work
 
 Follow the [comment review and test quality plan](test-organization-plan.md).
 Review comments for decisions and non-obvious reasons, then verify the test
@@ -289,7 +336,7 @@ contracts at their public seams. Start by reproducing the two recorded
 test-quality candidates. Preserve existing regression scenarios and keep
 test organization in separate changes.
 
-## What blocks Crawl → Issues
+### Blockers recorded before PR #83
 
 1. **Port 026, 040 and 050 to current contracts.** Their public checkpoints still use
    the pre-rename package and older core/store interfaces. Preserve their product work while
