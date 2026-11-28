@@ -15,12 +15,14 @@ from openlinx.cli.crawl import crawl
 from openlinx.cli.init import init
 from openlinx.cli.issues import issues
 from openlinx.cli.meta import CommandGroup, check_command, check_group
+from openlinx.cli.page import page
 from openlinx.cli.pages import pages
 from openlinx.cli.rules import RULES_GROUP
 from openlinx.cli.runner import Invocation, OpenLinxGroup, option_before_the_command
 from openlinx.cli.schema import schema
 from openlinx.cli.sql import sql
 from openlinx.cli.status import status
+from openlinx.cli.summary import summary
 from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
 from openlinx.output.codes import USAGE_ERROR
 from openlinx.output.diagnostics import OpenLinxError
@@ -75,12 +77,14 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         crawl,
         init,
         issues,
+        page,
         pages,
         RULES_GROUP,
         schema,
         sql,
         status,
         stop,
+        summary,
         *extra.commands,
     ]
     # Typer would silently keep the last registration of a name.

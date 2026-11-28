@@ -203,6 +203,17 @@ If the file becomes unreadable during selection, the diagnostic is
 from a newer version has its own `crawl_schema_too_new` diagnostic. For diagnostics
 after selection when continuing a Crawl, see [Writer ownership](crawl-store.md#writer-ownership).
 
+## Single Page and Crawl summary
+
+`linx page <url> [--headers] [--format json|table]` prints one Page document.
+`--headers` adds
+recorded response headers with cookie values redacted. `url_not_found` and
+`headers_not_stored` use exit code 4.
+
+`linx summary [--top N] [--format json|table]` summarises the selected Crawl.
+JSON is the default. `--top` accepts 0 to 100 and defaults to 10. See
+[querying a Crawl](querying.md) and the [summary contract](contracts/summary.md).
+
 ## Listing Pages
 
 `linx pages` reads the selected Crawl and lists its Pages in address order.

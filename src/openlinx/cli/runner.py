@@ -3,7 +3,7 @@
 import sys
 import traceback
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, NoReturn
 
 import typer
@@ -13,7 +13,7 @@ from openlinx.cli.click_compat import Command, MissingParameter
 from openlinx.cli.click_compat import Context as ClickContext
 from openlinx.cli.click_compat import UsageError as ClickUsageError
 from openlinx.cli.meta import formats_hint, meta_of
-from openlinx.cli.options import FORMAT_PARAMETER, options_with_meta
+from openlinx.cli.options import FORMAT_PARAMETER, OptionMeta, options_with_meta
 from openlinx.clock import SystemClock
 from openlinx.naming import COMMAND_NAME, PRODUCT_NAME, invoked_command
 from openlinx.output.codes import INTERNAL_ERROR, INTERRUPTED, INVALID_VALUE, USAGE_ERROR, ExitCode
@@ -22,6 +22,8 @@ from openlinx.output.reporter import CliReporter, Reporter
 from openlinx.output.writer import Document, Output, Rows
 from openlinx.query.sql import SQL_LIMIT_HINT, SQL_TIMEOUT_HINT
 from openlinx.workspace.tables import SettingsTables
+
+_PAGE_QUERY_COMMANDS = frozenset({"page", "summary"})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -84,7 +86,9 @@ class OpenLinxGroup(TyperGroup):
             elif isinstance(returned, Rows):
                 output.rows(returned)
                 returned = ExitCode.OK
-            elif command == "sql" and returned == ExitCode.INTERRUPTED:
+            elif (command == "sql" or command in _PAGE_QUERY_COMMANDS) and (
+                returned == ExitCode.INTERRUPTED
+            ):
                 # Typer can catch Ctrl+C during parsing, before invoke gets a context.
                 raise _interrupted(command)
         except ClickUsageError as error:
@@ -93,12 +97,15 @@ class OpenLinxGroup(TyperGroup):
                 failure = _invalid_value(error, command)
             else:
                 failure = OpenLinxError(
-                    USAGE_ERROR, error.format_message(), hint=_sql_usage_hint(error, command)
+                    USAGE_ERROR, error.format_message(), hint=_usage_hint(error, command)
                 )
             output.diagnostic(failure.diagnostic)
             sys.exit(ExitCode.USAGE)
         except OpenLinxError as error:
-            output.diagnostic(error.diagnostic)
+            diagnostic = error.diagnostic
+            if command is not None and command in _PAGE_QUERY_COMMANDS and diagnostic.hint is None:
+                diagnostic = replace(diagnostic, hint=_command_help_hint(command))
+            output.diagnostic(diagnostic)
             sys.exit(error.exit_code)
         except (KeyboardInterrupt, typer.Abort):
             # Rows stream after invoke, so Ctrl+C can land here; Click's prompts raise Abort.
@@ -163,6 +170,8 @@ def option_before_the_command(flag: str, command: str) -> OpenLinxError:
 
 def _interrupted(command: str | None) -> OpenLinxError:
     hint = "Run the SQL query again when ready." if command == "sql" else None
+    if command in _PAGE_QUERY_COMMANDS:
+        hint = f"Run {COMMAND_NAME} {command} again when ready."
     return OpenLinxError(INTERRUPTED, "Stopped with Ctrl+C.", hint=hint)
 
 
@@ -176,25 +185,37 @@ def _internal_error() -> OpenLinxError:
 
 
 def _invalid_value(error: typer.BadParameter, command: str | None) -> OpenLinxError:
+    extra = _option_of_error(error)
+    # The shape of a value refused when given to a service: its setting's key.
+    details: dict[str, Any] = (
+        {} if extra is None or extra.setting is None else {"key": extra.setting}
+    )
     hint = None
     if error.param is not None and error.param.name == FORMAT_PARAMETER and error.ctx is not None:
         callback = error.ctx.command.callback
         meta = meta_of(callback) if callback is not None else None
-        hint = formats_hint(meta) if meta is not None else None
-    setting = _setting_of(error)
-    # The shape of a value refused when given to a service: its setting's key.
-    details = {} if setting is None else {"key": setting}
+        if meta is not None:
+            hint = formats_hint(meta)
+            details["accepted"] = list(meta.formats)
+    option_hint = extra.invalid_hint if extra is not None else None
     return OpenLinxError(
         INVALID_VALUE,
         error.format_message(),
-        hint=hint or _sql_usage_hint(error, command),
+        hint=hint or option_hint or _usage_hint(error, command),
         details=details,
     )
 
 
-def _sql_usage_hint(error: ClickUsageError, command: str | None) -> str | None:
+def _command_help_hint(command: str) -> str:
+    return f"Run {COMMAND_NAME} {command} --help to check the arguments and option syntax."
+
+
+def _usage_hint(error: ClickUsageError, command: str | None) -> str | None:
     # Click omits the context when a token is missing its option value.
-    if (error.ctx.command.name if error.ctx is not None else command) != "sql":
+    command = error.ctx.command.name if error.ctx is not None else command
+    if command is not None and command in _PAGE_QUERY_COMMANDS:
+        return _command_help_hint(command)
+    if command != "sql":
         return None
     if isinstance(error, typer.BadParameter) and error.param is not None:
         if error.param.name == "limit":
@@ -204,12 +225,12 @@ def _sql_usage_hint(error: ClickUsageError, command: str | None) -> str | None:
     return f"Run {COMMAND_NAME} sql --help to check the query and option syntax."
 
 
-def _setting_of(error: typer.BadParameter) -> str | None:
+def _option_of_error(error: typer.BadParameter) -> OptionMeta | None:
     if error.param is None or error.ctx is None:
         return None
     return next(
         (
-            extra.setting
+            extra
             for param, extra in options_with_meta(error.ctx.command)
             if param.name == error.param.name
         ),

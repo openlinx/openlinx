@@ -117,20 +117,50 @@ def _evaluable_rules(connection: Connection, catalogue: Sequence[RuleQuery]) -> 
     return [rule for rule in catalogue if rule.id in evaluable]
 
 
-def issues_in(connection: Connection, catalogue: Sequence[RuleQuery]) -> Select[Any]:
+def issues_in(
+    connection: Connection,
+    catalogue: Sequence[RuleQuery],
+    *,
+    rule_ids: frozenset[str] | None = None,
+) -> Select[Any]:
     """A composable issues view on a reading() connection."""
     if _materialised(connection):
-        return _STORED_ISSUES
+        if rule_ids is None:
+            return _STORED_ISSUES
+        # Filter the count by the primary key prefix. A filter on the grouped view's
+        # projected Rule id scans all Affected URLs before discarding other Rules.
+        return (
+            select(*_ISSUE_COLUMNS, func.count().label("affected_count"))
+            .join_from(affected_urls, rules, affected_urls.c.rule_id == rules.c.id)
+            .where(affected_urls.c.rule_id.in_(rule_ids))
+            .group_by(affected_urls.c.rule_id)
+        )
     counts = [
         select(*_ISSUE_COLUMNS, func.count().label("affected_count"))
         .select_from(rules.join(_found(rule), true()))
         .where(rules.c.id == rule.id)
         .group_by(rules.c.id)
         for rule in _evaluable_rules(connection, catalogue)
+        if rule_ids is None or rule.id in rule_ids
     ]
     if not counts:
         return _EMPTY_ISSUES
     return select(union_all(*counts).subquery())
+
+
+def live_issue_affected_in(connection: Connection, catalogue: Sequence[RuleQuery]) -> Subquery:
+    """The live Affected URLs for enabled Issue-type Rules, for the Health Score."""
+    issue_ids: frozenset[str] = frozenset(
+        connection.scalars(select(rules.c.id).where(rules.c.issue_type == "issue"))
+    )
+    branches = []
+    for rule in _evaluable_rules(connection, catalogue):
+        if rule.id in issue_ids:
+            found = _found(rule)
+            branches.append(select(literal(rule.id).label("rule_id"), found.c.url_id))
+    if not branches:
+        return select(affected_urls.c.rule_id, affected_urls.c.url_id).where(false()).subquery()
+    return union_all(*branches).subquery()
 
 
 def _recorded_rule_is_evaluable(connection: Connection, rule_id: str) -> bool:
@@ -198,25 +228,32 @@ def read_url_issues(
 ) -> list[UrlIssue]:
     """Issues for one URL in catalogue order, followed by other stored Rules in Rule id order."""
     with reading(crawl_file) as connection:
-        if _materialised(connection):
-            statement = select(affected_urls.c.rule_id, affected_urls.c.detail).where(
-                affected_urls.c.url_id == url_id
-            )
-        else:
-            branches = []
-            for rule in _evaluable_rules(connection, catalogue):
-                found = _found(rule)
-                branches.append(
-                    select(literal(rule.id).label("rule_id"), found.c.detail).where(
-                        found.c.url_id == url_id
-                    )
+        return url_issues_in(connection, url_id, catalogue)
+
+
+def url_issues_in(
+    connection: Connection, url_id: int, catalogue: Sequence[RuleQuery]
+) -> list[UrlIssue]:
+    """Read the URL's Issue details within the caller's snapshot."""
+    if _materialised(connection):
+        statement = select(affected_urls.c.rule_id, affected_urls.c.detail).where(
+            affected_urls.c.url_id == url_id
+        )
+    else:
+        branches = []
+        for rule in _evaluable_rules(connection, catalogue):
+            found = _found(rule)
+            branches.append(
+                select(literal(rule.id).label("rule_id"), found.c.detail).where(
+                    found.c.url_id == url_id
                 )
-            if not branches:
-                return []
-            # A rollback journal releases its read lock between statements.
-            statement = select(union_all(*branches).subquery())
-        by_id = {
-            rule_id: UrlIssue(rule_id=rule_id, url_id=url_id, detail=decode_detail(detail))
-            for rule_id, detail in connection.execute(statement)
-        }
+            )
+        if not branches:
+            return []
+        # Evaluate the branches in one statement for readers without a snapshot.
+        statement = select(union_all(*branches).subquery())
+    by_id = {
+        rule_id: UrlIssue(rule_id=rule_id, url_id=url_id, detail=decode_detail(detail))
+        for rule_id, detail in connection.execute(statement)
+    }
     return _catalogue_order(by_id, catalogue)

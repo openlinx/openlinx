@@ -83,6 +83,17 @@ def _record_title(writer: CrawlWriter, url_id: int) -> None:
     )
 
 
+def test_stored_issue_counts_seek_only_the_requested_rules(stopped_issue: tuple[Path, int]) -> None:
+    file, _ = stopped_issue
+    with reading(file) as connection:
+        counts = issues_in(connection, _RULES, rule_ids=frozenset({"title-missing"}))
+        sql = counts.compile(dialect=connection.dialect, compile_kwargs={"literal_binds": True})
+        plan = connection.exec_driver_sql(f"EXPLAIN QUERY PLAN {sql}").fetchall()
+        assert connection.execute(counts).all() == [("title-missing", "titles", "issue", "high", 1)]
+
+    assert any("SEARCH affected_urls USING PRIMARY KEY" in row[3] for row in plan), plan
+
+
 def test_a_crawl_without_a_final_pass_is_read_live(stopped_issue: tuple[Path, int]) -> None:
     file, url_id = stopped_issue
     with CrawlWriter(file, FakeClock()) as writer:

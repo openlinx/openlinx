@@ -97,6 +97,7 @@ def command_meta[**P](
                     INVALID_VALUE,
                     f"This Command has no {output_format} format.",
                     hint=formats_hint(meta),
+                    details={"accepted": list(meta.formats)},
                 )
             result = command(*args, **kwargs)
             if meta.fields is None:

@@ -1,5 +1,37 @@
 # Querying a Crawl
 
+## Inspect a Page
+
+`linx page <url> [--headers]` reads a Page from the latest Crawl. Use `--crawl`
+to select another Crawl and `--workspace` to select a Workspace. The URL is
+normalised as it is during a Crawl. Fragments and differences in host case do
+not affect the lookup. The default output is JSON. Use `--format table` for a table.
+
+| JSON member | Value |
+|---|---|
+| `url` | The Page's recorded display address. |
+| `segment` | Always `null` until Segments arrive. |
+| `columns` | Every column listed by `linx schema pages`. |
+| `issues` | Issue records containing `rule_id`, `category`, `issue_type`, `priority`, `description` and `detail`, in the order used by `linx issues`. |
+| `redirect_chain` | The redirect hops and destination, each with its URL and status code. Empty for a URL without a redirect. |
+| `link_counts` | `inlinks`, `unique_inlinks`, `outlinks`, `unique_outlinks`, `external_outlinks` and the `partial` flag for a Section Crawl. |
+| `html_stored` | Always `false` until raw HTML storage arrives. |
+| `headers` | Present with `--headers`. The list preserves the order, spelling and repeated entries of the recorded response headers. Cookie values are redacted. |
+
+`url_not_found` (exit 4) includes up to five suggested Page addresses in
+`details.suggestions`. `headers_not_stored` (exit 4) means the selected Page has
+no recorded response headers.
+
+## Summarise a Crawl
+
+`linx summary [--crawl <ref>] [--top <n>] [--format json|table]` reports on the
+selected Crawl. The default `--top 10` shows ten Issues. Set it to 0 for no top
+Issues or to an integer up to 100. See the [summary contract](contracts/summary.md)
+for the JSON members and their meanings.
+
+The summary counts rows already committed to the crawl file. Use `linx status` to
+poll the progress of a running Crawl.
+
 ## Read-only SQL
 
 Use `linx sql` to read one snapshot of a Crawl. Run `linx schema` to list tables

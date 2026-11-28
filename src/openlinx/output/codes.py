@@ -176,6 +176,15 @@ CRAWL_NOT_FOUND = _declare(
 RULE_NOT_FOUND = _declare(
     "rule_not_found", "error", ExitCode.NOT_FOUND, "No Rule has the requested id."
 )
+URL_NOT_FOUND = _declare(
+    "url_not_found", "error", ExitCode.NOT_FOUND, "The Crawl has no Page for the requested URL."
+)
+HEADERS_NOT_STORED = _declare(
+    "headers_not_stored",
+    "error",
+    ExitCode.NOT_FOUND,
+    "The Crawl has no recorded response headers for the requested URL.",
+)
 CRAWL_BUSY = _declare(
     "crawl_busy",
     "error",

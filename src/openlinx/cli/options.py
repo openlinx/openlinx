@@ -18,13 +18,14 @@ from openlinx.store.records import LATEST
 from openlinx.workspace.tables import SecretPolicy, SettingsTables
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class OptionMeta:
     """What `linx commands` says about an option beyond what Click knows."""
 
     is_global: bool = False
     setting: str | None = None
     secret: SecretPolicy = False
+    invalid_hint: str | None = None
 
 
 GLOBAL = OptionMeta(is_global=True)
