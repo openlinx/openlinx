@@ -16,9 +16,13 @@ from openlinx.store.records import AffectedUrl, FetchedUrl, Provenance
 from openlinx.store.rows import HandlerRows
 from openlinx.store.urls import record_fetched, record_seed
 from openlinx.store.writer import CrawlWriter
+from tests.fixture_site.plugin import StartSite
+from tests.fixture_site.routes import Page, Site
 from tests.support.clock import FakeClock
+from tests.support.crawling import crawled
 from tests.support.crawls import STARTED_AT, create_any_crawl, query
 from tests.support.page_data import page_row, unprepared_page_row
+from tests.support.rule_results import assert_rule_results
 from tests.support.workspace import TempWorkspace
 
 _SEED = "https://example.com/"
@@ -150,3 +154,93 @@ def _noindex_rule() -> Rule:
     matching = [rule for rule in RULES if rule.id == "noindex"]
     assert len(matching) == 1, "The catalogue must register noindex once"
     return matching[0]
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_nofollow_from_meta_robots(fixture_site: StartSite) -> None:
+    meta = '<meta name="robots" content="nofollow">'
+    header = (("X-Robots-Tag", "nofollow"),)
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(
+                    body=(
+                        '<a href="/both">Both</a><a href="/header">Header</a>'
+                        '<a href="/meta">Meta</a><a href="/link">Link</a>'
+                    )
+                ),
+                "/both": Page(body=meta, headers=header),
+                "/header": Page(body="<title>Header only</title>", headers=header),
+                "/meta": Page(body=meta),
+                "/link": Page(body='<a href="/header" rel="nofollow">Link-level nofollow</a>'),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+
+    assert query(
+        file,
+        "SELECT url, meta_robots_nofollow, x_robots_tag_nofollow "
+        "FROM urls JOIN pages ON pages.url_id = urls.id ORDER BY url",
+    ) == [
+        (server.url("/"), 0, 0),
+        (server.url("/both"), 1, 1),
+        (server.url("/header"), 0, 1),
+        (server.url("/link"), 0, 0),
+        (server.url("/meta"), 1, 0),
+    ]
+    assert_rule_results(
+        file,
+        "nofollow",
+        [
+            (server.url("/both"), {"sources": ["meta_robots", "x_robots_tag"]}),
+            (server.url("/header"), {"sources": ["x_robots_tag"]}),
+            (server.url("/meta"), {"sources": ["meta_robots"]}),
+        ],
+    )
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_meta_refresh_used(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(
+                    body=(
+                        '<a href="/old">Old</a><a href="/reload">Reload</a>'
+                        '<a href="/header">Header</a>'
+                    )
+                ),
+                "/old": Page(body='<meta http-equiv="refresh" content="0; url=/new">'),
+                "/reload": Page(body='<meta http-equiv="refresh" content="5">'),
+                "/header": Page(
+                    body="<title>Header</title>", headers=(("Refresh", "0; url=/new"),)
+                ),
+                "/new": Page(body="<title>New</title>"),
+            }
+        )
+    )
+    file = crawled(server.url("/"))
+
+    assert query(
+        file,
+        "SELECT url, meta_refresh, redirect_url "
+        "FROM urls JOIN pages ON pages.url_id = urls.id ORDER BY url",
+    ) == [
+        (server.url("/"), None, None),
+        (server.url("/header"), None, server.url("/new")),
+        (server.url("/new"), None, None),
+        (server.url("/old"), "0; url=/new", server.url("/new")),
+        (server.url("/reload"), "5", None),
+    ]
+    assert_rule_results(
+        file,
+        "meta-refresh",
+        [
+            (
+                server.url("/old"),
+                {"meta_refresh": "0; url=/new", "redirect_url": server.url("/new")},
+            ),
+            (server.url("/reload"), {"meta_refresh": "5", "redirect_url": None}),
+        ],
+    )

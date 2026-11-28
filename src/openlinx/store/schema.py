@@ -729,8 +729,8 @@ pages = public_table(
     Column(
         "meta_description_1_width_px",
         Integer,
-        comment="Filled from v0.2. The width of meta_description_1 in Arial regular at 14 px, in "
-        "pixels.",
+        comment="The estimated width of meta_description_1 in pixels at 14 px, using Liberation "
+        "Sans Regular advances. NULL when absent or not measured.",
     ),
     Column(
         "meta_description_2",

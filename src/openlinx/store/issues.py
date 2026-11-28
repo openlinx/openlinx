@@ -31,9 +31,9 @@ from openlinx.store.writer import Unit
 
 
 def evaluate_rule(crawl_file: Path, rule: RuleQuery) -> list[AffectedUrl]:
-    """Evaluate the registered query when the Crawl records its Rule as enabled."""
+    """Evaluate the registered query for an enabled, active Rule in the Crawl snapshot."""
     with reading(crawl_file) as connection:
-        if not _recorded_rule_enabled(connection, rule.id):
+        if not _recorded_rule_is_evaluable(connection, rule.id):
             return []
         return _affected_urls(connection, select(_found(rule)))
 
@@ -52,7 +52,14 @@ def _affected_urls(connection: Connection, statement: Select[int, str | None]) -
 
 
 _DELETE = delete(affected_urls).where(affected_urls.c.rule_id == bindparam("rule_id"))
-_ENABLED = select(rules.c.id).where(rules.c.enabled == 1)
+_PREVIEW_RULE_IDS = ("h2-missing", "low-word-count", "url-parameters")
+_PREVIEW_NO_ROWS = "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
+# The preview query recorded an empty result. Keep it empty when reading or continuing
+# that Crawl after the same Rule id acquires a real query. Never run stored SQL here.
+_EVALUABLE = (rules.c.enabled == 1) & ~(
+    rules.c.id.in_(_PREVIEW_RULE_IDS) & (rules.c.reproduce_sql == _PREVIEW_NO_ROWS)
+)
+_EVALUABLE_IDS = select(rules.c.id).where(_EVALUABLE)
 
 
 def affected_urls_unit(rule: RuleQuery) -> Unit[None]:
@@ -69,8 +76,8 @@ def affected_urls_unit(rule: RuleQuery) -> Unit[None]:
     return replace_rows
 
 
-def _enabled_rule_ids(connection: Connection) -> frozenset[str]:
-    return frozenset(connection.scalars(_ENABLED))
+def _evaluable_rule_ids(connection: Connection) -> frozenset[str]:
+    return frozenset(connection.scalars(_EVALUABLE_IDS))
 
 
 class _IssueWriter(Protocol):
@@ -78,10 +85,10 @@ class _IssueWriter(Protocol):
 
 
 async def materialise_issues(writer: _IssueWriter, units: Mapping[str, Unit[None]]) -> None:
-    """Run the installed Rule units enabled by this Crawl's snapshot."""
-    enabled = await writer.run_async(_enabled_rule_ids)
+    """Run the installed Rule units enabled and active in this Crawl's snapshot."""
+    evaluable = await writer.run_async(_evaluable_rule_ids)
     for rule_id, unit in units.items():
-        if rule_id in enabled:
+        if rule_id in evaluable:
             await writer.run_async(unit)
 
 
@@ -95,7 +102,7 @@ _ISSUE_COLUMNS = (
 )
 _EMPTY_ISSUES = select(*_ISSUE_COLUMNS, literal(0).label("affected_count")).where(false())
 _AFFECTED = select(affected_urls.c.url_id, affected_urls.c.detail)
-_RULE_ENABLED = select(rules.c.enabled).where(rules.c.id == bindparam("rule_id"))
+_RULE_EVALUABLE = select(_EVALUABLE).where(rules.c.id == bindparam("rule_id"))
 _RECORDED_IDS = select(rules.c.id)
 
 
@@ -104,11 +111,11 @@ def _materialised(connection: Connection) -> bool:
     return state in ("completed", "stopped")
 
 
-def _enabled_rules(connection: Connection, catalogue: Sequence[RuleQuery]) -> list[RuleQuery]:
+def _evaluable_rules(connection: Connection, catalogue: Sequence[RuleQuery]) -> list[RuleQuery]:
     # SQLite resolves even unreachable query branches. A Rule absent or disabled in the
     # Crawl can name columns introduced after that Crawl was created.
-    enabled = _enabled_rule_ids(connection)
-    return [rule for rule in catalogue if rule.id in enabled]
+    evaluable = _evaluable_rule_ids(connection)
+    return [rule for rule in catalogue if rule.id in evaluable]
 
 
 def issues_in(connection: Connection, catalogue: Sequence[RuleQuery]) -> Select[Any]:
@@ -120,30 +127,30 @@ def issues_in(connection: Connection, catalogue: Sequence[RuleQuery]) -> Select[
         .select_from(rules.join(_found(rule), true()))
         .where(rules.c.id == rule.id)
         .group_by(rules.c.id)
-        for rule in _enabled_rules(connection, catalogue)
+        for rule in _evaluable_rules(connection, catalogue)
     ]
     if not counts:
         return _EMPTY_ISSUES
     return select(union_all(*counts).subquery())
 
 
-def _recorded_rule_enabled(connection: Connection, rule_id: str) -> bool:
-    enabled: bool | None = connection.execute(
-        _RULE_ENABLED, {"rule_id": rule_id}
+def _recorded_rule_is_evaluable(connection: Connection, rule_id: str) -> bool:
+    evaluable: bool | None = connection.execute(
+        _RULE_EVALUABLE, {"rule_id": rule_id}
     ).scalar_one_or_none()
-    if enabled is None:
+    if evaluable is None:
         raise rule_not_found(rule_id, connection.scalars(_RECORDED_IDS).all())
-    return enabled
+    return evaluable
 
 
 def affected_urls_in(
     connection: Connection, rule_id: str, catalogue: Sequence[RuleQuery]
 ) -> Select[Any]:
     """One Rule's url_id and raw JSON detail on a reading() connection."""
-    enabled = _recorded_rule_enabled(connection, rule_id)
+    evaluable = _recorded_rule_is_evaluable(connection, rule_id)
     if _materialised(connection):
         return _AFFECTED.where(affected_urls.c.rule_id == rule_id)
-    if not enabled:
+    if not evaluable:
         return _AFFECTED.where(false())
     for rule in catalogue:
         if rule.id == rule_id:
@@ -198,7 +205,7 @@ def read_url_issues(
             )
         else:
             branches = []
-            for rule in _enabled_rules(connection, catalogue):
+            for rule in _evaluable_rules(connection, catalogue):
                 found = _found(rule)
                 branches.append(
                     select(literal(rule.id).label("rule_id"), found.c.detail).where(

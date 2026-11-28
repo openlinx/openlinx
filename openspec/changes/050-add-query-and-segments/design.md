@@ -23,7 +23,7 @@ This change adds to that contract the `csv` format, the CSV policy, `--no-bom` a
 
 All query logic lives in the **Query Service** (`src/openlinx/services/query.py` plus `src/openlinx/query/`). The CLI modules only parse flags and serialise, and `090-add-mcp-server` wraps the same service calls.
 
-The scenarios use the column names that 030 publishes (`address`, `status_code`, `title_1`, `title_1_length`, `meta_description_1`, `word_count`, `crawl_depth`, `unique_inlinks`, `indexability`, `indexability_status`), the table names `pages`, `links`, `urls`, `issues` and `affected_urls`, and rule ids from 040's catalogue (`title-missing`, `title-too-long`, `h1-missing`, `meta-description-too-long`, `image-broken`). The summary's `crawl.completed_at` is `015`'s `crawl.completed_at`. Rule ids in the scenarios come from `040`'s 42-Rule catalogue; v0.1 ships 15 of them, and a scenario's stored Issues need not be ones v0.1 evaluates.
+The scenarios use the column names that 030 publishes (`address`, `status_code`, `title_1`, `title_1_length`, `meta_description_1`, `word_count`, `crawl_depth`, `unique_inlinks`, `indexability`, `indexability_status`), the table names `pages`, `links`, `urls`, `issues` and `affected_urls`, and rule ids from 040's catalogue (`title-missing`, `title-too-long`, `h1-missing`, `meta-description-too-long`, `image-broken`). The summary's `crawl.completed_at` is `015`'s `crawl.completed_at`. A new v0.1 Crawl evaluates the 42 Rules in `040`'s catalogue. Queries on an existing Crawl use the Rules it recorded.
 
 ## Goals / Non-Goals
 

@@ -42,10 +42,29 @@ The response-code Rules belong to `response_codes`, and the `http-url` Rule belo
 | `title-missing` | `issue` | `high` | An analysed Page has no `<title>` or its first `<title>` is empty. | SQL `NULL` |
 | `title-duplicate` | `warning` | `medium` | An analysed, Indexable Page shares its non-empty first title with another analysed, Indexable Page. The comparison is case-sensitive. | JSON object with `title_1` and `pages`, the number of Pages sharing the title |
 | `title-too-long` | `opportunity` | `medium` | An analysed Page's first title exceeds its recorded `max_chars` limit (default 60). | JSON object with `length`, the measured character count |
+| `title-too-short` | `opportunity` | `low` | A Page's first title has at least one character and fewer than its recorded `min_chars` (default 30). | JSON object with `length` |
+| `title-multiple` | `issue` | `medium` | A Page has more than one `<title>`. | JSON object with `count` |
+| `title-same-as-h1` | `opportunity` | `low` | A Page's first title is non-empty and equals its first `<h1>`. The comparison is case-sensitive. | SQL `NULL` |
 | `meta-description-missing` | `opportunity` | `medium` | An analysed Page has no meta description or its first meta description is empty. | SQL `NULL` |
+| `meta-description-duplicate` | `opportunity` | `low` | An Indexable Page shares its non-empty first meta description with another Indexable Page. The comparison is case-sensitive. | JSON object with `meta_description_1` and `pages`, the number of Pages in the group |
+| `meta-description-too-long` | `opportunity` | `low` | A Page's first meta description exceeds either recorded limit, `max_chars` (default 155) or `max_pixels` (default 985). | JSON object with `length` and `width_px` |
+| `meta-description-too-short` | `opportunity` | `low` | A Page's first meta description has at least one character and fewer than its recorded `min_chars` (default 70). | JSON object with `length` |
+| `meta-description-multiple` | `warning` | `low` | A Page has more than one meta description. | JSON object with `count` |
 | `h1-missing` | `warning` | `medium` | An analysed Page has no `<h1>` or its first `<h1>` is empty. | SQL `NULL` |
+| `h1-duplicate` | `opportunity` | `low` | An Indexable Page shares its non-empty first `<h1>` with another Indexable Page. The comparison is case-sensitive. | JSON object with `h1_1` and `pages`, the number of Pages in the group |
+| `h1-multiple` | `warning` | `low` | A Page has more than one `<h1>`. | JSON object with `count` |
+| `h1-too-long` | `opportunity` | `low` | A Page's first `<h1>` exceeds its recorded `max_chars` (default 70). | JSON object with `length` |
+| `h2-missing` | `opportunity` | `low` | A Page has no `<h2>` or its first `<h2>` is empty. | SQL `NULL` |
+| `canonical-missing` | `warning` | `medium` | An analysed Page has no canonical declaration and neither noindex directive. | SQL `NULL` |
+| `canonicalised` | `warning` | `medium` | An analysed Page has the stored Indexability Status `canonicalised`. | JSON object with the absolute `canonical_url` |
 | `canonical-to-non-indexable` | `issue` | `high` | An analysed Page declares a different URL as canonical and that target is Non-Indexable. | JSON object with `canonical_url` and `target_reason` |
+| `canonical-conflicting` | `issue` | `high` | At least two canonical declarations disagree, leaving the preferred URL unresolved. | JSON object with `canonical_link_element_1`, `canonical_link_element_2` and `http_canonical`. A missing source is JSON `null`. |
+| `canonical-relative` | `warning` | `low` | An analysed Page contains a relative canonical declaration. | SQL `NULL` |
 | `noindex` | `warning` | `high` | An analysed Page has `pages.meta_robots_noindex = 1` or `pages.x_robots_tag_noindex = 1`. | JSON object with `sources`, the applicable directive sources |
+| `nofollow` | `warning` | `medium` | An analysed Page has a nofollow directive in meta robots or `X-Robots-Tag`. | JSON object with `sources`, in the same order as for `noindex` |
+| `meta-refresh` | `warning` | `low` | An analysed Page has an HTML meta refresh declaration. | JSON object with `meta_refresh` and the absolute `redirect_url`, or JSON `null` for the URL when no target was recorded |
+| `low-word-count` | `opportunity` | `medium` | An analysed, Indexable Page has fewer than its recorded `min_words` words in its Content Area. The default is 200 words. | JSON object with the measured `word_count` |
+| `exact-duplicate` | `issue` | `medium` | An analysed, Indexable Page shares its Content Area hash with another analysed, Indexable Page. | JSON object with `content_hash` and `pages`, the number of Pages sharing it |
 
 The `internal_urls` population includes Internal URLs with `fetch_state` `fetched` or `error`,
 or with `blocked_by_robots_txt = 1`, including URLs outside a Section Crawl's Scope. A
@@ -70,10 +89,23 @@ even when the recorded targets form a closed loop.
 The title, meta description and heading Rules apply to analysed Pages (`urls.parsed = 1`).
 Missing measurements from a failed extractor do not trigger these Rules on their own.
 
+In v0.1, `title-too-long` uses the title's recorded character count and returns `length`.
+`meta-description-too-long` reads the first description's stored character count and pixel
+width. A description can exceed the character limit when its width is unmeasured. Its
+`width_px` detail is then JSON `null`. A value exactly at its limit passes that check.
+
+For a short or missing title, name the Page's subject and what distinguishes it. For a long
+title, put the distinguishing words first and shorten it to the configured limit. When a
+template emits several titles, keep the one that describes the Page. For duplicate titles,
+give each Indexable Page a distinct one. A title identical to the H1 can use extra context
+that helps people recognise the Page in search results.
+
 Read a Rule's guidance and reproducing SQL with [`linx rules show`](#read-one-rule).
 
-The `canonical-to-non-indexable` Rule belongs to `canonicals` and `noindex` belongs to
-`directives`. Both apply to analysed Pages (`internal_pages`, with `urls.parsed = 1`).
+The `canonicals`, `directives` and `content` categories apply to analysed Pages
+(`internal_pages`, with `urls.parsed = 1`). `canonicalised` reads the stored Indexability
+Status, so a self-canonical or a higher-priority status such as `noindex` gives no Issue
+for that Rule. `canonical-missing` exempts Pages with a noindex directive from either source.
 
 The canonical query matches the source Page's `pages.canonical_url` to the target's `urls.url`.
 It reports the source Page as the Affected URL when that target is a different URL and is
@@ -112,6 +144,53 @@ the Page's Indexability Status is `blocked_by_robots_txt`.
 Run `linx rules show noindex` for the guidance and reproducing SQL.
 [Robots directives](crawling.md#robots-directives)
 
+`nofollow` uses the Page-wide directive flags. `meta-refresh` reads the recorded HTML
+declaration, including a timed reload with no target. The `redirect_url` is the Page's
+recorded redirect target.
+
+Both Content Rules require Indexable Pages. `low-word-count` counts words in the Content
+Area and skips unmeasured counts. `exact-duplicate` excludes Pages without a hash. It
+reports every member of a group of two or more Pages with the same hash.
+
+### URLs
+
+The `urls` Rules apply to analysed Pages (`internal_pages`). The character checks use the
+display address's path and query. The encoded length uses the full requested URL.
+
+| Rule id | Issue Type | Priority | Fires when | `detail` |
+|---|---|---|---|---|
+| `url-uppercase` | `opportunity` | `low` | The display path or query contains a Unicode uppercase letter (general category `Lu`), ignoring valid `%XX` escapes. | SQL `NULL` |
+| `url-underscores` | `opportunity` | `low` | The display path contains an underscore. | SQL `NULL` |
+| `url-parameters` | `opportunity` | `low` | The query string is non-empty. | SQL `NULL` |
+| `url-too-long` | `opportunity` | `low` | The full encoded URL exceeds the recorded `max_chars` threshold (default 115 characters). | JSON object with `length` |
+| `url-non-ascii` | `opportunity` | `low` | The display path or query contains a non-ASCII character. | SQL `NULL` |
+
+For example, `/Кат/a%2F` contains an uppercase letter and a non-ASCII character.
+`/a%2Fb` has no uppercase letter outside the escape. Uppercase and non-ASCII checks
+ignore the host. The saved uppercase query uses the pinned Unicode 16.0 data and runs
+in plain SQLite.
+
+### Images
+
+| Rule id | Issue Type | Priority | Applies to | Fires when | `detail` |
+|---|---|---|---|---|---|
+| `image-missing-alt-text` | `opportunity` | `low` | `internal_pages` | An analysed Page has an `<img src>` Link with a missing or empty `alt` attribute. | JSON object with `missing_alt_attribute` and `empty_alt`, counted separately |
+| `image-too-large` | `opportunity` | `medium` | `resources` | An image target's recorded size exceeds `max_kb` × 1024 bytes (default 100 kilobytes), with HTML and XHTML responses excluded. | JSON object with `size_bytes` |
+| `image-broken` | `issue` | `medium` | `resources` | The image target returns HTTP 400–599 or its request fails. | JSON object with `status_code` for an HTTP error or `error` for a failed request |
+
+The alt Rule counts each measured `<img src>` occurrence on the Page once. It skips
+`srcset` candidates, ordinary hyperlinks and Pages whose Link extraction failed. Keep
+`alt=""` on intentionally decorative images.
+
+Both target Rules use the outcome of a request to the target URL itself and an image Link from
+a Page. They cover Internal and External targets regardless of how the Crawl found or requested
+the URL. Each target appears once per Rule, even if several Pages reference it. If a hyperlink
+led to `/bad` and returned an HTML 404, a later `<img src="/bad">` on another Page makes `/bad`
+an Affected URL of `image-broken`. `image-too-large` excludes responses identified as
+`text/html` or `application/xhtml+xml`. A robots.txt failure before any target attempt leaves
+no result for either Rule. A `record_failed` warning reports a Store write error, which is
+excluded from `image-broken`.
+
 ## Browse the catalogue
 
 `linx rules` is shorthand for `linx rules list`. Use the full Command name before any options.
@@ -124,13 +203,13 @@ This example replaces the returned cursor with a placeholder.
 
 ```json
 {
-  "total": 15,
+  "total": 42,
   "items": [{"id": "internal-4xx", "category": "response_codes"}],
   "next_cursor": "<opaque cursor>"
 }
 ```
 
-`total` counts all 15 Rules evaluated in v0.1. `items` contains the current page in
+`total` counts all 42 Rules evaluated in v0.1. `items` contains the current page in
 catalogue order, grouped by category. To see the next page in the same Workspace,
 pass the returned `next_cursor` to `--cursor` and continue until it is `null`.
 Treat the cursor as an opaque value.
@@ -220,19 +299,17 @@ If the threshold example uses `[rules.title-to-long]` in `openlinx.toml`, runnin
 `rules.title-to-long` in `details.errors[0].key`. Its hint reads
 `Did you mean rules.title-too-long?` Rename the table to `[rules.title-too-long]`.
 
-## Settings from preview Workspaces
+## Settings and Crawls from preview versions
 
-`h2-missing`, `low-word-count` and `url-parameters` are planned for v0.2. In v0.1,
-`linx rules show` reports those ids as unknown. Commands accept the empty tables that
-preview versions of `linx init` generated for those ids and leave the file as it was.
+The preview Workspace template included tables for `h2-missing`, `low-word-count` and
+`url-parameters`. New Crawls accept valid settings in those tables. An empty table uses the
+catalogue defaults. For example, `min_words = 300` in `[rules.low-word-count]` sets the
+word-count threshold to 300 for the next Crawl.
 
-If an old table contains an explicit setting, remove that entry or the whole table.
-The Command exits with code 3 and reports `settings_invalid` with the file and the
-exact key, such as `rules.low-word-count.min_words`. A Crawl refuses those settings
-before making any HTTP request.
-
-Existing crawl files retain their recorded Rule settings and rows. Continuing a Crawl
-uses the recorded settings of its enabled Rules that are installed.
+Continuing a Crawl keeps its recorded Rules and thresholds. If a preview Crawl recorded one
+of those three Rules with the preview query that returned zero rows, it continues to report
+zero Affected URLs for that Rule. Start a new Crawl to evaluate all 42 Rules. The recorded
+`title-too-long.max_chars` threshold still controls which titles appear in an older Crawl.
 
 ## Read Issues from a crawl file
 

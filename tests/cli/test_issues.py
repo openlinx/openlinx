@@ -1,6 +1,8 @@
 """Exercise list filters, paging and discovery through the public Issues Command."""
 
 import os
+import sqlite3
+from contextlib import closing
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -8,12 +10,12 @@ from typing import Any
 import pytest
 
 from openlinx.store.crawls import record_state
-from openlinx.store.records import RuleRow
+from openlinx.store.records import CrawlState, RuleRow, StopReason
 from openlinx.store.writer import CrawlWriter
 from tests.support.cli import run_cli, run_cli_process
 from tests.support.clock import FakeClock
 from tests.support.crawl_store import IssueExample, crawl_store
-from tests.support.crawls import STARTED_AT, create_any_crawl, create_crawl_at
+from tests.support.crawls import STARTED_AT, create_any_crawl, create_crawl_at, sha256_of
 from tests.support.workspace import TempWorkspace
 
 _FILTER_EXAMPLES: tuple[IssueExample, ...] = (
@@ -59,12 +61,12 @@ def issue_detail_crawl(temp_workspace: TempWorkspace) -> Path:
         pytest.param(("--category", "headings"), ["h1-missing"], id="headings-only"),
         pytest.param(
             ("--category", " TITLES,Headings "),
-            ["title-missing", "h1-missing"],
+            ["title-missing", "h1-missing", "title-too-short", "title-same-as-h1"],
             id="comma-separated",
         ),
         pytest.param(
             ("--category", "HEADINGS", "--category", "titles"),
-            ["title-missing", "h1-missing"],
+            ["title-missing", "h1-missing", "title-too-short", "title-same-as-h1"],
             id="repeatable",
         ),
         pytest.param(
@@ -88,20 +90,36 @@ def test_filter_by_category(
 
 
 def test_a_cursor_belongs_to_its_normalised_categories(category_crawl: Path) -> None:
-    args = ("issues", "--crawl", str(category_crawl), "--fields", "rule_id", "--limit", "1")
-    first = run_cli(*args, "--category", "titles,headings")
+    args = ("issues", "--crawl", str(category_crawl), "--fields", "rule_id")
+    first = run_cli(*args, "--category", "titles,headings", "--limit", "1")
     assert first.exit_code == 0, first.stderr
     page = first.json()
-    assert page["items"] == [{"rule_id": "title-missing"}]
+    assert (page["total"], page["items"]) == (4, [{"rule_id": "title-missing"}])
     cursor = page["next_cursor"]
     assert isinstance(cursor, str)
     assert cursor
 
     resumed = run_cli(
-        *args, "--category", "HEADINGS", "--category", "titles,titles", "--cursor", cursor
+        *args,
+        "--category",
+        "HEADINGS",
+        "--category",
+        "titles,titles",
+        "--cursor",
+        cursor,
+        "--limit",
+        "3",
     )
     assert resumed.exit_code == 0, resumed.stderr
-    assert resumed.json() == {"total": 2, "items": [{"rule_id": "h1-missing"}], "next_cursor": None}
+    assert resumed.json() == {
+        "total": 4,
+        "items": [
+            {"rule_id": "h1-missing"},
+            {"rule_id": "title-too-short"},
+            {"rule_id": "title-same-as-h1"},
+        ],
+        "next_cursor": None,
+    }
 
     changed = run_cli(*args, "--category", "headings", "--cursor", cursor)
     assert (changed.exit_code, changed.stdout, [error["code"] for error in changed.errors()]) == (
@@ -501,3 +519,46 @@ def test_issue_cursors_are_bound_to_the_form_crawl_and_rule(
         assert (wrong.exit_code, wrong.stdout) == (2, b"")
         (error,) = wrong.errors()
         assert error["code"] == "invalid_cursor"
+
+
+@pytest.mark.parametrize(
+    ("state", "stop_reason"),
+    [
+        pytest.param("completed", None, id="completed"),
+        pytest.param("stopped", "max_urls", id="stopped"),
+    ],
+)
+@pytest.mark.parametrize(
+    "rule_args", [pytest.param((), id="list"), pytest.param(("title-missing",), id="detail")]
+)
+def test_issues_reports_a_crawl_missing_the_issues_view(
+    temp_workspace: TempWorkspace,
+    state: CrawlState,
+    stop_reason: StopReason | None,
+    rule_args: tuple[str, ...],
+) -> None:
+    workspace = ("--workspace", str(temp_workspace.root))
+    initialized = run_cli("init", *workspace)
+    assert initialized.exit_code == 0, initialized.stderr
+    file = create_any_crawl(temp_workspace).path
+    with CrawlWriter(file, FakeClock()) as writer:
+        writer.run(record_state(state, STARTED_AT + timedelta(seconds=1), stop_reason))
+
+    healthy = run_cli("issues", *rule_args, *workspace)
+    assert healthy.exit_code == 0, healthy.stderr
+    assert healthy.json()["total"] == 0
+    if rule_args:
+        assert healthy.json()["rule"]["rule_id"] == "title-missing"
+
+    with closing(sqlite3.connect(file)) as connection:
+        connection.execute("DROP VIEW issues")
+        connection.commit()
+    before = sha256_of(file)
+
+    broken = run_cli("issues", *rule_args, *workspace)
+
+    assert sha256_of(file) == before
+    assert (broken.exit_code, broken.stdout) == (6, b""), broken.stderr
+    (error,) = broken.errors()
+    assert error["code"] == "crawl_file_invalid"
+    assert error["details"]["file"] == str(file)

@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import Connection, bindparam, case, func, select
 
 from openlinx.json_numbers import decode_json_object
-from openlinx.store.crawls import check_rule_tables
+from openlinx.store.crawls import check_rule_schema
 from openlinx.store.issues import affected_urls_in, decode_detail, issues_in
 from openlinx.store.rule_queries import RuleQuery
 from openlinx.store.schema import rules, urls
@@ -35,7 +35,7 @@ def ordered_issues_in(
     categories: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Join the reader's Issues to the Rule descriptions recorded for this Crawl."""
-    check_rule_tables(connection, path)
+    check_rule_schema(connection, path)
     source = issues_in(connection, catalogue).subquery()
     statement = (
         select(source, rules.c.description)
@@ -69,7 +69,7 @@ def issue_detail_in(
     limit: int,
 ) -> tuple[dict[str, Any], int, list[dict[str, Any]]]:
     """Collect the Rule header, total, and bounded URL results within the caller's snapshot."""
-    check_rule_tables(connection, path)
+    check_rule_schema(connection, path)
     source = affected_urls_in(connection, rule_id, catalogue).subquery()
     row = connection.execute(_RECORDED_RULE, {"rule_id": rule_id}).mappings().one()
     rule = {str(key): value for key, value in row.items()}

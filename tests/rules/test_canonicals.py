@@ -23,9 +23,11 @@ from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Robots, Site, Status
 from tests.support.clock import FakeClock
+from tests.support.crawl_store import crawl_store
 from tests.support.crawling import crawl_result
 from tests.support.crawls import STARTED_AT, create_any_crawl, query
 from tests.support.page_data import page_row, unprepared_page_row
+from tests.support.rule_results import assert_rule_results
 from tests.support.workspace import TempWorkspace
 
 
@@ -367,6 +369,231 @@ def test_canonical_target_never_requested(
         (target,),
     ) == [(target_state, skip_reason, 0, None, None)]
     _assert_canonical_results(file, [])
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_missing_canonical(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(
+                    body=(
+                        '<a href="/meta">Meta</a><a href="/header">Header</a>'
+                        '<a href="/declared">Declared</a><a href="/error">Error</a>'
+                    )
+                ),
+                "/meta": Page(body='<meta name="robots" content="noindex">'),
+                "/header": Page(
+                    body="<title>Header</title>", headers=(("X-Robots-Tag", "noindex"),)
+                ),
+                "/declared": Page(body='<link rel="canonical" href="/declared">'),
+                "/error": Status(404, body="<title>Error</title>"),
+            }
+        )
+    )
+    file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        file,
+        "SELECT url, parsed, canonical_count, meta_robots_noindex, x_robots_tag_noindex "
+        "FROM urls JOIN pages ON pages.url_id = urls.id ORDER BY url",
+    ) == [
+        (server.url("/"), 1, 0, 0, 0),
+        (server.url("/declared"), 1, 1, 0, 0),
+        (server.url("/error"), 0, None, None, 0),
+        (server.url("/header"), 1, 0, 0, 1),
+        (server.url("/meta"), 1, 0, 1, 0),
+    ]
+    assert_rule_results(file, "canonical-missing", [(server.url("/"), None)])
+
+
+def test_noindex_page_needs_no_canonical(temp_workspace: TempWorkspace) -> None:
+    url = "https://example.com/noindex"
+    file = crawl_store(temp_workspace, pages={url: '<meta name="robots" content="noindex">'})
+
+    assert query(
+        file,
+        "SELECT urls.parsed, canonical_count, meta_robots_noindex, x_robots_tag_noindex "
+        "FROM urls JOIN pages ON pages.url_id = urls.id WHERE url = ?",
+        (url,),
+    ) == [(1, 0, 1, 0)]
+    assert_rule_results(file, "canonical-missing", [("https://example.com/", None)])
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_canonicalised_page(fixture_site: StartSite) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(
+                    body=(
+                        '<link rel="canonical" href="/target">'
+                        '<a href="/noindex">Noindex</a><a href="/self">Self</a>'
+                    )
+                ),
+                "/noindex": Page(
+                    body=(
+                        '<link rel="canonical" href="/target">'
+                        '<meta name="robots" content="noindex">'
+                    )
+                ),
+                "/self": Page(body='<link rel="canonical" href="/self">'),
+                "/target": Page(body="<title>Target</title>"),
+            }
+        )
+    )
+    file = crawl_result(server.url("/")).crawl_file
+
+    assert query(
+        file,
+        "SELECT url, indexability_status, canonical_url "
+        "FROM urls JOIN pages ON pages.url_id = urls.id ORDER BY url",
+    ) == [
+        (server.url("/"), "canonicalised", server.url("/target")),
+        (server.url("/noindex"), "noindex", server.url("/target")),
+        (server.url("/self"), None, server.url("/self")),
+        (server.url("/target"), None, None),
+    ]
+    assert_rule_results(
+        file,
+        "canonicalised",
+        [
+            (
+                server.url("/"),
+                {
+                    "canonical_url": server.url("/target"),
+                },
+            )
+        ],
+    )
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_conflicting_canonicals(fixture_hosts: StartHosts) -> None:
+    same = (("Link", '<http://site.test/same>; rel="canonical"'),)
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/": Page(
+                    body=(
+                        '<link rel="canonical" href="http://site.test/one">'
+                        '<link rel="canonical" href="http://site.test/two">'
+                        '<a href="/agreeing">Agreement</a>'
+                        '<a href="/header-only">Header conflict</a>'
+                        '<a href="/html-and-header">HTML and header conflict</a>'
+                    ),
+                    headers=(("Link", '<http://site.test/three>; rel="canonical"'),),
+                ),
+                "/agreeing": Page(
+                    body='<link rel="canonical" href="http://site.test/same">',
+                    headers=same,
+                ),
+                "/header-only": Page(
+                    body="<title>Header</title>",
+                    headers=(
+                        (
+                            "Link",
+                            '<http://site.test/one>; rel="canonical", '
+                            '<http://site.test/two>; rel="canonical"',
+                        ),
+                    ),
+                ),
+                "/html-and-header": Page(
+                    body='<link rel="canonical" href="http://site.test/one">',
+                    headers=(("Link", '<http://site.test/two>; rel="canonical"'),),
+                ),
+                "/one": Page(body="<title>One</title>"),
+                "/two": Page(body="<title>Two</title>"),
+                "/three": Page(body="<title>Three</title>"),
+                "/same": Page(body="<title>Same</title>"),
+            }
+        ),
+        Site(),
+    )
+    file = crawl_result("http://site.test/", resolver=hosts.resolver).crawl_file
+
+    assert query(
+        file,
+        "SELECT url, canonical_count, canonical_url "
+        "FROM urls JOIN pages ON pages.url_id = urls.id ORDER BY url",
+    ) == [
+        ("http://site.test/", 3, None),
+        ("http://site.test/agreeing", 2, "http://site.test/same"),
+        ("http://site.test/header-only", 2, None),
+        ("http://site.test/html-and-header", 2, None),
+        ("http://site.test/one", 0, None),
+        ("http://site.test/same", 0, None),
+        ("http://site.test/three", 0, None),
+        ("http://site.test/two", 0, None),
+    ]
+    assert_rule_results(
+        file,
+        "canonical-conflicting",
+        [
+            (
+                "http://site.test/",
+                {
+                    "canonical_link_element_1": "http://site.test/one",
+                    "canonical_link_element_2": "http://site.test/two",
+                    "http_canonical": "http://site.test/three",
+                },
+            ),
+            (
+                "http://site.test/header-only",
+                {
+                    "canonical_link_element_1": None,
+                    "canonical_link_element_2": None,
+                    "http_canonical": "http://site.test/one",
+                },
+            ),
+            (
+                "http://site.test/html-and-header",
+                {
+                    "canonical_link_element_1": "http://site.test/one",
+                    "canonical_link_element_2": None,
+                    "http_canonical": "http://site.test/two",
+                },
+            ),
+        ],
+    )
+
+
+def test_agreeing_canonicals(temp_workspace: TempWorkspace) -> None:
+    url = "https://example.com/a"
+    declaration = '<link rel="canonical" href="https://example.com/b">'
+    file = crawl_store(temp_workspace, pages={url: declaration * 2})
+
+    assert query(
+        file,
+        "SELECT urls.parsed, canonical_count, canonical_url "
+        "FROM urls JOIN pages ON pages.url_id = urls.id WHERE url = ?",
+        (url,),
+    ) == [(1, 2, "https://example.com/b")]
+    assert_rule_results(file, "canonical-conflicting", [])
+
+
+@pytest.mark.usefixtures("temp_workspace")
+def test_relative_canonical(fixture_hosts: StartHosts) -> None:
+    hosts = fixture_hosts(
+        Site(
+            {
+                "/": Page(body='<link rel="canonical" href="/absolute">'),
+                "/absolute": Page(body='<link rel="canonical" href="http://site.test/absolute">'),
+            }
+        ),
+        Site(),
+    )
+    file = crawl_result("http://site.test/", resolver=hosts.resolver).crawl_file
+
+    assert query(
+        file,
+        "SELECT url, canonical_relative, canonical_url "
+        "FROM urls JOIN pages ON pages.url_id = urls.id ORDER BY url",
+    ) == [
+        ("http://site.test/", 1, "http://site.test/absolute"),
+        ("http://site.test/absolute", 0, "http://site.test/absolute"),
+    ]
+    assert_rule_results(file, "canonical-relative", [("http://site.test/", None)])
 
 
 def _source_canonicals(file: Path, source: str) -> list[tuple[int, str | None]]:

@@ -454,17 +454,17 @@ Headings SHALL be extracted from `<h1>` and `<h2>` elements anywhere in the docu
   - `h2_2` and `h2_2_length` are NULL
 
 ### Requirement: SERP pixel widths
-From v0.2, pixel widths SHALL be computed for titles and meta descriptions. In v0.1 the four width columns exist and are NULL (see "Columns measured by later releases stay NULL").
+**In short:** v0.1 stores the estimated desktop pixel width of the normalised first meta description.
 
+The Crawl SHALL measure `meta_description_1_width_px` at 14 px. A present but empty description gives 0. A missing description, unanalysed Page or failed Page extraction gives NULL. From v0.2 the same method SHALL measure `meta_description_2_width_px` at 14 px and `title_1_width_px` and `title_2_width_px` at 20 px.
 
-- `title_1_width_px` and `title_2_width_px` are the widths of the texts in Arial regular at 20 px.
-- `meta_description_1_width_px` and `meta_description_2_width_px` are the widths in Arial regular at 14 px.
+The Crawl SHALL sum the advances of the text's Unicode code points from the bundled Liberation Sans Regular table, multiply by the font size, divide by 2048 and round once to the nearest whole pixel, with halves rounded up. It SHALL apply no kerning or shaping. For a code point missing from the table, the Crawl SHALL apply the first matching row below using Unicode 16.0.0.
 
-Each width is the sum, over the text's characters, of advance × size ÷ 2048, rounded to the nearest whole pixel with halves rounded up. Advances come from a bundled table of Arial advance widths in units of 1/2048 em, and kerning is not applied. A character missing from the table SHALL count as:
-
-- 2048 units for East Asian Wide and Fullwidth characters
-- 0 for combining marks (Mn, Me) and format characters (Cf)
-- the advance of the digit `0` (1139 units) for any other character
+| Code point | Advance in units of 1/2048 em |
+|---|---:|
+| Nonspacing or enclosing mark (Mn, Me) or format character (Cf) | 0 |
+| East Asian Wide or Fullwidth | 2048 |
+| All others | 1139 (the advance of the digit `0`) |
 
 The result SHALL NOT depend on the fonts installed on the machine.
 
@@ -473,8 +473,16 @@ The result SHALL NOT depend on the fonts installed on the machine.
 - **THEN** `title_1_width_px` is 46
 
 #### Scenario: Meta description pixel width
-- **WHEN** an analysed Page's meta description is `Buy shoes`
-- **THEN** `meta_description_1_width_px` is 65
+- **WHEN** a Crawl analyses a Page whose first meta description normalises to `Buy shoes`
+- **THEN** the stored `meta_description_1` is `Buy shoes` and `meta_description_1_width_px` is 65
+
+#### Scenario: Unlisted combining marks add no width
+- **WHEN** the first meta description is `か` followed by U+3099 COMBINING KATAKANA-HIRAGANA VOICED SOUND MARK
+- **THEN** `meta_description_1_width_px` is 14
+
+#### Scenario: Meta description pixel width rounds halves up
+- **WHEN** the first meta description is `iW+`
+- **THEN** `meta_description_1_width_px` is 25
 
 #### Scenario: Wide characters use one em
 - **WHEN** an analysed Page's title is `日本`
@@ -1013,9 +1021,11 @@ When storage is off, `page_sources` SHALL hold no rows.
 - **THEN** its `page_sources.encoding` is `windows-1251`
 
 ### Requirement: Columns measured by later releases stay NULL
+**In short:** reserved columns hold NULL until their release starts measuring them.
+
 These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, until the release that fills them:
 
-- from v0.2: the SERP pixel widths `title_1_width_px`, `title_2_width_px`, `meta_description_1_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, which follows `022-add-fetch-policy`'s `origins.http_version`
+- from v0.2: the SERP pixel widths `title_1_width_px`, `title_2_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, which follows `022-add-fetch-policy`'s `origins.http_version`
 - from v0.3: `closest_similarity_pct` and `near_duplicate_count`; `structured_data_error_count` and `structured_data_warning_count`
 - from v1.1: `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count`
 
@@ -1023,7 +1033,7 @@ These columns SHALL exist in v0.1 and SHALL be NULL for every Page, never 0, unt
 
 #### Scenario: Deferred columns are NULL after a completed Crawl
 - **WHEN** a Crawl of the fixture site ends as `completed` and its post-crawl passes have run
-- **THEN** 0 Pages have a non-NULL value in any of the 17 columns listed above, and 0 `links` rows have a non-NULL `html_source`
+- **THEN** 0 Pages have a non-NULL value in any of the 16 columns listed above, and 0 `links` rows have a non-NULL `html_source`
 
 #### Scenario: Deferred columns are described with their release
 - **WHEN** `linx schema pages` runs

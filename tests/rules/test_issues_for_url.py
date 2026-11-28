@@ -78,12 +78,21 @@ def test_one_url_reads_stored_then_live_issues(
 
     assert read_url_issues(file, root_id, _CATALOGUE) == [
         UrlIssue(rule_id="title-missing", url_id=root_id, detail=None),
+        UrlIssue(rule_id="canonical-missing", url_id=root_id, detail=None),
         UrlIssue(rule_id="h1-missing", url_id=root_id, detail=None),
+        UrlIssue(rule_id="h2-missing", url_id=root_id, detail=None),
         UrlIssue(rule_id="http-url", url_id=root_id, detail={"status_code": 200}),
+        UrlIssue(rule_id="low-word-count", url_id=root_id, detail={"word_count": 1}),
+        UrlIssue(rule_id="meta-description-too-short", url_id=root_id, detail={"length": 4}),
     ]
     assert read_url_issues(file, present_id, _CATALOGUE) == [
+        UrlIssue(rule_id="canonical-missing", url_id=present_id, detail=None),
         UrlIssue(rule_id="h1-missing", url_id=present_id, detail=None),
+        UrlIssue(rule_id="h2-missing", url_id=present_id, detail=None),
         UrlIssue(rule_id="http-url", url_id=present_id, detail={"status_code": 200}),
+        UrlIssue(rule_id="low-word-count", url_id=present_id, detail={"word_count": 1}),
+        UrlIssue(rule_id="meta-description-too-short", url_id=present_id, detail={"length": 7}),
+        UrlIssue(rule_id="title-too-short", url_id=present_id, detail={"length": 7}),
     ]
     assert read_url_issues(file, gone_id, _CATALOGUE) == [
         UrlIssue(rule_id="internal-4xx", url_id=gone_id, detail={"status_code": 404})
@@ -137,7 +146,11 @@ def test_live_url_issues_share_one_result_snapshot(
     ]
     assert read_url_issues(file, other_id, catalogue) == [
         *other_issues,
+        UrlIssue(rule_id="canonical-missing", url_id=other_id, detail=None),
+        UrlIssue(rule_id="h2-missing", url_id=other_id, detail=None),
         UrlIssue(rule_id="http-url", url_id=other_id, detail={"status_code": 200}),
+        UrlIssue(rule_id="low-word-count", url_id=other_id, detail={"word_count": 1}),
+        UrlIssue(rule_id="meta-description-too-short", url_id=other_id, detail={"length": 5}),
     ]
     reader_thread = threading.get_ident()
     result_statements = 0

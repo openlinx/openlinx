@@ -48,6 +48,26 @@ Titles, meta descriptions, meta keywords and headings follow one pattern:
 - **Columns.** A `_count` column counts the elements, and is 0 when there are none. The `_1` and `_2` columns hold the normalised texts of the first two, in document order, NULL when there is no such element; meta keywords keep only the first, with no count. Each `_length` column is NULL exactly when its text is.
 - **Headings** take the text of the whole element, nested elements such as `<span>` included (see [Text](#text)).
 
+## Meta description pixel width
+
+`meta_description_1_width_px` estimates the desktop snippet width of the normalised first meta
+description at 14 px. The Crawl adds the advance of each Unicode code point, scales the sum to pixels
+and rounds once to the nearest whole pixel, with halves rounded up. The estimate applies no kerning
+or shaping.
+
+Advances come from the bundled table generated from Liberation Sans Regular 2.1.5, which is
+metric-compatible with Arial. The table covers Basic Latin, Latin-1 Supplement, Latin Extended-A and
+-B, Greek and Coptic, Cyrillic and General Punctuation. [Liberation Fonts 2.1.5 release](https://github.com/liberationfonts/liberation-fonts/releases/tag/2.1.5)
+
+Code points absent from the table use Unicode 16.0.0 fallbacks.
+
+- Combining marks (Mn, Me) and format characters (Cf) add zero.
+- Other East Asian Wide and Fullwidth characters add one em (14 px).
+- All remaining characters use the advance of the digit `0`.
+
+A present but empty description has width 0. A missing description or an unanalysed Page has NULL.
+Pages stored before width measurement can also have NULL.
+
 ## Content Area
 
 `word_count`, `sentence_count` and `average_words_per_sentence` are counted over the Page's Content Area (see [CONTEXT.md](../CONTEXT.md)). The `[content_area]` table of `openlinx.toml` sets it with two lists of CSS selectors:
@@ -196,7 +216,7 @@ Page data never holds a cookie's value, only its name and attributes, since a va
 ## Columns of later releases
 
 Some columns exist from v0.1 and are NULL, never 0, until the release that measures them, so that release changes no table and a query written now keeps working. Each one's description starts with `Filled from v<major>.<minor>. `, naming that release:
-- **v0.2:** the SERP pixel widths `title_1_width_px`, `title_2_width_px`, `meta_description_1_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, a copy of the origin's.
+- **v0.2:** the SERP pixel widths `title_1_width_px`, `title_2_width_px` and `meta_description_2_width_px`; `syllable_count`, `flesch_reading_ease` and `readability`; `detected_language`; `link_score`; and `http_version`, a copy of the origin's.
 - **v0.3:** `closest_similarity_pct` and `near_duplicate_count`; `structured_data_error_count` and `structured_data_warning_count`.
 - **v1.1, with JavaScript rendering:** `js_cookie_count`, `unique_js_inlinks` and `unique_js_outlinks`, and `links.html_source`.
 

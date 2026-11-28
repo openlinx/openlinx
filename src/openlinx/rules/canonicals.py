@@ -2,6 +2,47 @@
 
 from openlinx.rules.model import Rule
 
+CANONICAL_MISSING = Rule(
+    id="canonical-missing",
+    category="canonicals",
+    issue_type="warning",
+    priority="medium",
+    applies_to="internal_pages",
+    description="An analysed Page has no canonical declaration and no noindex directive.",
+    why_it_matters="A canonical declaration tells search engines which URL you prefer to index.",
+    how_to_fix="Declare the preferred, Indexable URL, using this Page's URL if it is preferred.",
+    reproduce_sql="""\
+SELECT pages.url_id, NULL AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1
+  AND pages.canonical_count = 0
+  -- A Page already marked noindex does not need to name a preferred URL.
+  AND pages.meta_robots_noindex = 0
+  AND pages.x_robots_tag_noindex = 0""",
+)
+
+CANONICALISED = Rule(
+    id="canonicalised",
+    category="canonicals",
+    issue_type="warning",
+    priority="medium",
+    applies_to="internal_pages",
+    description="An analysed Page is Non-Indexable because it declares another URL as canonical.",
+    why_it_matters=(
+        "Search engines are directed to consider the other URL for indexing in place of this Page."
+    ),
+    how_to_fix="Confirm the preferred URL. If this Page should be indexed, make it self-canonical.",
+    reproduce_sql="""\
+SELECT pages.url_id, json_object('canonical_url', pages.canonical_url) AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1
+  -- The recorded reason already excludes self-canonicals and higher-priority reasons.
+  AND pages.indexability_status = 'canonicalised'
+  AND pages.canonical_url IS NOT NULL""",
+)
+
 CANONICAL_TO_NON_INDEXABLE = Rule(
     id="canonical-to-non-indexable",
     category="canonicals",
@@ -43,4 +84,48 @@ FROM canonical_targets
 WHERE target_reason IS NOT NULL""",
 )
 
-RULES = (CANONICAL_TO_NON_INDEXABLE,)
+CANONICAL_CONFLICTING = Rule(
+    id="canonical-conflicting",
+    category="canonicals",
+    issue_type="issue",
+    priority="high",
+    applies_to="internal_pages",
+    description="An analysed Page declares two or more conflicting canonicals.",
+    why_it_matters="Conflicting declarations make the preferred URL ambiguous for search engines.",
+    how_to_fix="Choose one preferred, Indexable URL and make the HTML and HTTP declarations agree.",
+    reproduce_sql="""\
+SELECT pages.url_id,
+       json_object('canonical_link_element_1', pages.canonical_link_element_1,
+                   'canonical_link_element_2', pages.canonical_link_element_2,
+                   'http_canonical', pages.http_canonical) AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1
+  -- Two or more declarations leave the preferred URL NULL when their targets disagree.
+  AND pages.canonical_count >= 2
+  AND pages.canonical_url IS NULL""",
+)
+
+CANONICAL_RELATIVE = Rule(
+    id="canonical-relative",
+    category="canonicals",
+    issue_type="warning",
+    priority="low",
+    applies_to="internal_pages",
+    description="An analysed Page declares a canonical using a relative URL.",
+    why_it_matters="A relative canonical can resolve to the wrong URL if the Page's base changes.",
+    how_to_fix="Use an absolute URL with the scheme and host of the preferred URL.",
+    reproduce_sql="""\
+SELECT pages.url_id, NULL AS detail
+FROM pages
+JOIN urls ON urls.id = pages.url_id
+WHERE urls.parsed = 1 AND pages.canonical_relative = 1""",
+)
+
+RULES = (
+    CANONICAL_MISSING,
+    CANONICALISED,
+    CANONICAL_TO_NON_INDEXABLE,
+    CANONICAL_CONFLICTING,
+    CANONICAL_RELATIVE,
+)

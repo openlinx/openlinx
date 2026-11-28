@@ -1,5 +1,6 @@
 """Check how the Issues reader selects a result for the Crawl State."""
 
+import asyncio
 import re
 import threading
 from dataclasses import replace
@@ -19,12 +20,13 @@ from openlinx.store.issues import (
     affected_urls_unit,
     evaluate_rule,
     issues_in,
+    materialise_issues,
     read_affected_urls,
     read_issues,
     read_url_issues,
 )
 from openlinx.store.reading import reading
-from openlinx.store.records import AffectedUrl, Issue
+from openlinx.store.records import AffectedUrl, Issue, UrlIssue
 from openlinx.store.schema import pages, rules
 from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
@@ -32,6 +34,7 @@ from tests.fixture_site.routes import Page, Site
 from tests.support.clock import FakeClock
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
+from tests.support.rules import PREVIEW_NO_ROWS, PREVIEW_RULE_IDS
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
 
@@ -228,7 +231,7 @@ def test_unknown_rule_suggests_ids_from_the_crawl(
 def test_a_rule_missing_from_the_live_catalogue_explains_how_to_reproduce_it(
     stopped_issue: tuple[Path, int],
 ) -> None:
-    file, _ = stopped_issue
+    file, url_id = stopped_issue
     assert query(file, "SELECT enabled FROM rules WHERE id = 'title-missing'") == [(1,)]
     with CrawlWriter(file, FakeClock()) as writer:
         writer.run(record_continue(read_recorded(file).config, _AT))
@@ -248,8 +251,15 @@ def test_a_rule_missing_from_the_live_catalogue_explains_how_to_reproduce_it(
         rf"(?:{running},? {cannot_evaluate}|{cannot_evaluate} (?:live|{running}))[.!]?",
         message,
     ), diagnostic.message
-    assert "reproduce_sql" in (diagnostic.hint or "")
-    assert "linx sql" in (diagnostic.hint or "")
+    hint = (diagnostic.hint or "").casefold()
+    assert not re.search(r"\blinx\s+sql\b", hint), diagnostic.hint
+    assert re.search(r"\bsqlite3\s+-readonly\b", hint), diagnostic.hint
+    assert re.search(r"\b(?:this|(?:the )?selected) crawl\b", hint), diagnostic.hint
+    assert re.search(r"\brules\b", hint), diagnostic.hint
+    assert "reproduce_sql" in hint, diagnostic.hint
+
+    [(statement,)] = query(file, "SELECT reproduce_sql FROM rules WHERE id = ?", ("title-missing",))
+    assert query(file, statement) == [(url_id, None)]
 
 
 @pytest.mark.parametrize("reader", ["issues", "rule", "url", "evaluate"])
@@ -290,6 +300,69 @@ def test_live_readers_compile_only_recorded_enabled_rules(
         assert [(row.rule_id, row.url_id) for row in read_url_issues(file, url_id, catalogue)] == [
             ("title-missing", url_id)
         ]
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "recorded_sql", "evaluable"),
+    [
+        *(
+            pytest.param(rule_id, PREVIEW_NO_ROWS, False, id=rule_id)
+            for rule_id in sorted(PREVIEW_RULE_IDS)
+        ),
+        pytest.param("h2-missing", PREVIEW_NO_ROWS + "\n", True, id="different-sql"),
+        pytest.param("another-rule", PREVIEW_NO_ROWS, True, id="different-id"),
+    ],
+)
+@pytest.mark.parametrize("reader", ["issues", "rule", "url", "evaluate", "final_pass"])
+def test_only_an_exact_preview_placeholder_stays_empty(
+    stopped_issue: tuple[Path, int], rule_id: str, recorded_sql: str, evaluable: bool, reader: str
+) -> None:
+    file, url_id = stopped_issue
+    installed = replace(TITLE_MISSING, id=rule_id)
+
+    def record_legacy_rule(connection: Connection) -> None:
+        connection.exec_driver_sql("DELETE FROM affected_urls WHERE rule_id = ?", (rule_id,))
+        connection.exec_driver_sql("DELETE FROM rules WHERE id = ?", (rule_id,))
+        connection.exec_driver_sql(
+            """INSERT INTO rules SELECT ?, category, issue_type, priority, applies_to, enabled,
+               thresholds, description, why_it_matters, how_to_fix, ? FROM rules
+               WHERE id = 'title-missing'""",
+            (rule_id, recorded_sql),
+        )
+
+    with CrawlWriter(file, FakeClock()) as writer:
+        writer.run(record_continue(read_recorded(file).config, _AT))
+        writer.run(record_legacy_rule)
+        writer.flush()
+
+    assert query(file, recorded_sql) == []
+    assert query(file, installed.reproduce_sql) == [(url_id, None)]
+    expected = [AffectedUrl(url_id=url_id, detail=None)] if evaluable else []
+    if reader == "issues":
+        issues = [replace(_ISSUE, rule_id=rule_id), _ISSUE] if evaluable else [_ISSUE]
+        assert read_issues(file, (installed, TITLE_MISSING)) == issues
+    elif reader == "rule":
+        assert read_affected_urls(file, rule_id, (installed,)) == expected
+    elif reader == "url":
+        issues_for_url = (
+            [UrlIssue(rule_id=rule_id, url_id=url_id, detail=None)] if evaluable else []
+        )
+        assert read_url_issues(file, url_id, (installed,)) == issues_for_url
+    elif reader == "evaluate":
+        assert evaluate_rule(file, installed) == expected
+    else:
+        _run_final_pass(file, installed)
+        assert query(file, "SELECT url_id FROM affected_urls WHERE rule_id = ?", (rule_id,)) == [
+            (row.url_id,) for row in expected
+        ]
+
+
+def _run_final_pass(file: Path, rule: Rule) -> None:
+    async def materialise() -> None:
+        with CrawlWriter(file, FakeClock()) as writer:
+            await materialise_issues(writer, {rule.id: affected_urls_unit(rule)})
+
+    asyncio.run(materialise())
 
 
 @pytest.mark.parametrize("stored", [False, True], ids=["live", "stored"])

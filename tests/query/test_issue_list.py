@@ -104,20 +104,30 @@ def test_issue_list_item_fields(temp_workspace: TempWorkspace) -> None:
     cwd, home = temp_workspace.root, temp_workspace.home
 
     result = issue_list(QueryRequest(cwd=cwd, home=home))
-    shown = rule_item(
-        RulesRequest(cwd=cwd, home=home, workspace=None), default_tables(), "title-missing"
-    )
+    rules_request = RulesRequest(cwd=cwd, home=home, workspace=None)
+    tables = default_tables()
 
-    assert (result.total, result.next_cursor) == (1, None)
+    assert (result.total, result.next_cursor) == (9, None)
     assert result.items == [
         {
-            "rule_id": "title-missing",
-            "category": "titles",
-            "issue_type": "issue",
-            "priority": "high",
-            "affected_count": 4,
-            "description": shown["description"],
-        },
+            "rule_id": rule_id,
+            "category": category,
+            "issue_type": issue_type,
+            "priority": priority,
+            "affected_count": count,
+            "description": rule_item(rules_request, tables, rule_id)["description"],
+        }
+        for rule_id, category, issue_type, priority, count in [
+            ("title-missing", "titles", "issue", "high", 4),
+            ("exact-duplicate", "content", "issue", "medium", 4),
+            ("canonical-missing", "canonicals", "warning", "medium", 5),
+            ("low-word-count", "content", "opportunity", "medium", 5),
+            ("meta-description-too-short", "meta_descriptions", "opportunity", "low", 5),
+            ("h1-duplicate", "headings", "opportunity", "low", 4),
+            ("meta-description-duplicate", "meta_descriptions", "opportunity", "low", 4),
+            ("title-same-as-h1", "titles", "opportunity", "low", 1),
+            ("title-too-short", "titles", "opportunity", "low", 1),
+        ]
     ]
 
 
@@ -133,7 +143,12 @@ def test_issues_of_a_running_crawl_are_computed_live(temp_workspace: TempWorkspa
     result = issue_list(QueryRequest(cwd=temp_workspace.root, home=temp_workspace.home))
 
     assert [(item["rule_id"], item["affected_count"]) for item in result.items] == [
-        ("title-missing", 1)
+        ("title-missing", 1),
+        ("canonical-missing", 2),
+        ("low-word-count", 2),
+        ("meta-description-too-short", 2),
+        ("title-same-as-h1", 1),
+        ("title-too-short", 1),
     ]
 
 

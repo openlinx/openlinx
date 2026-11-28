@@ -22,6 +22,7 @@ from openlinx.extract.head_metadata import (
     titles,
 )
 from openlinx.extract.headings import headings
+from openlinx.extract.serp_widths import meta_description_width_px
 from openlinx.extract.structured_data import structured_data
 
 
@@ -33,6 +34,7 @@ class PageData(msgspec.Struct, frozen=True, kw_only=True):
     title_count: int
     meta_description_1: str | None
     meta_description_1_length: int | None
+    meta_description_1_width_px: int | None
     meta_description_2: str | None
     meta_description_2_length: int | None
     meta_description_count: int
@@ -85,6 +87,7 @@ def extract_page_data(tree: LexborHTMLParser, page: PageInput, config: ContentAr
         title_count=len(title_texts),
         meta_description_1=description_1,
         meta_description_1_length=description_1_length,
+        meta_description_1_width_px=meta_description_width_px(description_1),
         meta_description_2=description_2,
         meta_description_2_length=description_2_length,
         meta_description_count=len(descriptions),

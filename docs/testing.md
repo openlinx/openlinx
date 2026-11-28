@@ -71,6 +71,10 @@ does not add it to the direct test seams.
 | `tests/js/` | 9, the Report script |
 | `tests/` | the repository's own guards: dependencies, naming, line endings, docs links, isolation |
 
+The [URL Rule tests](../tests/rules/test_urls.py) rerun the saved queries in plain SQLite.
+The [image Rule tests](../tests/rules/test_images.py) exercise Link measurement, Resource
+requests and Store write failures using the fixture site.
+
 The ALPN capability-probe tests in [tests/crawl/alpn/](../tests/crawl/alpn/)
 cover admission, deadlines, lifecycle and system DNS, plus the
 [capability recorded for an origin](../tests/crawl/alpn/test_capability.py)

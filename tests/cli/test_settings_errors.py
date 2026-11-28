@@ -6,6 +6,7 @@ import pytest
 
 from tests.support.app import example_app
 from tests.support.cli import run_cli
+from tests.support.settings import UNKNOWN_SETTING_REASON, assert_setting_problem
 from tests.support.workspace import TempWorkspace
 
 
@@ -162,7 +163,7 @@ crawl.max_urls = -1
     assert (result.exit_code, error["code"]) == (3, "settings_invalid")
     assert [problem["key"] for problem in error["details"]["errors"]] == [
         "crawl.concurrency",
-        "crawl.header",
+        '"crawl.header"',
         "store.journal_mode",
         "crawl.header.0",
         "unknown",
@@ -283,36 +284,58 @@ def test_toml_syntax_error_after_an_overflowing_threshold(
         assert (problem["key"], problem["line"]) == (None, line)
 
 
-def test_preview_and_active_rule_errors_keep_toml_order(temp_workspace: TempWorkspace) -> None:
+@pytest.mark.parametrize(
+    ("settings", "keys"),
+    [
+        pytest.param(
+            (
+                "rules.title-missing.enabled = 1",
+                "rules.h2-missing.unknown = true",
+                "rules.h1-missing.max_chars = 10",
+            ),
+            [
+                "rules.title-missing.enabled",
+                "rules.h2-missing.unknown",
+                "rules.h1-missing.max_chars",
+            ],
+            id="unknown-h2-key",
+        ),
+        pytest.param(
+            (
+                "rules.title-missing.enabled = 1",
+                "rules.low-word-count.enabled = 1",
+                "rules.h1-missing.max_chars = 10",
+                f"rules.title-too-long.max_chars = {10**4300:#x}",
+                "rules.title-to-long.max_chars = 10",
+            ),
+            [
+                "rules.title-missing.enabled",
+                "rules.low-word-count.enabled",
+                "rules.h1-missing.max_chars",
+                "rules.title-too-long.max_chars",
+                "rules.title-to-long",
+            ],
+            id="mixed-validation",
+        ),
+    ],
+)
+def test_invalid_rule_settings_keep_toml_order(
+    temp_workspace: TempWorkspace, settings: tuple[str, ...], keys: list[str]
+) -> None:
     settings_file = temp_workspace.root / "openlinx.toml"
-    source = (
-        "rules.title-missing.enabled = 1\n"
-        "rules.low-word-count.enabled = false\n"
-        "rules.h1-missing.max_chars = 10\n"
-        f"rules.title-too-long.max_chars = {10**4300:#x}\n"
-        "rules.title-to-long.max_chars = 10\n"
-    )
-    settings_file.write_text(source, encoding="utf-8")
-    both = run_cli("rules", "list")
-    settings_file.write_text(
-        source.replace("rules.low-word-count.enabled = false\n", ""), encoding="utf-8"
-    )
-    active = run_cli("rules", "list")
+    settings_file.write_text("\n".join(settings) + "\n", encoding="utf-8")
+    full = run_cli("rules", "list")
+    settings_file.write_text("\n".join((settings[0], *settings[2:])) + "\n", encoding="utf-8")
+    without_middle = run_cli("rules", "list")
 
-    assert both.exit_code == active.exit_code == 3
-    (error,) = both.errors()
+    assert full.exit_code == without_middle.exit_code == 3
+    (error,) = full.errors()
     assert error["code"] == "settings_invalid"
     errors = error["details"]["errors"]
-    assert [problem["key"] for problem in errors] == [
-        "rules.title-missing.enabled",
-        "rules.low-word-count.enabled",
-        "rules.h1-missing.max_chars",
-        "rules.title-too-long.max_chars",
-        "rules.title-to-long",
-    ]
-    (active_error,) = active.errors()
-    assert errors[:1] + errors[2:] == active_error["details"]["errors"]
-    assert error["hint"] == active_error["hint"]
+    assert [problem["key"] for problem in errors] == keys
+    (other_error,) = without_middle.errors()
+    assert errors[:1] + errors[2:] == other_error["details"]["errors"]
+    assert error["hint"] == other_error["hint"]
 
 
 @pytest.mark.parametrize(
@@ -320,23 +343,23 @@ def test_preview_and_active_rule_errors_keep_toml_order(temp_workspace: TempWork
     [
         pytest.param(
             '[rules.low-word-count]\n"min.words" = 30\nmin.words = 31\n',
-            ['rules.low-word-count."min.words"', "rules.low-word-count.min.words"],
+            ['rules.low-word-count."min.words"', "rules.low-word-count.min"],
             id="literal-dot-and-dotted-key",
         ),
         pytest.param(
-            r"""rules.low-word-count = { nested = { "min\u002Ewords" = 30, '' = 31, """
-            r"""'with space' = 32, "say\"\\\u007F😀" = 33 } }""",
+            r"""rules.low-word-count = { "min\u002Ewords" = 30, '' = 31, """
+            r"""'with space' = 32, "say\"\\\u007F😀" = 33 }""",
             [
-                'rules.low-word-count.nested."min.words"',
-                'rules.low-word-count.nested.""',
-                'rules.low-word-count.nested."with space"',
-                r'rules.low-word-count.nested."say\"\\\u007f😀"',
+                'rules.low-word-count."min.words"',
+                'rules.low-word-count.""',
+                'rules.low-word-count."with space"',
+                r'rules.low-word-count."say\"\\\u007f😀"',
             ],
-            id="nested-inline-keys",
+            id="inline-keys",
         ),
     ],
 )
-def test_preview_error_paths_identify_exact_toml_keys(
+def test_rule_error_paths_identify_exact_toml_keys(
     temp_workspace: TempWorkspace, source: str, keys: list[str]
 ) -> None:
     settings_file = temp_workspace.root / "openlinx.toml"
@@ -347,16 +370,11 @@ def test_preview_error_paths_identify_exact_toml_keys(
     (error,) = result.errors()
     assert (result.exit_code, error["code"]) == (3, "settings_invalid")
     assert error["details"]["file"] == str(settings_file)
-    assert error["details"]["errors"] == [
-        {
-            "key": key,
-            "message": f"Remove {key} from the settings file. This Rule is deferred to v0.2.",
-        }
-        for key in keys
-    ]
+    for problem, key in zip(error["details"]["errors"], keys, strict=True):
+        assert_setting_problem(problem, key, UNKNOWN_SETTING_REASON)
 
 
-def test_deeply_nested_preview_setting_returns_its_full_path(
+def test_deeply_nested_rule_setting_reports_the_first_unknown_key(
     temp_workspace: TempWorkspace,
 ) -> None:
     key = "rules.low-word-count." + "nested." * 980 + '"literal.dot"'
@@ -370,10 +388,5 @@ def test_deeply_nested_preview_setting_returns_its_full_path(
     (error,) = result.errors()
     assert (result.exit_code, error["code"]) == (3, "settings_invalid")
     assert error["details"]["file"] == str(settings_file)
-    assert error["details"]["errors"] == [
-        {
-            "key": path,
-            "message": f"Remove {path} from the settings file. This Rule is deferred to v0.2.",
-        }
-        for path in (key, "rules.low-word-count.enabled")
-    ]
+    (problem,) = error["details"]["errors"]
+    assert_setting_problem(problem, "rules.low-word-count.nested", UNKNOWN_SETTING_REASON)

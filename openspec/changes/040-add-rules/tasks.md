@@ -13,9 +13,9 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **Order against `020` and `030`:** the slice starts once `020`'s first pull request (its groups 1–6: `urls` with `is_internal`, `in_scope`, `fetch_state`, `status_code`, `fetch_error`, `parsed` and `parse_error`) and `030`'s slice (its groups 1–3: `pages` with the title and heading columns) are on main. A Rule whose columns come later (`020`'s `blocked_by_robots_txt` in task 10.5; `022`-min's redirect and size columns; `030`'s Indexability, canonical, directive, link and content columns) joins the v0.1 catalogue when its own task delivers an executable query. Each task names its dependencies where they are not obvious.
 
-**Release scope.** v0.1 ships the [15 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Work on the other 27 is the first Rules priority immediately after release, within the existing ROADMAP milestones. Plan their Rule-specific work in 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9 for v0.2. The pixel threshold for `title-too-long` also waits for v0.2. For shared behaviour, use a v0.1 Rule to exercise snapshots, disabling, empty Issue results and resume. Keep the examples that depend on a deferred Rule, including the image Resource example in 10.4, for the post-release plan. Each group's documentation and review cover the Rules in that release.
+**Release scope.** v0.1 ships all [42 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Rule-specific work includes 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9. In 6.2 verify the first meta description's pixel width from 030 as well as the character limit. The additional pixel threshold for `title-too-long` belongs to v0.2.
 
-**Implemented v0.1 Rules through group 8.** The CLI, generated Workspace settings and new Crawl snapshots include exactly the 15 Rules with executable evaluation queries. Each Rule accepts `enabled`, defaulting to `true`. Group 3 added the configuration snapshot, public reproducing queries and the live and stored Issues paths.
+**Initial integration.** The first 15 Rules established the configuration snapshot, public reproducing queries and live and stored Issues paths.
 
 ## 1. Rule model and the rules Command (slice)
 
@@ -38,7 +38,8 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 2.6 Docs: add `[rules.<id>]` examples to `docs/rules.md`: raising a limit, disabling a Rule, and the error for a misspelt id. Document `enabled` in the Command output.
 - [x] 2.7 Drive “Largest supported threshold” and “First threshold above the limit” at seam 1 using decimal and hexadecimal TOML integers. Check exact JSON at 4300 digits and the keyed `settings_invalid` diagnostic at 4301 on Workspace load, including zero fixture requests on Crawl. Document the limit in `docs/rules.md`. Review group 2's commits with the code-review skill and run the whole suite on the final composition.
 
-- [x] 2.8 Enforce the exact v0.1 catalogue on the CLI, generated settings and new Crawl snapshots. Accept only empty tables from the three preview Rules and reject explicit settings before HTTP at seam 1. Check at seams 2 and 3+6 that Continue retains a preview snapshot and applies an installed Rule with its recorded threshold.
+- [x] 2.8 Check the initial 15-Rule catalogue, empty preview settings and preservation of the configuration recorded in earlier Crawls.
+- [x] 2.9 Accept valid settings for the three formerly preview Rules. Verify all 42 ids in the CLI, Workspace template and new Crawl. Check continued preview Crawls against their original snapshot.
 
 ## 3. Rules as queries, stored Issues and live Issues (slice)
 
@@ -57,7 +58,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.13 Drive "Issue visible before the Crawl ends" at seam 3+6, with a fixture page that delays its response by 5 s: the Issues reader and its live path (design D16).
 - [x] 3.14 Drive "A Crawl without a final pass is read live" at seam 2: the path chosen by the Crawl State.
 - [x] 3.15 Drive "Live and materialised Issues agree" at seam 3+6.
-- [ ] 3.16 Drive "Missing H2" at seam 2, over `030`'s `h2_count` and `h2_1`, after `030` task 3.4.
+- [x] 3.16 Drive "Missing H2" at seam 2, over `030`'s `h2_count` and `h2_1`, after `030` task 3.4.
 - [x] 3.17 Drive "Disabled Rule produces no Issue" at seam 3+6.
 - [x] 3.18 Drive "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2).
 - [x] 3.19 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` from the Command output over a crawl file, and when Issues are live or materialised.
@@ -72,7 +73,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
 - [x] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
 - [x] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1` (after `030` task 3.4), and register `h1-missing`.
-- [ ] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
+- [x] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
 - [ ] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Title Rules and the post-crawl pass
@@ -81,29 +82,29 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 5.2 Drive "Title at the limit" at seam 2.
 - [x] 5.3 Drive "Raised title limit" at seam 2. The query reads the effective threshold from the Crawl's recorded Rule (design D15).
 - [x] 5.4 Drive "Detail is stored as JSON" at seam 3+6, with the fixture Page `/long-title`.
-- [ ] 5.5 Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
-- [ ] 5.6 Drive "Multiple titles" at seam 2, and register `title-multiple`.
+- [x] 5.5 Drive "Title too short" and "Title at the minimum" at seam 2. This is a trivial pair: one boundary. Register `title-too-short`.
+- [x] 5.6 Drive "Multiple titles" at seam 2, and register `title-multiple`.
 - [x] 5.7 Drive "Rule that did not fire has no Issue" at seam 3+6.
-- [ ] 5.8 Drive "Title equals H1" and "Comparison with H1 is case-sensitive" at seam 2. This is a trivial pair: the same comparison. Register `title-same-as-h1`.
+- [x] 5.8 Drive "Title equals H1" and "Comparison with H1 is case-sensitive" at seam 2. This is a trivial pair: the same comparison. Register `title-same-as-h1`.
 - [x] 5.9 Drive "Duplicate titles among Indexable Pages" at seam 2, and register `title-duplicate`.
 - [x] 5.10 Drive "Non-indexable Pages are not compared" at seam 2.
 - [x] 5.11 Drive "Duplicates found by the post-crawl passes" at seam 3+6, with the pass after `030`'s link counts.
 - [x] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
 - [x] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
-- [ ] 5.14 Docs: add the other 5 title Rules (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1.
+- [x] 5.14 Docs: add the other 5 title Rules (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1.
 - [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Meta description and heading Rules
 
 - [x] 6.1 Drive "Missing meta description" at seam 2, and register `meta-description-missing`.
-- [ ] 6.2 Drive "Meta description too long" and "Meta description at both limits" at seam 2. This is a trivial pair: one boundary. Register `meta-description-too-long`.
-- [ ] 6.3 Drive "Meta description too short" at seam 2, and register `meta-description-too-short`.
-- [ ] 6.4 Drive "Multiple meta descriptions" at seam 2, and register `meta-description-multiple`.
-- [ ] 6.5 Drive "Duplicate meta descriptions" at seam 2, and register `meta-description-duplicate`.
-- [ ] 6.6 Drive "Multiple H1" at seam 2, and register `h1-multiple`.
-- [ ] 6.7 Drive "H1 too long" and "H1 at the limit" at seam 2. This is a trivial pair: one boundary. Register `h1-too-long`.
-- [ ] 6.8 Drive "Duplicate H1" at seam 2, and register `h1-duplicate`.
-- [ ] 6.9 Docs: add the 5 meta description Rules and the other 4 heading Rules to the catalogue in `docs/rules.md`.
+- [x] 6.2 Drive "Meta description too long" and "Meta description at both limits" at seam 2. This is a trivial pair: one boundary. Register `meta-description-too-long`.
+- [x] 6.3 Drive "Meta description too short" at seam 2, and register `meta-description-too-short`.
+- [x] 6.4 Drive "Multiple meta descriptions raise an Issue" at seam 2, and register `meta-description-multiple`.
+- [x] 6.5 Drive "Duplicate meta descriptions" at seam 2, and register `meta-description-duplicate`.
+- [x] 6.6 Drive "Multiple H1" at seam 2, and register `h1-multiple`.
+- [x] 6.7 Drive "H1 too long" and "H1 at the limit" at seam 2. This is a trivial pair: one boundary. Register `h1-too-long`.
+- [x] 6.8 Drive "Duplicate H1" at seam 2, and register `h1-duplicate`.
+- [x] 6.9 Docs: add the 5 meta description Rules and the other 4 heading Rules to the catalogue in `docs/rules.md`.
 - [ ] 6.10 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Response code and security Rules
@@ -118,40 +119,40 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 ## 8. Canonical and directive Rules
 
-- [ ] 8.1 Drive "Missing canonical" and "Noindex Page needs no canonical" at seam 2. This is a trivial pair. Register `canonical-missing`.
-- [ ] 8.2 Drive "Canonicalised Page" at seam 2, and register `canonicalised`.
-- [ ] 8.3 Drive "Relative canonical" at seam 2, and register `canonical-relative`.
-- [ ] 8.4 Drive "Conflicting canonicals" and "Agreeing canonicals" at seam 2. This is a trivial pair. Register `canonical-conflicting`.
+- [x] 8.1 Drive "Missing canonical" and "Noindex Page needs no canonical" at seam 2. This is a trivial pair. Register `canonical-missing`.
+- [x] 8.2 Drive "Canonicalised Page" at seam 2, and register `canonicalised`.
+- [x] 8.3 Drive "Relative canonical" at seam 2, and register `canonical-relative`.
+- [x] 8.4 Drive "Conflicting canonicals" and "Agreeing canonicals" at seam 2. This is a trivial pair. Register `canonical-conflicting`.
 - [x] 8.5 Drive "Canonical to a redirect" at seam 2, with the target's Indexability in the Rule's reproducing query (design D13). Register `canonical-to-non-indexable`.
 - [x] 8.6 Drive "Canonical to a noindex Page" at seam 2.
 - [x] 8.7 Drive "Canonical to a URL without a response", "Canonical target robots.txt preflight fails" and "Canonical target response could not be recorded" at seams 2 and 3+6. Check the registered and recorded SQL against actual Crawl outcomes.
 - [x] 8.8 Drive "Canonical to an indexable Page" and "Canonical to a non-HTML 200 response" at seam 2. This is a trivial pair: both targets count as indexable.
 - [x] 8.9 Drive "Canonical target never requested" at seam 2.
 - [x] 8.10 Drive "Noindex from X-Robots-Tag only" and "Noindex from both sources" at seam 2. This is a trivial pair: `detail.sources`. Register `noindex`.
-- [ ] 8.11 Drive "Nofollow from meta robots" at seam 2, and register `nofollow`.
-- [ ] 8.12 Drive "Meta refresh used" at seam 2, and register `meta-refresh`.
-- [x] 8.13 Docs: add the canonical and directive Rules for the current release to `docs/rules.md`. For v0.1, check “Catalogue size” and “Rule ids are unique kebab-case” at seam 1 for coverage of the 15 ROADMAP ids and uniqueness across all registrations.
+- [x] 8.11 Drive "Nofollow from meta robots" at seam 2, and register `nofollow`.
+- [x] 8.12 Drive "Meta refresh used" at seam 2, and register `meta-refresh`.
+- [x] 8.13 Docs: add the canonical and directive Rules for the current release to `docs/rules.md`. For v0.1, check “Catalogue size” and “Rule ids are unique kebab-case” at seam 1 for coverage of the initial 15 ids and uniqueness across all registrations.
 - [x] 8.14 Review: run the code-review skill on group 8's commits, then refactor with the whole suite green.
 
 ## 9. Content, URL and image Rules
 
-- [ ] 9.1 Drive "Thin Page" and "Word count at the minimum" at seam 2. This is a trivial pair: one boundary.
-- [ ] 9.2 Drive "Thin noindex Page is ignored" at seam 2.
-- [ ] 9.3 Drive "Exact Duplicates" at seam 2, and register `exact-duplicate`.
-- [ ] 9.4 Drive "Pages without a hash are not duplicates" at seam 2.
-- [ ] 9.5 Drive "Uppercase letters in the path" and "Uppercase percent escapes are ignored" at seam 2. This is a trivial pair. Register `url-uppercase`.
-- [ ] 9.6 Drive "Underscore in the path" and "Underscore only in the query" at seam 2. This is a trivial pair. Register `url-underscores`.
-- [ ] 9.7 Drive "Parameters" at seam 2.
-- [ ] 9.8 Drive "URL too long" and "URL at the limit" at seam 2. This is a trivial pair: one boundary. Register `url-too-long`.
-- [ ] 9.9 Drive "Non-ASCII path" and "Non-ASCII host only" at seam 2. This is a trivial pair. Register `url-non-ascii`.
-- [ ] 9.10 Drive "Images without alt text" at seam 2, and register `image-missing-alt-text`.
-- [ ] 9.11 Drive "Srcset candidates are not counted twice" at seam 2.
-- [ ] 9.12 Drive "All images described" at seam 2.
-- [ ] 9.13 Drive "Image over the size limit" and "Image at the size limit" at seam 2. This is a trivial pair: one boundary. Register `image-too-large`.
-- [ ] 9.14 Drive "Broken external image" at seam 2 by registering `image-broken`, the 42nd Rule. In the same red step, check "Full catalogue size after v0.1" and "Rule ids are unique kebab-case" at seam 1 against the full 42-Rule catalogue.
-- [ ] 9.15 Drive "An image that failed to be recorded is not broken" at seam 2, with the reason in the query's SQL comment.
-- [ ] 9.16 Docs: add the 2 content Rules, 5 URL Rules and 3 image Rules to the catalogue in `docs/rules.md`, and check that the catalogue lists exactly the 42 ids that `linx rules list` returns.
-- [ ] 9.17 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
+- [x] 9.1 Drive "Thin Page" and "Word count at the minimum" at seam 2. This is a trivial pair: one boundary.
+- [x] 9.2 Drive "Thin noindex Page is ignored" at seam 2.
+- [x] 9.3 Drive "Exact Duplicates" at seam 2, and register `exact-duplicate`.
+- [x] 9.4 Drive "Pages without a hash are not duplicates" at seam 2.
+- [x] 9.5 Drive "Uppercase letters in the path" and "Uppercase percent escapes are ignored" at seam 2. This is a trivial pair. Register `url-uppercase`.
+- [x] 9.6 Drive "Underscore in the path" and "Underscore only in the query" at seam 2. This is a trivial pair. Register `url-underscores`.
+- [x] 9.7 Drive "Parameters" at seam 2.
+- [x] 9.8 Drive "URL too long" and "URL at the limit" at seam 2. This is a trivial pair: one boundary. Register `url-too-long`.
+- [x] 9.9 Drive "Non-ASCII path" and "Non-ASCII host only" at seam 2. This is a trivial pair. Register `url-non-ascii`.
+- [x] 9.10 Drive "Images without alt text" at seam 2, and register `image-missing-alt-text`.
+- [x] 9.11 Drive "Srcset candidates are not counted twice" at seam 2.
+- [x] 9.12 Drive "All images described" at seam 2.
+- [x] 9.13 Drive "Image over the size limit" and "Image at the size limit" at seam 2. This is a trivial pair: one boundary. Register `image-too-large`.
+- [x] 9.14 Drive "Broken external image" at seam 2 by registering `image-broken`, the 42nd Rule. In the same red step, check "Catalogue size" and "Rule ids are unique kebab-case" at seam 1 against the full 42-Rule catalogue.
+- [x] 9.15 Drive "An image that failed to be recorded is not broken" at seam 2, with the reason in the query's SQL comment.
+- [x] 9.16 Docs: add the 2 content Rules, 5 URL Rules and 3 image Rules to the catalogue in `docs/rules.md`, and check that the catalogue lists exactly the 42 ids that `linx rules list` returns.
+- [x] 9.17 Review: run the code-review skill on group 9's commits, then refactor with the whole suite green.
 
 ## 10. Health Score and per-Crawl configuration
 

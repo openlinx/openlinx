@@ -32,7 +32,15 @@ from openlinx.store.records import (
     RecordedScope,
     StopReason,
 )
-from openlinx.store.schema import SCHEMA_VERSION, affected_urls, crawl, metadata, rules, seeds
+from openlinx.store.schema import (
+    SCHEMA_VERSION,
+    affected_urls,
+    crawl,
+    issues,
+    metadata,
+    rules,
+    seeds,
+)
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import requeue_for_a_continue
 from openlinx.workspace.creation import as_workspace_not_writable, create_data_folder
@@ -120,7 +128,7 @@ def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedC
         ).one()
         if selected is not None:
             check_crawl_id(selected.path, selected.id, row.id)
-        check_rule_tables(connection, path)
+        check_rule_schema(connection, path)
         urls: list[str] = list(
             connection.execute(select(seeds.c.url).order_by(seeds.c.position)).scalars()
         )
@@ -134,19 +142,27 @@ def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedC
         )
 
 
-def check_rule_tables(connection: Connection, path: Path) -> None:
-    """Refuse pre-Rules Crawl files, which also recorded schema version 1."""
-    names = (rules.name, affected_urls.name)
+def check_rule_schema(connection: Connection, path: Path) -> None:
+    """Refuse Crawl files missing the Rule tables or the stored Issues view."""
+    table_names = (rules.name, affected_urls.name)
     present: set[str] = set(
         connection.exec_driver_sql(
-            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name IN (?, ?)", names
+            "SELECT name FROM sqlite_schema WHERE (type = 'table' AND name IN (?, ?))"
+            " OR (type = 'view' AND name = ?)",
+            (*table_names, issues.name),
         ).scalars()
     )
-    missing = ", ".join(name for name in names if name not in present)
+    missing_tables = ", ".join(name for name in table_names if name not in present)
+    missing = []
+    if missing_tables:
+        missing.append(f"required Rule tables: {missing_tables}")
+    if issues.name not in present:
+        missing.append(f"required Rule view: {issues.name}")
     if missing:
+        objects = " and ".join(missing)
         raise OpenLinxError(
             CRAWL_FILE_INVALID,
-            f"The crawl file {path} is missing required Rule tables: {missing}.",
+            f"The crawl file {path} is missing {objects}.",
             hint="Crawl again with this tool to record Rules and their Affected URLs.",
             details={"file": str(path)},
         )

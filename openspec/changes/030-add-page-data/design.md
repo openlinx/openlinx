@@ -19,7 +19,7 @@ The motivation is in proposal.md. The exact column definitions are in `specs/pag
   - `response_headers`, where cookie values are stored as `***`
   - the gzip fixture support
 - **`026-add-parse-pool`:** page preparation runs in its process pool in v0.1, so this change's extractor must stay a pure, module-level function of its input, with a msgspec result that crosses the process boundary.
-- **v0.1 scope (ROADMAP.md):** syllables and readability (D8), SERP pixel widths (D9), raw HTML storage (D11) and language detection (D12) arrive in v0.2. Their columns, and the `page_sources` table, exist in v0.1 and stay NULL or empty (ADR-0005), so v0.2 changes no table.
+- **v0.1 scope (ROADMAP.md):** the first meta description's pixel width (D9) is available in v0.1 for Rules. Syllables and readability (D8), the other three pixel widths (D9), raw HTML storage (D11) and language detection (D12) arrive in v0.2. Their columns, and the `page_sources` table, exist in v0.1 and stay NULL or empty (ADR-0005), so v0.2 changes no table.
 - **Scale target:** about 500k URLs and tens of millions of Link rows in one SQLite file ([ADR-0003](../../../docs/adr/0003-sqlalchemy-core-not-orm.md)).
 
 ## Goals / Non-Goals
@@ -116,12 +116,14 @@ Indexability is stored only for Pages. `040`'s `canonical-to-non-indexable` Rule
   - *Alternatives:* pyphen, which counts hyphenation points (not syllables, and it skips short words) and uses LGPL/MPL dictionaries; and CMUdict, which covers English only and is large. Both rejected.
 - **Readability languages** (v0.2). Spanish uses Szigriszt-Pazos (1993), because Fernández Huerta's (1959) published form is widely misquoted. Italian is left out until the Flesch–Vacca coefficients are verified, since two versions are in circulation.
 
-### D9. SERP pixel widths (v0.2)
-**In short:** pixel widths come from a generated Liberation Sans width table at Google's desktop font sizes, never from the fonts installed.
-- **Data.** Widths come from a generated table of advance widths taken from **Liberation Sans Regular** (SIL OFL 1.1), which is metric-compatible with Arial. We avoid redistributing data taken from Arial's proprietary font files. The table ships as package data with the OFL notice.
-- **Coverage.** Basic Latin, Latin-1, Latin Extended-A/B, Greek, Cyrillic and General Punctuation. Other characters use the fallback rules in the spec.
-- **Font sizes.** 20 px for titles and 14 px for descriptions, the sizes Google uses on desktop results. The 561 px and 985 px limits are thresholds of `040`.
-- *Alternative: measure text with a font engine (Pillow/FreeType).* Rejected. It adds a native dependency and makes results depend on the fonts installed.
+### D9. SERP pixel widths
+**In short:** the first meta description's pixel width comes from bundled Liberation Sans Regular advances at 14 px.
+
+- **Data.** `scripts/serp_widths.py` generates the advances from the official Liberation Sans Regular 2.1.5 release. Its metrics are compatible with Arial. The package bundles the table and its SIL Open Font License 1.1 notice.
+- **Coverage.** The table includes mapped code points in Basic Latin, Latin-1 Supplement, Latin Extended-A and -B, Greek and Coptic, Cyrillic and General Punctuation. A second generated table pins the fallback properties to Unicode 16.0.0, as in D8, so the estimate stays the same across supported Python versions.
+- **Placement.** The Page extractor computes `meta_description_1_width_px` from the same normalised string it stores. The Page handler carries it through the existing Page row and writer unit.
+- **Release scope.** v0.1 measures the first meta description at 14 px. The second meta description (14 px) and the two titles (20 px) follow in v0.2. `040` owns the Rule thresholds.
+- *Alternative: measure text with a font engine (Pillow/FreeType).* Rejected because it adds a native dependency and can make results depend on installed fonts.
 
 ### D10. Exact Duplicate hash
 **In short:** `content_hash` is the SHA-256 of the normalised Content Area text as UTF-8, with no Unicode normalisation, and NULL for a Page without words.
@@ -179,7 +181,9 @@ Each column and table is added in the TDD slice whose scenario first needs it, w
 ### D17. Every column a Rule reads is stored
 **In short:** a v0.1 Rule reads only columns that this change stores.
 
-`040`'s Rules are only SQL queries over stored columns, so a value a Rule needs must be a column of this change. The v0.1 Rules read `title_count`, `title_1`, `title_1_length`, `meta_description_count`, `meta_description_1`, `h1_count`, `h1_1`, `meta_robots_noindex`, `x_robots_tag_noindex`, `canonical_url`, `indexability` and `indexability_status`, all v0.1 columns; `canonical-to-non-indexable` also reads the target's `urls` row when the target is not a Page (D3). The v0.2 Rules also read the pixel widths, `word_count`, `content_hash`, `url_encoded_address`, and `links.element`, `attribute` and `alt_text`. The URL Rules (v0.2) read `url_path` and `url_query`, the path and query of `address`, stored as W columns because agents' SQL filters on them too. Cut from `address`, they hold non-ASCII characters decoded, which `urls.url` holds only as `%XX` escapes.
+`040` evaluates Rules using stored values from `pages`, `links` and `urls`. Page inputs include `title_count`, `title_1`, `title_1_length`, `meta_description_count`, `meta_description_1`, `meta_description_1_length`, `meta_description_1_width_px`, `h1_count`, `h1_1`, `meta_robots_noindex`, `x_robots_tag_noindex`, `canonical_url`, `indexability`, `indexability_status`, `word_count`, `content_hash` and `url_encoded_address`. Link inputs include `links.element`, `attribute` and `alt_text`. The title length Rule uses character counts in v0.1. D9 covers the remaining pixel widths.
+
+`canonical-to-non-indexable` also reads the target's `urls` row when the target is not a Page (D3). The URL Rules read `url_path` and `url_query`, the path and query of `address`, stored as W columns so agents can filter on them too. They hold decoded non-ASCII characters that `urls.url` holds as `%XX` escapes.
 
 ### D18. Crawl Depth is the crawl engine's
 **In short:** `crawl_depth` in `pages` is the depth that the crawl engine records in `urls`; no post-crawl pass recomputes it.

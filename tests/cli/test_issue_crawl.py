@@ -86,3 +86,39 @@ def test_issues_of_a_fixture_crawl_on_every_os(
         ("GET", "/e2e/notitle"),
         ("GET", "/robots.txt"),
     ]
+
+
+def test_description_pixel_limit_in_a_new_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    # Fullwidth characters occupy one em at the 14 px description font size.
+    below = "日" * 70
+    above = "日" * 71
+    site = fixture_site(
+        Site(
+            routes={
+                "/width/": Page(
+                    body=f'<meta name="description" content="{below}"><a href="wide">Wide</a>'
+                ),
+                "/width/wide": Page(body=f'<meta name="description" content="{above}">'),
+            }
+        )
+    )
+    options = ("--workspace", str(temp_workspace.root))
+    assert run_cli("init", *options).exit_code == 0
+    crawl = run_cli("crawl", site.url("/width/"), *options)
+    assert crawl.exit_code == 0, crawl.stderr
+    result = crawl.json()
+    assert (result["state"], result["pages"]) == ("completed", 2)
+
+    detail = run_cli("issues", "meta-description-too-long", *options)
+    assert detail.exit_code == 0, detail.stderr
+    issue = detail.json()
+    assert issue["total"] == 1
+    assert issue["items"] == [
+        {"url": site.url("/width/wide"), "detail": {"length": 71, "width_px": 994}},
+    ]
+    assert query(
+        Path(result["crawl_file"]),
+        "SELECT meta_description_1_length, meta_description_1_width_px FROM pages ORDER BY address",
+    ) == [(70, 980), (71, 994)]

@@ -13,11 +13,11 @@ import pytest
 from openlinx.store.connections import connect
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
-from tests.support.cli import CLI_PROCESS_TIMEOUT, run_cli
+from tests.support.cli import CLI_PROCESS_TIMEOUT, REPO_ROOT, run_cli
 from tests.support.crawling import crawled
 from tests.support.crawls import query
 from tests.support.processes import console_process, python_command
-from tests.support.rules import V01_RULE_IDS
+from tests.support.rules import PREVIEW_NO_ROWS, V01_RULE_IDS
 from tests.support.workspace import TempWorkspace
 
 GUIDANCE = ("description", "why_it_matters", "how_to_fix")
@@ -62,9 +62,24 @@ def test_catalogue_size(temp_workspace: TempWorkspace) -> None:
 
     assert result.exit_code == 0, result.stderr
     page = result.json()
-    assert page["total"] == len(page["items"]) == 15
+    assert page["total"] == len(page["items"]) == 42
     assert {item["id"] for item in page["items"]} == V01_RULE_IDS
     assert [item["id"] for item in page["items"] if item["enabled"] is not True] == []
+    assert not any(item["reproduce_sql"].strip() == PREVIEW_NO_ROWS for item in page["items"])
+
+
+def test_roadmap_names_the_exact_v01_rule_catalogue() -> None:
+    roadmap = (REPO_ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    section = roadmap.split("### The v0.1 Rules\n", 1)[1].split("\n### ", 1)[0]
+    names = [
+        rule_id
+        for line in section.splitlines()
+        if line.startswith("|")
+        for rule_id in re.findall(r"`([a-z0-9]+(?:-[a-z0-9]+)*)`", line.split("|")[2])
+    ]
+
+    assert len(names) == 42
+    assert set(names) == V01_RULE_IDS
 
 
 def test_rule_ids_are_unique_kebab_case(catalogue_items: list[dict[str, Any]]) -> None:
@@ -367,14 +382,45 @@ def test_rule_without_thresholds(temp_workspace: TempWorkspace) -> None:
     assert rule["thresholds"] == {}
 
 
-@pytest.mark.parametrize("rule_id", ["h2-missing", "low-word-count", "url-parameters"])
-def test_a_preview_rule_is_absent_from_show(temp_workspace: TempWorkspace, rule_id: str) -> None:
+@pytest.mark.parametrize(
+    ("rule_id", "category", "priority", "thresholds"),
+    [
+        ("h2-missing", "headings", "low", {}),
+        (
+            "low-word-count",
+            "content",
+            "medium",
+            {"min_words": {"value": 200, "default": 200, "unit": "words"}},
+        ),
+        ("url-parameters", "urls", "low", {}),
+    ],
+)
+def test_show_a_formerly_preview_rule(
+    temp_workspace: TempWorkspace,
+    rule_id: str,
+    category: str,
+    priority: str,
+    thresholds: dict[str, Any],
+) -> None:
     result = run_cli("rules", "show", rule_id)
 
-    assert result.exit_code == 4, result.stdout
-    (error,) = result.errors()
-    assert (error["code"], error["details"]) == ("rule_not_found", {"id": rule_id})
-    assert result.stdout == b""
+    assert result.exit_code == 0, result.stderr
+    rule = result.json()
+    assert (rule["id"], rule["category"], rule["issue_type"], rule["priority"]) == (
+        rule_id,
+        category,
+        "opportunity",
+        priority,
+    )
+    assert (rule["applies_to"], rule["enabled"], rule["thresholds"]) == (
+        "internal_pages",
+        True,
+        thresholds,
+    )
+    assert all(rule[field].strip() for field in GUIDANCE)
+    sql = rule["reproduce_sql"].strip()
+    assert sql
+    assert sql != PREVIEW_NO_ROWS
 
 
 def test_unknown_rule_id(temp_workspace: TempWorkspace) -> None:
