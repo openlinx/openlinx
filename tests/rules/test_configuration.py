@@ -8,12 +8,16 @@ from pathlib import Path
 
 import pytest
 
+from openlinx.clock import SystemClock
 from openlinx.crawl.engine.hooks import Pass, PassContext
+from openlinx.output.reporter import Collected
 from openlinx.rules.headings import H2_MISSING
 from openlinx.rules.registry import RULES
-from openlinx.services.crawling import CrawlOverrides, CrawlResult
+from openlinx.rules.titles import TITLE_TOO_LONG
+from openlinx.services.crawling import CrawlOverrides, CrawlResult, continue_crawl
 from openlinx.services.hooks import default_hooks
-from openlinx.store.issues import read_affected_urls
+from openlinx.store.issues import evaluate_rule, read_affected_urls, read_issues
+from openlinx.store.records import AffectedUrl, CrawlFile, Issue
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site
 from tests.fixture_site.server import ServerHandle
@@ -92,6 +96,114 @@ def test_the_rule_snapshot_keeps_defaults_and_disabled_rules(
             {"max_chars": 60},
         ),
     ]
+
+
+def test_later_edits_do_not_change_a_completed_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    title = "a" * 80
+    server = fixture_site(Site({"/": Page(body=f"<title>{title}</title>")}))
+    completed = crawl_result(server.url("/"))
+    file = completed.crawl_file
+    assert completed.summary.state == "completed"
+    [(url_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/"),))
+    expected = [AffectedUrl(url_id=url_id, detail={"length": 80})]
+    expected_issue = [
+        Issue(
+            rule_id="title-too-long",
+            category="titles",
+            issue_type="opportunity",
+            priority="medium",
+            affected_count=1,
+        )
+    ]
+    snapshot = "SELECT enabled, thresholds FROM rules WHERE id = 'title-too-long'"
+    assert query(file, snapshot) == [(1, '{"max_chars":60}')]
+    assert read_affected_urls(file, "title-too-long", RULES) == expected
+    assert [issue for issue in read_issues(file, RULES) if issue.rule_id == "title-too-long"] == (
+        expected_issue
+    )
+
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_text("[rules.title-too-long]\nmax_chars = 100\n", encoding="utf-8")
+    fresh = crawl_result(server.url("/"))
+
+    assert fresh.summary.state == "completed"
+    assert fresh.crawl_file != file
+    assert query(fresh.crawl_file, "SELECT title_1 FROM pages") == [(title,)]
+    assert query(fresh.crawl_file, snapshot) == [(1, '{"max_chars":100}')]
+    assert query(file, snapshot) == [(1, '{"max_chars":60}')]
+    assert read_affected_urls(file, "title-too-long", RULES) == expected
+    assert [issue for issue in read_issues(file, RULES) if issue.rule_id == "title-too-long"] == (
+        expected_issue
+    )
+    assert evaluate_rule(file, TITLE_TOO_LONG) == expected
+    assert read_affected_urls(fresh.crawl_file, "title-too-long", RULES) == []
+    assert evaluate_rule(fresh.crawl_file, TITLE_TOO_LONG) == []
+
+
+def test_resumed_crawl_keeps_the_recorded_configuration(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    title = "a" * 80
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Start</title><a href="/next">Continue</a>'),
+                "/next": Page(body=f"<title>{title}</title>"),
+            }
+        )
+    )
+    settings = temp_workspace.root / "openlinx.toml"
+    settings.write_text("[rules.title-too-long]\nmax_chars = 70\n", encoding="utf-8")
+    stopped = run_cli("crawl", server.url("/"), "--max-urls", "1")
+    assert stopped.exit_code == 0, stopped.stderr
+    result = stopped.json()
+    assert (result["state"], result["stop_reason"]) == ("stopped", "max_urls")
+    file = Path(result["crawl_file"])
+    assert query(file, "SELECT url_path FROM pages") == [("/",)]
+    assert_rule_results(file, "title-too-long", [])
+    snapshot_sql = "SELECT * FROM rules ORDER BY id"
+    snapshot = query(file, snapshot_sql)
+    assert len(snapshot) == 42
+    recorded = json.loads(crawl_row(file)["config"])["rules"]
+    assert recorded["title-too-long"] == {"enabled": True, "max_chars": 70}
+    health_sql = (
+        "SELECT health_score, health_internal_page_count, health_affected_page_count, "
+        "health_calculated_at FROM crawl"
+    )
+    previous_health = query(file, health_sql)
+    assert [row[:3] for row in previous_health] == [(100, 1, 0)]
+    assert previous_health[0][3] is not None
+
+    settings.write_text("[rules.title-too-long]\nmax_chars = 100\n", encoding="utf-8")
+    shown = run_cli("rules", "show", "title-too-long")
+    assert shown.exit_code == 0, shown.stderr
+    assert shown.json()["thresholds"]["max_chars"]["value"] == 100
+
+    health_before_passes: list[tuple[object, ...]] = []
+
+    async def observe_previous_health(_context: PassContext) -> None:
+        assert query(file, "SELECT state FROM crawl") == [("running",)]
+        health_before_passes.extend(query(file, health_sql))
+
+    hooks = default_hooks()
+    probe = Pass("observe-previous-health", observe_previous_health)
+    resumed = continue_crawl(
+        CrawlFile(result["crawl_id"], file),
+        CrawlOverrides(max_urls=3),
+        SystemClock(),
+        Collected(),
+        replace(hooks, passes=(probe, *hooks.passes)),
+    )
+
+    assert (resumed.summary.state, resumed.crawl_file) == ("completed", file)
+    assert query(file, "SELECT title_1 FROM pages WHERE url_path = '/next'") == [(title,)]
+    assert json.loads(crawl_row(file)["config"])["rules"] == recorded
+    assert query(file, snapshot_sql) == snapshot
+    assert_rule_results(file, "title-too-long", [(server.url("/next"), {"length": 80})])
+    assert health_before_passes == previous_health
+    assert [row[:3] for row in query(file, health_sql)] == [(100, 2, 0)]
 
 
 def test_empty_preview_rule_tables_are_accepted_without_rewriting(

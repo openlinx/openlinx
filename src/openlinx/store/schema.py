@@ -179,6 +179,28 @@ crawl = public_table(
         comment="When the state became completed; NULL in every other state.",
     ),
     Column(
+        "health_score",
+        Integer,
+        comment="Derived: The Health Score from the last post-crawl pass. "
+        "NULL for a Crawl without Internal Pages.",
+    ),
+    Column(
+        "health_internal_page_count",
+        Integer,
+        comment="Derived: The number of Internal Pages in the last post-crawl pass.",
+    ),
+    Column(
+        "health_affected_page_count",
+        Integer,
+        comment="Derived: The number of Internal Pages with an Issue-type Issue from an enabled "
+        "Rule in the last post-crawl pass.",
+    ),
+    Column(
+        "health_calculated_at",
+        Timestamp,
+        comment="Derived: When the last post-crawl pass calculated the Health Score.",
+    ),
+    Column(
         "stop_reason",
         Text,
         comment="Why the Crawl ended early: max_urls, interrupt or requested for a stopped Crawl, "

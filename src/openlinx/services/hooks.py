@@ -9,6 +9,7 @@ from openlinx.extract.page_handler import cookie_rows, page_rows
 from openlinx.extract.page_links import PAGE_LINKS
 from openlinx.extract.settings import ContentAreaSettings
 from openlinx.rules.registry import RULES
+from openlinx.store.health import record_health
 from openlinx.store.issues import affected_urls_unit, materialise_issues
 from openlinx.store.links import (
     inlink_counts,
@@ -39,9 +40,15 @@ def default_hooks(settings: Settings | None = None) -> Hooks:
         ),
         passes=(
             Pass("inlinks", count_inlinks),
-            Pass("issues", lambda context: materialise_issues(context.writer, _RULE_UNITS)),
+            Pass("issues", _materialise_and_score),
         ),
     )
+
+
+async def _materialise_and_score(context: PassContext) -> None:
+    """Write Health after all the Issue rows are available inside the Writer."""
+    await materialise_issues(context.writer, _RULE_UNITS)
+    await context.writer.run_async(record_health(context.clock.now()))
 
 
 def _response_headers(result: UrlResult) -> tuple[ResponseHeaders, ...]:

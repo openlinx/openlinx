@@ -21,6 +21,7 @@ from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.reporter import Collected
 from openlinx.services.crawling import CrawlOverrides
 from openlinx.services.hooks import default_hooks
+from openlinx.store.connections import connect
 from openlinx.store.transitions import CrawlStateError
 from tests.fixture_site.hosts import FixtureResolver, on_http_port
 from tests.fixture_site.plugin import StartSite
@@ -34,6 +35,12 @@ from tests.support.sites import NINE_PAGES
 from tests.support.workspace import TempWorkspace
 
 _PAGES = range(1, 10)
+_HEALTH_COLUMNS = (
+    "health_score",
+    "health_internal_page_count",
+    "health_affected_page_count",
+    "health_calculated_at",
+)
 
 
 def test_continuing_a_stopped_crawl_completes_it(
@@ -93,6 +100,97 @@ def test_a_continue_refuses_a_crawl_without_rule_tables_before_writing(
     assert reporter.events == []
     assert sha256_of(file) == before
     assert [request.path for request in server.requests] == ["/robots.txt", "/"]
+
+
+def _sql_dump(file: Path) -> tuple[str, ...]:
+    with closing(connect(file, read_only=True)) as connection:
+        return tuple(connection.iterdump())
+
+
+@pytest.mark.parametrize("journal_mode", ["wal", "delete"])
+@pytest.mark.parametrize(
+    "missing_columns",
+    [_HEALTH_COLUMNS, ("health_calculated_at",)],
+    ids=["before-health", "no-health-timestamp"],
+)
+def test_a_continue_refuses_a_crawl_without_health_columns_before_writing(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    journal_mode: str,
+    missing_columns: tuple[str, ...],
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_text(
+        f'[store]\njournal_mode = "{journal_mode}"\n', encoding="utf-8"
+    )
+    server = fixture_site(
+        Site({"/": Page(body='<a href="/next">Next</a>'), "/next": Page(body="<p>Next</p>")})
+    )
+    stopped = crawl_result(server.url("/"), max_urls=1)
+    file = stopped.crawl_file
+
+    # Development builds on either side of the change declare the same schema version.
+    with closing(connect(file)) as connection:
+        for name in missing_columns:
+            connection.execute(f"ALTER TABLE crawl DROP COLUMN {name}")
+
+    assert query(file, "PRAGMA user_version") == [(1,)]
+    assert query(file, "PRAGMA journal_mode") == [(journal_mode,)]
+    assert query(file, "SELECT state, (SELECT count(*) FROM pages) FROM crawl") == [("stopped", 1)]
+    before = crawl_row(file)
+    dump = _sql_dump(file)
+    reporter = Collected()
+
+    with pytest.raises(OpenLinxError) as caught:
+        continued(stopped, CrawlOverrides(max_urls=None), reporter=reporter)
+
+    assert (caught.value.code, caught.value.exit_code, dict(caught.value.diagnostic.details)) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(file)},
+    )
+    message = caught.value.diagnostic.message.replace(str(file), "").casefold()
+    words = set(re.findall(r"\w+", message))
+    assert words & {"missing", "lacks", "absent"}
+    assert words & {"column", "columns"}
+    assert words & set(_HEALTH_COLUMNS) == set(missing_columns)
+    assert reporter.events == []
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
+    assert crawl_row(file) == before
+    assert _sql_dump(file) == dump
+
+
+def test_a_continue_accepts_null_health_columns(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            {
+                "/": Page(body='<title>Home</title><a href="/next">Next</a>'),
+                "/next": Page(body="<title>Next</title>"),
+            }
+        )
+    )
+    hooks = replace(default_hooks(), passes=())
+    stopped = crawl_result(server.url("/"), hooks, max_urls=1)
+    assert stopped.summary.state == "stopped"
+    assert query(
+        stopped.crawl_file,
+        "SELECT health_score, health_internal_page_count, health_affected_page_count, "
+        "health_calculated_at FROM crawl",
+    ) == [(None, None, None, None)]
+
+    result = continued(stopped, CrawlOverrides(max_urls=None))
+
+    assert result.summary.state == "completed"
+    assert query(result.crawl_file, "SELECT url_path FROM pages ORDER BY url_path") == [
+        ("/",),
+        ("/next",),
+    ]
+    assert query(
+        result.crawl_file,
+        "SELECT health_score, health_internal_page_count, health_affected_page_count, "
+        "health_calculated_at IS NOT NULL FROM crawl",
+    ) == [(100, 2, 0, 1)]
 
 
 def test_a_continue_records_the_settings_it_runs_with(

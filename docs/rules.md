@@ -17,12 +17,39 @@ Issue Type describes the nature of the Issue. The CLI prints one of these values
 | Issue Type | Meaning |
 |---|---|
 | `issue` | A definite defect, such as a missing Page title. |
-| `warning` | Something to check. It can be intentional or the design can exclude it from the Health Score. |
+| `warning` | Something to check that can be intentional. |
 | `opportunity` | Something that could be improved, such as a long Page title. |
 
-Priority is the urgency of the fix, expressed as `high`, `medium` or `low`. In the planned
-Health Score, an Internal Page counts against the score only if it is an Affected URL of at
-least one Rule of type `issue`. Priority carries no weight in the calculation.
+Priority is the urgency of the fix, expressed as `high`, `medium` or `low`.
+
+## Health Score
+
+The Health Score is `floor(100 × (N − A) ÷ N)`. **N** counts Internal Pages, meaning all
+rows in `pages` regardless of HTTP status. **A** counts the distinct Internal Pages that are
+Affected URLs of an enabled Rule whose Issue Type is `issue` in that Crawl's `rules` table.
+Each such Page counts once, even if several Rules affect it. Warnings, Opportunities,
+Priority and findings on Resources without a Page row leave the score unchanged.
+
+The Issues Pass writes these derived fields on the [`crawl` row](schema.md#table-crawl)
+after it writes the Affected URLs.
+
+| Field | Value |
+|---|---|
+| `health_score` | Integer from 0 to 100, or SQL NULL when N is 0. |
+| `health_internal_page_count` | N. |
+| `health_affected_page_count` | A. |
+| `health_calculated_at` | Timestamp from the clock used by the Issues Pass. |
+
+All four fields are NULL before the first Issues Pass. A resumed Crawl keeps the previous
+values until its next Issues Pass recalculates them.
+
+For Segment Health, the planned query Commands (`050`) and HTML Report (`070`) share the Store
+function `openlinx.store.health.health_for_pages`. They pass a query selecting the Segment's URL ids
+as `page_ids`. The function restricts both counts to the Internal Pages in that selection.
+In the same read snapshot as the Issues reader, the default source is the materialised
+`affected_urls`. When the reader evaluates Issues live, the caller passes its live SQL
+source as `affected`, with columns `url_id` and `rule_id`. An empty Segment has zero counts
+and a NULL score.
 
 ## Rules evaluated by a Crawl
 

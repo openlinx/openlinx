@@ -109,7 +109,7 @@ No count of Affected URLs is stored: a count that only repeats the rows of anoth
   - They are derived (ADR-0005): only the post-crawl pass writes them, after the Rules' rows, and each description starts with `Derived: `. They stay NULL until the pass runs.
   - `health_score` has no unit suffix, because a score is not a share (ADR-0005 rule 5; it was `health_score_pct` until ruling Q9). The two counts end in `_count` (rule 5); `050`'s summary shape `{score, internal_pages, affected_pages}` maps them to its own member names.
   - `health_calculated_at` comes from the injectable clock. `020`'s `Pass` (`openlinx.crawl.hooks`) gets only the `CrawlWriter`, whose clock is private, and a unit cannot read the time itself (`017` D7). So the pass needs the clock: `020`'s `Pass.run` takes one frozen `PassContext` (the writer and the clock, with a field added only when a pass needs one; ruled 2026-10-14), an interface point for `020` before group 10.
-- **Subsets.** The formula is exposed as one pure function taking the set of Internal Pages and the set of URLs affected by Issue-type Rules. `050` (Segments) and `070` (health per Segment) call it, rather than re-implementing it.
+- **Counts in SQL, formula in Python.** The Store counts the selected rows of `pages` and their distinct Affected URLs of enabled Issue-type Rules. This avoids holding a Crawl-sized set of URL ids in Python. The same calculation serves the whole Crawl and the subsets requested by `050` (Segments) and `070` (health per Segment).
 - **Which Issue Types count.** They are read from the Crawl's `rules` table, never from the installed tool.
 
 ### D9. Strict configuration through `010`'s settings validation
