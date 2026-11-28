@@ -188,6 +188,12 @@ linx schema seeds --fields name
 
 `jsonl` and `table` print the items only, so an agent that needs `schema_version` reads the `json` result. Each item has `name`, `kind`, `description` and `columns`; each column has `name`, `description`, `type`, `nullable`, `primary_key`, `references`, `format` and `values`. Tables are listed in the order of the change that added them. An unknown TABLE fails with `unknown_table` (exit code 2), whose `details.tables` lists the tables. [schema.md](schema.md) documents the same tables for people.
 
+## Read-only SQL
+
+`linx sql QUERY` or `linx sql --file PATH` runs one read-only statement against
+the selected Crawl. [Read-only SQL](querying.md#read-only-sql) covers the result,
+limits and diagnostics.
+
 ## Selecting a Crawl
 
 Every Command that reads a Crawl takes the global flag `--crawl latest|<id>|<path>`, with the default `latest`. `linx commands` describes it with `"global":true` and `"default":"latest"`. What each value selects, and its errors (`no_crawls`, `crawl_not_found`, `crawl_file_invalid` and `invalid_value`), are in [crawl-store.md](crawl-store.md).
@@ -247,7 +253,7 @@ Every code is declared once, with its level, its exit code and a description, an
 
 | Code | Level | Exit code | Meaning |
 |---|---|---|---|
-| `usage_error` | error | 2 | an unknown Command or flag, a missing argument, or a global flag before the Command name |
+| `usage_error` | error | 2 | an unknown Command or flag, missing or conflicting arguments, or a global flag before the Command name |
 | `invalid_value` | error | 2 | a flag or argument value that is not allowed, or a value given with the settings that its setting refuses; `details.key` names the setting |
 | `secrets_required` | error | 2 | continuing a Crawl requires fresh secret input; the hint names the required flag or Workspace setting |
 | `unknown_field` | error | 2 | a `--fields` name the Command does not have |

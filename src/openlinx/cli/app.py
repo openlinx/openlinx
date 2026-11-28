@@ -18,6 +18,7 @@ from openlinx.cli.meta import CommandGroup, check_command, check_group
 from openlinx.cli.rules import RULES_GROUP
 from openlinx.cli.runner import Invocation, OpenLinxGroup, option_before_the_command
 from openlinx.cli.schema import schema
+from openlinx.cli.sql import sql
 from openlinx.naming import COMMAND_NAME, PRODUCT_NAME
 from openlinx.output.codes import USAGE_ERROR
 from openlinx.output.diagnostics import OpenLinxError
@@ -67,7 +68,7 @@ def build_app(extra: AppExtra | None = None) -> typer.Typer:
         rich_markup_mode=None,
     )
     app.callback()(root)
-    registered = [commands, crawl, init, issues, RULES_GROUP, schema, stop, *extra.commands]
+    registered = [commands, crawl, init, issues, RULES_GROUP, schema, sql, stop, *extra.commands]
     # Typer would silently keep the last registration of a name.
     taken: set[str] = set()
     for entry in registered:

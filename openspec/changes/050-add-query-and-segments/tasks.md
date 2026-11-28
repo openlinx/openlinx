@@ -130,6 +130,7 @@ Every group ends with a docs task and a review task.
 - [ ] 7.1 Drive `Read-only SQL › A SELECT runs` (Store contract): the result shape on 015's read-only connection. Verify: red → green; one commit.
 - [ ] 7.2 Drive `SQL results › Duplicate column names` (Store contract). Verify: red → green; one commit.
 - [ ] 7.3 Drive `SQL results › BLOB values` (Store contract). Verify: red → green; one commit.
+- [ ] 7.3a Drive "Infinite REAL values preserve sign and type" (CLI). Verify: red → green on a real SQL result with both signs, NULL, a finite REAL and both TEXT spellings; one commit.
 - [ ] 7.4 Drive `Read-only SQL › Writes are refused` (Store contract): the statement check. Verify: red → green; one commit.
 - [ ] 7.5 Drive `Read-only SQL › A refused write changes nothing` (Store contract). Verify: red → green; one commit.
 - [ ] 7.6 Drive the pair `Read-only SQL › Two statements are refused` and `› PRAGMA is refused` (Store contract). Verify: red → green; one commit.
@@ -139,9 +140,9 @@ Every group ends with a docs task and a review task.
 - [ ] 7.10 Drive the pair `SQL results › Default row limit` and `› Custom row limit` (CLI): `fetchmany(limit + 1)` and `truncated`. Verify: red → green; one commit.
 - [ ] 7.11 Drive `SQL errors, timeout and query files › Unknown column` (CLI): `details.suggestions` from schema metadata. Verify: red → green; one commit.
 - [ ] 7.12 Drive `SQL errors, timeout and query files › Timeout` (CLI): the progress-handler timeout. Verify: red → green; one commit.
-- [ ] 7.13 Drive `SQL errors, timeout and query files › Query given twice` (CLI). Verify: red → green; one commit.
+- [ ] 7.13 Drive `SQL errors, timeout and query files › Query given twice` (CLI). Verify: red → green; distinguish both sources from a missing source, accepting equivalent diagnostic wording; one commit.
 - [ ] 7.14 Drive `SQL errors, timeout and query files › Query file with a byte-order mark on Windows` (CLI, real subprocess, Windows-only). Verify: red → green on the Windows CI job; one commit.
-- [ ] 7.15 Docs: in `docs/querying.md`, document `linx sql`: what is refused and why, the result shape, `--limit`, `--timeout`, `--file`, and a pointer to `linx schema`. Verify: every refused statement class is listed.
+- [ ] 7.15 Docs: in `docs/querying.md`, document `linx sql`: what is refused and why, the result shape including BLOB and infinite REAL values, `--limit`, `--timeout`, `--file`, and a pointer to `linx schema`. Verify: every refused statement class is listed.
 - [ ] 7.16 Review: run the code-review skill on group 7's commits, then refactor with the whole suite green. Verify: suite green; one commit.
 
 ## 8. Cross-cutting checks (seam 1: CLI)

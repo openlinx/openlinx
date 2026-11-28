@@ -90,7 +90,7 @@ The count, min, max and mean come from SQL aggregates, and the histogram from a 
 2. **Authorizer allowlist on 015's read-only connection:** `SQLITE_SELECT`, `SQLITE_READ`, `SQLITE_RECURSIVE` and `SQLITE_FUNCTION`, except `load_extension`. Everything else is denied and reported as `sql_not_allowed`.
 3. **Progress handler:** aborts after `--timeout` seconds and reports `sql_timeout`.
 
-Rows are read with `fetchmany(limit + 1)` to set `truncated`, and BLOBs are mapped to `{"blob_bytes": n}`. For "no such column" and "no such table" errors, `details.suggestions` takes close matches from the schema metadata.
+Rows are read with `fetchmany(limit + 1)` to set `truncated`. The Store returns SQLite scalars. The SQL document projector maps BLOBs to `{"blob_bytes": n}` and infinite REAL values to `{"real":"Infinity"}` or `{"real":"-Infinity"}`. JSON has no infinite numbers, and the objects preserve the sign and distinguish REAL values from NULL and TEXT without changing the common JSON encoder. For "no such column" and "no such table" errors, `details.suggestions` takes close matches from the schema metadata.
 - *Alternatives:* `mode=ro` alone still allows ATTACH and PRAGMA, which change connection state. Fully parsing SQL with sqlglot is heavy.
 
 ### D10. Export streams rows through the output layer's serialisers

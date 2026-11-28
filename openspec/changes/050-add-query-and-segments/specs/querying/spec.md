@@ -712,6 +712,7 @@ With a rule id, an explicit `--type`, `--priority` or `--category` SHALL be reje
 - `row_count` is the number of rows returned. `truncated` is `true` when the query had more rows than `limit`.
 - `limit` defaults to 1000 and is set by `--limit` (1 to 100,000).
 - A BLOB value SHALL be returned as `{"blob_bytes": <length>}`.
+- Positive and negative SQLite REAL infinity SHALL be returned as `{"real":"Infinity"}` and `{"real":"-Infinity"}`, respectively. Finite REAL values SHALL remain JSON numbers, SQL NULL SHALL remain `null`, and TEXT SHALL remain JSON strings.
 
 #### Scenario: Default row limit
 - **WHEN** `linx sql "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1500) SELECT i FROM n"` runs
@@ -729,9 +730,13 @@ With a rule id, an explicit `--type`, `--priority` or `--category` SHALL be reje
 - **WHEN** `linx sql "SELECT x'00010203' AS b"` runs
 - **THEN** `rows` is `[[{"blob_bytes": 4}]]`
 
+#### Scenario: Infinite REAL values preserve sign and type
+- **WHEN** the query selects `1e999, -1e999, NULL, 1.25, 'Infinity', '-Infinity'` in that order
+- **THEN** `rows` is `[[{"real":"Infinity"},{"real":"-Infinity"},null,1.25,"Infinity","-Infinity"]]`
+
 ### Requirement: SQL errors, timeout and query files
 
-A query that SQLite rejects SHALL fail with the error code `sql_error`, and the message SHALL contain SQLite's message. For an unknown table or column, `details.suggestions` SHALL list the closest names, and the hint SHALL mention `linx schema`. A query that runs longer than `--timeout` seconds (default 30) SHALL be interrupted and fail with the error code `sql_timeout`. `--file <path>` SHALL read the query from a UTF-8 file, with or without a byte-order mark. Giving both a query argument and `--file` SHALL be rejected with the `usage_error` of `010-add-workspace-and-cli-contract`.
+A query that SQLite rejects SHALL fail with the error code `sql_error`, and the message SHALL contain SQLite's message. For an unknown table or column, `details.suggestions` SHALL list the closest names, and the hint SHALL mention `linx schema`. A query that runs longer than `--timeout` seconds (default 30) SHALL be interrupted and fail with the error code `sql_timeout`. `--file <path>` SHALL read the query from a UTF-8 file, with or without a byte-order mark. The caller SHALL supply exactly one query argument or `--file`. With both or neither, the Command SHALL return the `usage_error` of `010-add-workspace-and-cli-contract` and state whether the inputs conflict or a query is required.
 
 #### Scenario: Unknown column
 - **WHEN** `linx sql "SELECT adress FROM pages"` runs
