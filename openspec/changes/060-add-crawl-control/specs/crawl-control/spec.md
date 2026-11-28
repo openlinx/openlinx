@@ -131,10 +131,12 @@ The background process SHALL survive the end of the process and terminal that st
 - **THEN** the printed `warnings` hold an entry with code `job_may_end_crawl`
 
 ### Requirement: Control through the crawl store
+**In short:** Commands coordinate through the crawl store, and the Crawl acts on committed stop requests.
+
 `status`, `stop` and `resume` SHALL work only through the crawl store and its writer claim, never through operating-system signals.
 - **Stop requests:** a stop request SHALL be a row in `control_requests`, a control table.
 - **Control writes:** a process that does not hold the Crawl's writer claim (see "One writer per Crawl") SHALL write only to control tables, through a connection on which every write to another table is refused, waiting up to 5 seconds for a busy file. Recording `interrupted` is the only other write without the running process's claim (see "Detecting a dead crawl process").
-- **Checking for requests:** the crawl process, foreground or background, SHALL check for new requests at least once per second.
+- **Checking for requests:** the crawl process, foreground or background, SHALL check for new requests at least once per second. It SHALL read only committed rows in a short, independent read-only snapshot that verifies the selected Crawl. When the Store is busy the check SHALL return without waiting for its lock and check again on the next tick. The writer SHALL retain the ordinary replay checks for its units.
 - **Handling:** for each request it acts on, it SHALL set `handled_at` and `handled_by_run_id`.
 
 > **v0.1.**

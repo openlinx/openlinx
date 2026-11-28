@@ -24,12 +24,16 @@ _PREVIEW_METADATA = select(*(column for column in crawl.c if column.name not in 
 
 @contextmanager
 def reading(
-    path: Path, *, identity: CrawlFileIdentity | None = None, snapshot: bool = False
+    path: Path,
+    *,
+    identity: CrawlFileIdentity | None = None,
+    snapshot: bool = False,
+    busy_seconds: float = READER_BUSY_SECONDS,
 ) -> Iterator[Connection]:
     """Pin a snapshot in WAL and on request in rollback-journal mode."""
     try:
         with (
-            opening(path, role="read", identity=identity) as engine,
+            opening(path, role="read", identity=identity, busy_seconds=busy_seconds) as engine,
             engine.connect() as connection,
         ):
             # Legacy SQLite transactions do not begin on SELECT. A rollback-journal
@@ -41,13 +45,17 @@ def reading(
     except DBAPIError as error:
         if not is_busy(error):
             raise
-        raise busy_error(path, "reading", READER_BUSY_SECONDS, error) from error
+        raise busy_error(path, "reading", busy_seconds, error) from error
 
 
 @contextmanager
-def reading_selected(selected: CrawlFile) -> Iterator[Connection]:
+def reading_selected(
+    selected: CrawlFile, *, busy_seconds: float = READER_BUSY_SECONDS
+) -> Iterator[Connection]:
     """Confirm the recorded Crawl ID in the snapshot used for the response."""
-    with reading(selected.path, identity=selected.identity, snapshot=True) as connection:
+    with reading(
+        selected.path, identity=selected.identity, snapshot=True, busy_seconds=busy_seconds
+    ) as connection:
         check_crawl_id(selected.path, selected.id, connection.execute(_CRAWL_ID).scalar_one())
         yield connection
 

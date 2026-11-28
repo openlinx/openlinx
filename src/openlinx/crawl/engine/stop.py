@@ -70,6 +70,20 @@ class StopSignal:
         self._on_its_loop()
         if self._closed:
             return
+        self._set(reason, cause)
+
+    def request_from_store(self) -> bool:
+        """Apply a request even during the Passes, if it still changes how the Crawl stops."""
+        self._on_its_loop()
+        if self._ends_under_way.is_set():
+            return False
+        if self._reason == "max_urls":
+            # The URL limit only refuses new requests. A stop also ends work under way.
+            self._reason = "requested"
+        self._set("requested", None)
+        return True
+
+    def _set(self, reason: StopReason, cause: BaseException | None) -> None:
         if _ends_under_way(reason):
             self._ends_under_way.set()
         first = self._reason is None
@@ -85,9 +99,10 @@ class StopSignal:
         self.set("write_failed", write_failure_cause(error))
 
     def close(self) -> StopReason | None:
-        """The end's one read of the reason: a stop set after it, during the passes or the
-        end's writes, changes nothing and writes no stopping event, since the Crawl ends as
-        its empty frontier says (020-add-crawl-core D10)."""
+        """Freeze engine stops and interrupts when dispatch ends (020-add-crawl-core D10).
+
+        A control row can still be accepted until the Store records the final state.
+        """
         self._closed = True
         return self._reason
 

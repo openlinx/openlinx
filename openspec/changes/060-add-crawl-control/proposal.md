@@ -93,12 +93,13 @@ The v0.1 writer ownership slice takes the OS claim before creating a crawl file 
     - from its later groups: the `stopped` end and `--max-urls`, robots.txt, `--rate`, the progress counters and events, the failed ends, the network pause, interrupts with the stop's grace period, and the continue operation
   - `022-add-fetch-policy`: the proxy variables in v0.1, and `--auth`, `--header` and `--proxy` in v0.2.
   - `024-add-list-and-sitemap-modes`: List mode, and the list and sitemap readers used by the estimate.
+  - `050-add-query-and-segments`: the shared Store reader `reading_selected` for reading the selected Crawl in one verified snapshot.
 - **Edits this change makes to others' areas:**
   - **In `015`'s store:** it adds the writer claim, control writes, recording `interrupted` and reserved ids, which moved from `015`, and the tables `crawl_runs` and `control_requests`, following ADR-0005.
   - **In `020`'s engine:**
     - it adds `running` → `interrupted` and `interrupted` → `running` to `020`'s transition table
     - it writes a `crawl_runs` row per run, with a heartbeat every 5 seconds that records the progress counters
-    - it checks `control_requests` every second and sets the stop flag with `stop_reason` = `requested`
+    - every second it checks committed `control_requests` in a short, independent read-only snapshot and sets the stop flag with `stop_reason` = `requested` when it finds a request
     - it records synthesised argv for callers without a command line
 - **Used by:**
   - `070-add-html-report`: the end-to-end test `crawl --detach` → `status` → `completed`.
@@ -107,7 +108,7 @@ The v0.1 writer ownership slice takes the OS claim before creating a crawl file 
 - **Code:**
   - `openlinx.services.control`: detach, status, stop and resume, next to `020`'s `openlinx.services.crawling` (the start) and `015`'s `openlinx.services.crawls` (creating a Crawl), which gains a chosen id and, in v0.2, `crawls list|show|rm`.
   - `openlinx.crawl.process`: background start per OS.
-  - `openlinx.crawl.heartbeat`: the control check and the heartbeat beside the engine.
+  - `openlinx.crawl.engine.heartbeat`: the control check and the heartbeat beside the engine.
   - `openlinx.store.claim`, `openlinx.store.control` (control writes and `check_writer`) and the `crawl_runs` and `control_requests` units: data access stays in the store (`020` D14).
   - `openlinx.cli.control`: the Commands.
   - **(v0.1.1)** `openlinx.crawl.commandline`: the equivalent command's argv; **(v0.2)** its shell forms, and `openlinx.crawl.estimate`.

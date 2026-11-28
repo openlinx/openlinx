@@ -269,6 +269,52 @@ crawl = public_table(
     change=15,
 )
 
+crawl_runs = public_table(
+    "crawl_runs",
+    Column("id", Integer, primary_key=True, comment="The run number, starting at 1."),
+    Column("started_at", Timestamp, nullable=False, comment="When the run started."),
+    Column(
+        "command_argv",
+        Json,
+        nullable=False,
+        comment="The run's command line as a JSON array, with secrets redacted; "
+        "[] without a command line.",
+    ),
+    Column("detached", Flag, nullable=False, comment="1 for a detached run, otherwise 0."),
+    Column("pid", Integer, nullable=False, comment="Process id of the run."),
+    comment="One row per run of the Crawl.",
+    change=60,
+)
+
+control_requests = public_table(
+    "control_requests",
+    Column("id", Integer, primary_key=True, comment="The request id."),
+    Column(
+        "kind",
+        Text,
+        nullable=False,
+        info={"values": ["stop"]},
+        comment="What is requested.",
+    ),
+    Column("requested_at", Timestamp, nullable=False, comment="When the request was written."),
+    Column(
+        "requested_by_pid",
+        Integer,
+        nullable=False,
+        comment="Process id of the Command that wrote the request.",
+    ),
+    Column("handled_at", Timestamp, comment="When the crawl process acted on it; NULL until then."),
+    Column(
+        "handled_by_run_id",
+        Integer,
+        ForeignKey("crawl_runs.id"),
+        comment="The run that acted on the request; NULL until then.",
+    ),
+    comment="Requests from a separate process to control the Crawl.",
+    change=60,
+)
+control_requests.info["control"] = True
+
 seeds = public_table(
     "seeds",
     Column(

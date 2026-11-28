@@ -176,6 +176,9 @@ An interrupt stops a foreground Crawl gracefully: Ctrl+C, and on Windows also Ct
 
 Every stop takes the same grace, the URL limit's and a failure's too.
 
+[Stop a foreground Crawl](crawl-control.md#stop-a-foreground-crawl) in another terminal with
+`linx stop --crawl <id>` for a graceful end through the crawl file.
+
 A second interrupt ends the process at once, with no result and no error. The crawl file keeps every unit committed before it, which is about a second of work behind, and stays `running`; it can be continued like a stopped Crawl.
 
 ### The network pause
@@ -187,7 +190,7 @@ When requests stop getting answers, the Crawl pauses instead of recording the re
 - **Probes:** the Crawl requests its Seed 5, 10, 20 and 40 seconds after the pause began, then every 60 seconds, through the host's limits. A probe is not recorded and does not count toward `--max-urls`.
 - **Outcomes:** when the first probe answers before the second is due, the failures were the site's own (`dead_section`), unless the pause began before the Seed's origin ever answered, which is always the network's: their errors are kept and the Crawl goes on. From then on, the origins of those URLs no longer count toward a pause, the Seed's origin aside, so a dead subdomain pauses the Crawl once; their URLs are still requested and recorded as errors. When a later probe answers, the network was down (`outage`): the URLs of the count are queued again, each at most once a run, and the Internal origins whose robots.txt got no response ask for it again.
 - **Giving up:** a probe starts only before `--network-wait` seconds have passed since the pause's start (default 1800). When none has answered by then, the probes still in flight are cancelled and the Crawl fails with `site_unreachable`. With `--network-wait 0` nothing pauses: no probe starts, no pause event or `network_paused` is written, and the Crawl fails at once.
-- **A stop** (the URL limit, an interrupt) ends a pause at once: the probes are cancelled, nothing is queued again, and the URLs that waited at the pause stay `queued`.
+- **An interrupt or `linx stop`** ends a pause at once. It cancels the probes, keeps the recorded errors and leaves URLs that were waiting at the pause `queued`. A Crawl that reaches its URL limit during a network pause waits for the pause to end.
 - **The Seed:** until the Seed's origin has answered, one request of its robots.txt or of the Seed without a response pauses the Crawl at once, since a network may come up or switch just as a Crawl starts. A probe that answers then requests robots.txt and the Seed again; when none does, the Crawl fails with `seed_unreachable`.
 
 The events `crawl_paused` and `crawl_resumed` mark a pause, `progress` events go on during it with `paused` = true, and the counted `network_paused` warning says how often and how long the Crawl paused. It is written to stderr when the first pause begins, and the result counts every pause.

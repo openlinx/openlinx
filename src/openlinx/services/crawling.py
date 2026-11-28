@@ -3,7 +3,7 @@
 import asyncio
 import os
 import re
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, fields, replace
 from datetime import datetime
@@ -17,6 +17,7 @@ from openlinx.aio import loop_factory
 from openlinx.clock import Clock
 from openlinx.crawl.engine.context import CrawlContext
 from openlinx.crawl.engine.dispatch import run_crawl
+from openlinx.crawl.engine.heartbeat import watch_stop_requests
 from openlinx.crawl.engine.hooks import Hooks, PassContext
 from openlinx.crawl.engine.stop import StopSignal
 from openlinx.crawl.engine.warning_log import WarningLog
@@ -66,11 +67,11 @@ from openlinx.services.interrupts import interrupts_stop
 from openlinx.services.rules import rule_rows
 from openlinx.services.settings import default_tables
 from openlinx.store.claim import claim_writer
+from openlinx.store.control import latest_stop_request, record_end, record_stop_handled
 from openlinx.store.crawls import (
-    crawl_summary,
+    FIRST_RUN_ID,
     read_recorded,
     record_continue,
-    record_state,
     record_warnings,
 )
 from openlinx.store.failures import is_write_failure
@@ -362,6 +363,8 @@ def start_crawl(
             pages=pages or default_page_executor,
             fetchers=fetchers,
             stop=stop or StopSignal(),
+            stop_after=0,
+            run_id=FIRST_RUN_ID,
         )
         return _crawled(crawl)
 
@@ -448,6 +451,10 @@ def continue_crawl(
             pages=pages or default_page_executor,
             fetchers=fetchers,
             stop=stop or StopSignal(),
+            # Capture the cutoff while the Crawl has a terminal state. A control command
+            # cannot enqueue for the next run before record_continue commits "running".
+            stop_after=latest_stop_request(crawl_file),
+            run_id=None,
         )
         return _crawled(crawl)
 
@@ -534,6 +541,8 @@ class _Crawl:
     pages: Callable[[], PageExecutor]
     fetchers: FetcherFactory
     stop: StopSignal
+    stop_after: int | None
+    run_id: int | None
 
 
 def _open_writer(crawl: _Crawl, *, disk_temp_store: bool = False) -> CrawlWriter:
@@ -572,28 +581,82 @@ class _WriteFailed(Exception):
 async def _crawl_and_end(crawl: _Crawl) -> _End:
     async with _crawl_context(crawl) as context:
         if crawl.continuing is not None:
-            await context.writer.run_async(record_continue(crawl.continuing, crawl.clock.now()))
+            run_id = await context.writer.run_async(
+                record_continue(
+                    crawl.continuing,
+                    crawl.clock.now(),
+                    run_pid=os.getpid() if crawl.stop_after is not None else None,
+                )
+            )
+            crawl = replace(crawl, run_id=run_id)
             await context.writer.flush_async()
-        await run_crawl(context, crawl.plan.seed)
-        stop = context.stop
-        reason = stop.close()
-        if reason == "write_failed":
-            raise _WriteFailed(stop.cause)
-        if reason is not None and reason in NETWORK_FAILURES:
-            ended = await _end(crawl, context.writer, "failed", reason)
-            failure = NETWORK_FAILURES[reason]
-            plan = crawl.plan
-            return replace(ended, failure=failure(plan.seed, plan.settings, crawl.crawl_file))
+        if crawl.stop_after is None:
+            return await _crawl_through_end(crawl, context)
+        return await _crawl_with_stop_checks(crawl, context, crawl.stop_after)
+
+
+async def _crawl_through_end(
+    crawl: _Crawl,
+    context: CrawlContext,
+    finish_checks: Callable[[], Awaitable[None]] | None = None,
+) -> _End:
+    await run_crawl(context, crawl.plan.seed)
+    stop = context.stop
+    reason = stop.close()
+    if reason == "write_failed":
+        raise _WriteFailed(stop.cause)
+    if reason is not None and reason in NETWORK_FAILURES:
+        ended = await _end(crawl, context.writer, "failed", reason, finish_checks=finish_checks)
+        failure = NETWORK_FAILURES[reason]
+        plan = crawl.plan
+        return replace(ended, failure=failure(plan.seed, plan.settings, crawl.crawl_file))
+    # Both completed and stopped guarantee that the passes have materialised their results.
+    for crawl_pass in crawl.hooks.passes:
+        await crawl_pass.run(PassContext(context.writer, crawl.clock))
+    reason = stop.reason
+    state: CrawlState = "completed" if reason is None else "stopped"
+    ended = await _end(crawl, context.writer, state, reason, finish_checks=finish_checks)
+    if reason == "interrupt":
+        return replace(ended, failure=interrupted(crawl.crawl_file))
+    return ended
+
+
+async def _crawl_with_stop_checks(crawl: _Crawl, context: CrawlContext, after: int) -> _End:
+    run_id = crawl.run_id
+    if run_id is None:
+        raise RuntimeError("A Crawl listening for stop requests needs a recorded run.")
+    handling = False
+
+    async def check() -> None:
+        nonlocal handling
+        handled = await watch_stop_requests(context.crawl_file, after, context.clock, context.stop)
+        if handled is not None:
+            handling = True
+            await context.writer.run_async(record_stop_handled(*handled, run_id=run_id))
+
+    checks = asyncio.create_task(check())
+
+    async def finish_checks() -> None:
+        if handling or checks.done():
+            await checks
         else:
-            # Run passes before writing completed or stopped so either state guarantees that
-            # post-crawl results have been materialised.
-            for crawl_pass in crawl.hooks.passes:
-                await crawl_pass.run(PassContext(context.writer, crawl.clock))
-            state: CrawlState = "completed" if reason is None else "stopped"
-            ended = await _end(crawl, context.writer, state, reason)
-            if reason == "interrupt":
-                return replace(ended, failure=interrupted(crawl.crawl_file))
-            return ended
+            # No request has affected the Crawl. The final write transaction takes over.
+            checks.cancel()
+
+    work = asyncio.create_task(_crawl_through_end(crawl, context, finish_checks))
+    try:
+        await asyncio.wait((work, checks), return_when=asyncio.FIRST_COMPLETED)
+        if checks.done() and not checks.cancelled() and not work.done():
+            checks.result()
+        # The owner finishes the grace and Passes, then commits its end.
+        ended = await work
+        if checks.done() and not checks.cancelled():
+            checks.result()
+        return ended
+    finally:
+        work.cancel()
+        checks.cancel()
+        await asyncio.gather(work, checks, return_exceptions=True)
 
 
 async def _failed_end(crawl: _Crawl, error: OpenLinxError) -> _End:
@@ -613,15 +676,31 @@ async def _failed_end(crawl: _Crawl, error: OpenLinxError) -> _End:
 
 
 async def _end(
-    crawl: _Crawl, writer: CrawlWriter, state: CrawlState, stop_reason: StopReason | None
+    crawl: _Crawl,
+    writer: CrawlWriter,
+    state: CrawlState,
+    stop_reason: StopReason | None,
+    *,
+    finish_checks: Callable[[], Awaitable[None]] | None = None,
 ) -> _End:
-    # One instant: the result's ended_at is the time the file records for the end.
-    ended_at = crawl.clock.now()
     # Before the end, so a reader that sees the end sees every warning.
     await writer.run_async(record_warnings([w.to_json() for w in crawl.log.warnings]))
-    await writer.run_async(record_state(state, ended_at, stop_reason))
-    summary = await writer.run_async(crawl_summary())
-    return _End(ended_at=ended_at, summary=summary, counts=await writer.run_async(url_counts()))
+    counts = await writer.run_async(url_counts())
+    if finish_checks is not None:
+        await finish_checks()
+        if stop_reason in (None, "max_urls") and crawl.stop.reason == "requested":
+            state, stop_reason = "stopped", "requested"
+    # The last unit goes straight to commit. No subsequent unit can cause it to replay
+    # against a different set of accepted stop requests.
+    ended_at, summary = await writer.run_async(
+        record_end(
+            state, crawl.clock, stop_reason, stop_after=crawl.stop_after, run_id=crawl.run_id
+        )
+    )
+    await writer.flush_async()
+    if summary.stop_reason == "requested":
+        crawl.stop.request_from_store()
+    return _End(ended_at=ended_at, summary=summary, counts=counts)
 
 
 @asynccontextmanager

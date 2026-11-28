@@ -77,6 +77,10 @@ def columns_of(table: str) -> dict[str, dict[str, Any]]:
     return {column["name"]: column for column in item["columns"]}
 
 
+def test_a_stop_request_refers_to_its_run() -> None:
+    assert columns_of("control_requests")["handled_by_run_id"]["references"] == "crawl_runs.id"
+
+
 def test_the_http_version_is_a_later_column() -> None:
     # The v0.1 Command output predates capability measurement.
     path = Path(__file__).parents[1] / "contract" / "origins-http-version-v0.1.json"

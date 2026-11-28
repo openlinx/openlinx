@@ -204,6 +204,7 @@ SETTINGS_MODELS = {
         (["rules", "list", "--help"], STARTUP_ALLOWLIST),
         (["rules", "show", "--help"], STARTUP_ALLOWLIST),
         (["issues", "--help"], STARTUP_ALLOWLIST),
+        (["stop", "--help"], STARTUP_ALLOWLIST),
     ],
     ids=lambda value: " ".join(value) if isinstance(value, list) else "",
 )
