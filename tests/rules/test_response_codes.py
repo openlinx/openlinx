@@ -151,7 +151,7 @@ def test_client_error_recorded_by_a_crawl(fixture_site: StartSite) -> None:
 
 
 @pytest.mark.usefixtures("temp_workspace")
-def test_server_error(fixture_hosts: StartHosts) -> None:
+def test_server_error_raises_an_issue(fixture_hosts: StartHosts) -> None:
     hosts = fixture_hosts(
         Site(
             {

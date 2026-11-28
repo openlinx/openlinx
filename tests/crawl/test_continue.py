@@ -111,7 +111,7 @@ def _sql_dump(file: Path) -> tuple[str, ...]:
 @pytest.mark.parametrize(
     "missing_columns",
     [_HEALTH_COLUMNS, ("health_calculated_at",)],
-    ids=["before-health", "no-health-timestamp"],
+    ids=["no-health-columns", "no-health-timestamp"],
 )
 def test_a_continue_refuses_a_crawl_without_health_columns_before_writing(
     temp_workspace: TempWorkspace,
@@ -128,7 +128,7 @@ def test_a_continue_refuses_a_crawl_without_health_columns_before_writing(
     stopped = crawl_result(server.url("/"), max_urls=1)
     file = stopped.crawl_file
 
-    # Development builds on either side of the change declare the same schema version.
+    # Removing columns from a current Crawl doesn't give it the shipped preview's snapshot.
     with closing(connect(file)) as connection:
         for name in missing_columns:
             connection.execute(f"ALTER TABLE crawl DROP COLUMN {name}")

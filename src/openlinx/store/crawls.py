@@ -22,6 +22,7 @@ from openlinx.store.connections import connect, not_writable_name, opening
 from openlinx.store.identity import check_crawl_id
 from openlinx.store.ids import Choice, crawl_path, new_crawl_id
 from openlinx.store.journal import JournalChoice, confirm_journal_mode
+from openlinx.store.preview import is_historical_preview, missing_health_columns
 from openlinx.store.reading import reading
 from openlinx.store.records import (
     CrawlFile,
@@ -170,21 +171,12 @@ def check_rule_schema(connection: Connection, path: Path) -> None:
 
 
 def _check_health_columns(connection: Connection, path: Path) -> None:
-    """Refuse pre-Health Crawl files before Continue changes the file."""
-    names = (
-        crawl.c.health_score.name,
-        crawl.c.health_internal_page_count.name,
-        crawl.c.health_affected_page_count.name,
-        crawl.c.health_calculated_at.name,
-    )
-    present: set[str] = set(
-        connection.exec_driver_sql("SELECT name FROM pragma_table_info(?)", (crawl.name,)).scalars()
-    )
-    missing = ", ".join(name for name in names if name not in present)
-    if missing:
+    """Refuse unsupported layouts before Continue reaches the Writer or Fetcher."""
+    missing = missing_health_columns(connection)
+    if missing and not is_historical_preview(connection, missing):
         raise OpenLinxError(
             CRAWL_FILE_INVALID,
-            f"The crawl file {path} is missing required Health columns {missing}.",
+            f"The crawl file {path} is missing required Health columns {', '.join(missing)}.",
             hint="Crawl again with this tool to record the Health Score.",
             details={"file": str(path)},
         )

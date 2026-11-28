@@ -23,6 +23,7 @@ from sqlalchemy import (
     union_all,
 )
 
+from openlinx.store.preview import PREVIEW_NO_ROWS, PREVIEW_PLACEHOLDER_IDS
 from openlinx.store.reading import reading
 from openlinx.store.records import AffectedUrl, CrawlState, Issue, UrlIssue
 from openlinx.store.rule_queries import RuleQuery, rule_not_computable, rule_not_found
@@ -52,12 +53,10 @@ def _affected_urls(connection: Connection, statement: Select[int, str | None]) -
 
 
 _DELETE = delete(affected_urls).where(affected_urls.c.rule_id == bindparam("rule_id"))
-_PREVIEW_RULE_IDS = ("h2-missing", "low-word-count", "url-parameters")
-_PREVIEW_NO_ROWS = "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
 # The preview query recorded an empty result. Keep it empty when reading or continuing
 # that Crawl after the same Rule id acquires a real query. Never run stored SQL here.
 _EVALUABLE = (rules.c.enabled == 1) & ~(
-    rules.c.id.in_(_PREVIEW_RULE_IDS) & (rules.c.reproduce_sql == _PREVIEW_NO_ROWS)
+    rules.c.id.in_(PREVIEW_PLACEHOLDER_IDS) & (rules.c.reproduce_sql == PREVIEW_NO_ROWS)
 )
 _EVALUABLE_IDS = select(rules.c.id).where(_EVALUABLE)
 

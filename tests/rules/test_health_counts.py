@@ -19,6 +19,19 @@ from tests.support.fetcher import FakeFetcher, FakePage
 
 
 @pytest.mark.usefixtures("temp_workspace")
+def test_no_pages_means_no_score(fixture_site: StartSite) -> None:
+    server = fixture_site(Site({"/": Page(body="resource", content_type="text/plain")}))
+    file = crawled(server.url("/"))
+
+    assert query(file, "SELECT count(*) FROM pages") == [(0,)]
+    assert query(
+        file,
+        "SELECT state, health_score, health_internal_page_count, health_affected_page_count, "
+        "health_calculated_at IS NOT NULL FROM crawl",
+    ) == [("completed", None, 0, 0, 1)]
+
+
+@pytest.mark.usefixtures("temp_workspace")
 def test_end_to_end_score_on_the_fixture_site(fixture_site: StartSite) -> None:
     server = fixture_site(
         Site(

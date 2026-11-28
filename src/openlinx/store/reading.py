@@ -13,10 +13,13 @@ from openlinx.output.codes import CRAWL_SCHEMA_TOO_NEW
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.connections import READER_BUSY_SECONDS, busy_error, is_busy, opening
 from openlinx.store.identity import check_crawl_id
+from openlinx.store.preview import HEALTH_COLUMNS, is_historical_preview, missing_health_columns
 from openlinx.store.records import CrawlFile, CrawlFileIdentity
 from openlinx.store.schema import SCHEMA_VERSION, crawl
 
 _CRAWL_ID = select(crawl.c.id)
+_CRAWL_METADATA = select(crawl)
+_PREVIEW_METADATA = select(*(column for column in crawl.c if column.name not in HEALTH_COLUMNS))
 
 
 @contextmanager
@@ -63,5 +66,8 @@ def _check_schema_version(connection: Connection, path: Path) -> None:
 
 
 def read_metadata(path: Path, *, identity: CrawlFileIdentity | None = None) -> dict[str, Any]:
-    with reading(path, identity=identity) as connection:
-        return dict(connection.execute(select(crawl)).mappings().one())
+    with reading(path, identity=identity, snapshot=True) as connection:
+        statement = _CRAWL_METADATA
+        if is_historical_preview(connection, missing_health_columns(connection)):
+            statement = _PREVIEW_METADATA
+        return dict(connection.execute(statement).mappings().one())
