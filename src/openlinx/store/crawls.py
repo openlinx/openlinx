@@ -129,6 +129,7 @@ def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedC
         if selected is not None:
             check_crawl_id(selected.path, selected.id, row.id)
         check_rule_schema(connection, path)
+        _check_health_columns(connection, path)
         urls: list[str] = list(
             connection.execute(select(seeds.c.url).order_by(seeds.c.position)).scalars()
         )
@@ -164,6 +165,27 @@ def check_rule_schema(connection: Connection, path: Path) -> None:
             CRAWL_FILE_INVALID,
             f"The crawl file {path} is missing {objects}.",
             hint="Crawl again with this tool to record Rules and their Affected URLs.",
+            details={"file": str(path)},
+        )
+
+
+def _check_health_columns(connection: Connection, path: Path) -> None:
+    """Refuse pre-Health Crawl files before Continue changes the file."""
+    names = (
+        crawl.c.health_score.name,
+        crawl.c.health_internal_page_count.name,
+        crawl.c.health_affected_page_count.name,
+        crawl.c.health_calculated_at.name,
+    )
+    present: set[str] = set(
+        connection.exec_driver_sql("SELECT name FROM pragma_table_info(?)", (crawl.name,)).scalars()
+    )
+    missing = ", ".join(name for name in names if name not in present)
+    if missing:
+        raise OpenLinxError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} is missing required Health columns {missing}.",
+            hint="Crawl again with this tool to record the Health Score.",
             details={"file": str(path)},
         )
 

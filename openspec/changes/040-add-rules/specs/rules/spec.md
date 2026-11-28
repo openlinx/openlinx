@@ -740,8 +740,8 @@ Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed C
 - **THEN** `health_score` is 100
 
 #### Scenario: A Page with several Issues counts once
-- **WHEN** a Crawl has 4 Internal Pages and one of them is an Affected URL of both `title-missing` and `exact-duplicate`
-- **THEN** `health_score` is 75
+- **WHEN** a Crawl has 4 Internal Pages, one of them is an Affected URL of both `title-missing` and `canonical-to-non-indexable`, and the other Pages have no Issue-type Issues
+- **THEN** `health_score` is 75, `health_internal_page_count` is 4 and `health_affected_page_count` is 1
 
 #### Scenario: Resource Issues do not change the score
 - **WHEN** a Crawl has 1 Internal Page and the only Affected URL is the image Resource `https://example.test/x.png` of `image-broken`
