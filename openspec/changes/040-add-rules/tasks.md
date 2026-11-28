@@ -62,19 +62,19 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 3.17 Drive "Disabled Rule produces no Issue" at seam 3+6.
 - [x] 3.18 Drive "A failed extractor raises no Issue for its missing columns" at seam 2: the Page stays in `internal_pages`, and NULL columns fire nothing (design D2).
 - [x] 3.19 Docs: add the `rules` and `affected_urls` tables and the `issues` view to `docs/rules.md`, with a sample query for each, how to run a Rule's `reproduce_sql` from the Command output over a crawl file, and when Issues are live or materialised.
-- [ ] 3.20 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
+- [x] 3.20 Review: run the code-review skill on group 3's commits, then refactor with the whole suite green.
 
 ## 4. The slice's response code Rules and Missing H1 (slice)
 
 - [x] 4.1 Drive "Client error" at seam 2, over `urls` rows: `020`'s `is_internal`, `fetch_state` and `status_code`. The `internal_urls` population reads `blocked_by_robots_txt` only from task 7.1, after `020` task 10.5 declares the column (design D2).
 - [x] 4.2 Drive "External URLs are not Internal URLs" at seam 2.
 - [x] 4.3 Drive "Client error recorded by a Crawl" at seam 3+6, with an Internal URL that is not a Page. `020`'s Crawl records it, Internal and not parsed, since group 6 of `020`.
-- [x] 4.4 Drive "Server error" at seam 2 by replacing the no-row query of `internal-5xx`, registered in 1.1.
+- [x] 4.4 Drive "Server error raises an Issue" at seam 2 by replacing the no-row query of `internal-5xx`, registered in 1.1.
 - [x] 4.5 Drive "No response" at seam 2, over `020`'s `fetch_error`, and register `internal-no-response`.
 - [x] 4.6 Drive "A URL that failed to be recorded is no Issue" at seam 2, with the reason in the query's SQL comment (design D15).
 - [x] 4.7 Drive "Missing H1" at seam 2, over `030`'s `h1_count` and `h1_1` (after `030` task 3.4), and register `h1-missing`.
 - [x] 4.8 Docs: add the slice's five Rules (`internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`) to the catalogue in `docs/rules.md`.
-- [ ] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
+- [x] 4.9 Review: run the code-review skill on group 4's commits, then refactor with the whole suite green.
 
 ## 5. Title Rules and the post-crawl pass
 
@@ -92,7 +92,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 5.12 Drive "A running Crawl writes no Affected URL" at seam 3+6.
 - [x] 5.13 Drive "A second pass does not duplicate rows" at seam 2. The pass replaces each Rule's rows in one unit per Rule.
 - [x] 5.14 Docs: add the other 5 title Rules (id, type, priority, condition, detail, guidance) to the catalogue in `docs/rules.md`, with `title-too-long` checking characters only in v0.1.
-- [ ] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
+- [x] 5.15 Review: run the code-review skill on group 5's commits, then refactor with the whole suite green.
 
 ## 6. Meta description and heading Rules
 
@@ -105,7 +105,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 6.7 Drive "H1 too long" and "H1 at the limit" at seam 2. This is a trivial pair: one boundary. Register `h1-too-long`.
 - [x] 6.8 Drive "Duplicate H1" at seam 2, and register `h1-duplicate`.
 - [x] 6.9 Docs: add the 5 meta description Rules and the other 4 heading Rules to the catalogue in `docs/rules.md`.
-- [ ] 6.10 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
+- [x] 6.10 Review: run the code-review skill on group 6's commits, then refactor with the whole suite green.
 
 ## 7. Response code and security Rules
 
@@ -168,4 +168,4 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 - [x] 10.10 Drive "Later edits do not change a completed Crawl" at seam 2.
 - [x] 10.11 Drive "Resumed Crawl keeps the recorded configuration" at seam 3+6. Stop at `--max-urls`, then resume through the Crawl Service with a higher limit.
 - [x] 10.12 Docs: add the Health Score definition, the `health_*` fields, and how `050` and `070` call the function for Segments to `docs/rules.md`, with a link from `docs/architecture.md`.
-- [ ] 10.13 Review: run the code-review skill on group 10's commits and then on the whole change, and refactor with the whole suite green.
+- [x] 10.13 Review: run the code-review skill on group 10's commits and then on the whole change, and refactor with the whole suite green.

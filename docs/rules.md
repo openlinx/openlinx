@@ -43,6 +43,9 @@ after it writes the Affected URLs.
 All four fields are NULL before the first Issues Pass. A resumed Crawl keeps the previous
 values until its next Issues Pass recalculates them.
 
+Stored Health is unavailable in files from the original 18-Rule preview. Continuing one of
+those files leaves its schema unchanged and updates its Issues using the recorded thresholds.
+
 For Segment Health, the planned query Commands (`050`) and HTML Report (`070`) share the Store
 function `openlinx.store.health.health_for_pages`. They pass a query selecting the Segment's URL ids
 as `page_ids`. The function restricts both counts to the Internal Pages in that selection.
@@ -337,6 +340,10 @@ Continuing a Crawl keeps its recorded Rules and thresholds. If a preview Crawl r
 of those three Rules with the preview query that returned zero rows, it continues to report
 zero Affected URLs for that Rule. Start a new Crawl to evaluate all 42 Rules. The recorded
 `title-too-long.max_chars` threshold still controls which titles appear in an older Crawl.
+
+The pre-Health exception applies to the original preview schema with its 18 Rules in both
+snapshots and the exact shipped SQL of all three placeholders. A Crawl that lost any of its
+Health fields is refused before Continue writes to it or sends an HTTP request.
 
 ## Read Issues from a crawl file
 

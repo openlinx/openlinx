@@ -85,7 +85,7 @@ A URL's *Redirect Chain length* is the number of 3xx responses met when followin
 - **WHEN** a Crawl of the fixture site requests `{site}/gone`, which responds 404 with `Content-Type: text/plain`, and ends as `completed`
 - **THEN** `affected_urls` holds an `internal-4xx` row for `{site}/gone` with `detail` `{"status_code": 404}`
 
-#### Scenario: Server error
+#### Scenario: Server error raises an Issue
 - **WHEN** the Internal URL `https://example.test/err` has `status_code` 503
 - **THEN** `internal-5xx` fires for it with `detail` `{"status_code": 503}`
 
@@ -613,6 +613,10 @@ The Crawl SHALL use this configuration throughout, including after `resume`. A c
 - **WHEN** a preview Crawl with all three preview Rules and `title-too-long.max_chars = 70` stops at `--max-urls`, the Workspace raises the limit to 90, and Continue fetches the remaining Page with a 71-character title
 - **THEN** both Rule snapshots retain their recorded entries and settings, and the newly crawled Page is an Affected URL of `title-too-long` with `detail.length` 71
 
+#### Scenario: Continuing a historical preview leaves stored Health unavailable
+- **WHEN** a Crawl made by the original 18-Rule preview stops at `--max-urls` in WAL or DELETE mode and is continued with its original `title-too-long.max_chars` threshold still recorded
+- **THEN** Continue keeps the original schema and both Rule snapshots, evaluates Issues with that threshold, and records no Health fields. `linx issues` reads the updated results and all three historical placeholders still have zero Affected URLs.
+
 ### Requirement: Rules are SQL queries
 Every Rule SHALL have a reproducing query and SHALL be evaluated only by it. The query is one read-only SQL `SELECT` over the public schema that returns the Rule's Affected URLs in a crawl file, as the columns `url_id` and `detail`.
 - It SHALL read only stored columns, and the Rule's effective thresholds from the Crawl's `rules` row, so its text is the same in every Workspace and gives the right answer under overrides.
@@ -655,7 +659,7 @@ A Crawl has materialised Issues exactly when its Crawl State is `completed` or `
 ### Requirement: Materialising Issues
 This change's post-crawl pass SHALL materialise the Issues when a Crawl ends as `completed` or `stopped`, after `030-add-page-data` has computed link counts:
 1. For each enabled Rule, one writer unit replaces the Rule's rows in `affected_urls` with the rows its query returns.
-2. Then one unit records the Health Score fields.
+2. Then one unit records the Health Score fields for a Crawl that has them.
 
 It SHALL run again when a resumed Crawl ends, and each run SHALL replace the rows of the run before, so an Affected URL is never stored twice. A Crawl that ends as `failed`, or whose process died, gets no pass until it is resumed and ends; until then its Issues are read live.
 
@@ -716,7 +720,7 @@ The Health Score of a Crawl SHALL be `floor(100 × (N − A) ÷ N)`:
 
 Warnings, including `http-url`, and Opportunities never lower it.
 
-At the end of the post-crawl passes, the Crawl SHALL record these crawl metadata fields on the `crawl` row of `015-add-crawl-store`. They are derived: only the post-crawl pass writes them, and each description starts with `Derived: ` (ADR-0005).
+At the end of the post-crawl passes, a Crawl created with the Health schema SHALL record these crawl metadata fields on the `crawl` row of `015-add-crawl-store`. A new Crawl SHALL have all four fields. They are derived: only the post-crawl pass writes them, and each description starts with `Derived: ` (ADR-0005).
 
 | Column | Type | Null | Format | Description |
 |---|---|---|---|---|
@@ -726,6 +730,8 @@ At the end of the post-crawl passes, the Crawl SHALL record these crawl metadata
 | `health_calculated_at` | TEXT | yes | timestamp | When the post-crawl pass calculated the score |
 
 Until the post-crawl passes have run, all four fields SHALL be NULL. A resumed Crawl keeps the values of its last pass until its next pass. The Health Score of any subset of Internal Pages, such as a Segment, SHALL use the same formula restricted to that subset, through one function that `050-add-query-and-segments` and `070-add-html-report` call at query time. While the Issues reader computes Issues live, the function takes the live Affected URLs.
+
+A Crawl from the original 18-Rule preview SHALL remain readable for Issues and may be continued without stored Health when all four fields are absent, both schema versions are 1, the schema matches that producer's tables, views and indexes, both recorded Rule id sets match its catalogue, and all three placeholder SQL strings match exactly. Continue SHALL keep that schema unchanged and materialise Issues without recording Health. A partial set of Health fields or a missing set on any other layout SHALL be refused before the Crawl is written or makes HTTP requests. This compatibility path applies without a schema migration (ADR-0002).
 
 #### Scenario: Pages with Issue-type Issues lower the score
 - **WHEN** a Crawl has 10 Internal Pages, 3 of which are Affected URLs of Rules whose Issue Type is `issue`

@@ -47,7 +47,7 @@ def _hooks_with_replacements(
     )
 
 
-def test_failed_extractor_raises_no_issue_for_its_missing_columns(
+def test_a_failed_extractor_raises_no_issue_for_its_missing_columns(
     temp_workspace: TempWorkspace, fixture_site: StartSite
 ) -> None:
     server = fixture_site(

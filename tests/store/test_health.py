@@ -7,14 +7,24 @@ from sqlalchemy import create_engine, insert, literal, select
 from sqlalchemy.pool import NullPool
 
 from openlinx.rules.registry import RULES
-from openlinx.store.health import Health, health_for_pages, health_score, materialised_health
+from openlinx.store.health import (
+    Health,
+    health_for_pages,
+    health_score,
+    materialised_health,
+    record_health,
+)
 from openlinx.store.issues import affected_urls_in
 from openlinx.store.pages import write_pages
 from openlinx.store.reading import reading
 from openlinx.store.schema import affected_urls, metadata, origins, pages, rules, urls
+from openlinx.store.writer import CrawlWriter
+from tests.support.clock import FakeClock
 from tests.support.crawl_store import crawl_store
+from tests.support.crawls import query
 from tests.support.page_data import page_row
 from tests.support.workspace import TempWorkspace
+from tests.support.writer import replay_now
 
 
 def test_pages_with_issue_type_issues_lower_the_score() -> None:
@@ -25,7 +35,7 @@ def test_score_is_rounded_down() -> None:
     assert health_score(internal_pages=3, affected_pages=1) == 66
 
 
-def test_no_pages_means_no_score() -> None:
+def test_health_score_is_undefined_without_internal_pages() -> None:
     assert health_score(internal_pages=0, affected_pages=0) is None
 
 
@@ -142,3 +152,25 @@ def test_health_score_of_a_segment(temp_workspace: TempWorkspace, completed: boo
             result = health_for_pages(connection, page_ids=segment_pages, affected=live)
 
     assert result == Health(score=75, internal_pages=4, affected_pages=1)
+
+
+def test_health_replay_preserves_score_counts_and_timestamp(temp_workspace: TempWorkspace) -> None:
+    file = crawl_store(
+        temp_workspace,
+        pages={
+            "https://example.com/a": "<title>A</title><h1>A</h1>",
+            "https://example.com/b": "<h1>B</h1>",
+            "https://example.com/c": "<title>C</title><h1>C</h1>",
+        },
+    )
+    clock = FakeClock()
+    with CrawlWriter(file, clock) as writer:
+        writer.run(record_health(clock.now()))
+        clock.shift_wall(60)
+        replay_now(writer)
+
+    assert query(
+        file,
+        "SELECT health_score, health_internal_page_count, health_affected_page_count, "
+        "health_calculated_at FROM crawl",
+    ) == [(75, 4, 1, "2026-01-01T00:00:00.000Z")]

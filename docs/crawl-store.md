@@ -300,6 +300,7 @@ A new crawl file gets its SQLite journal mode once, when it is created, and `cra
 Every crawl file records its schema version twice: in `crawl.schema_version` and in SQLite's `user_version`, which a tool reads before any table.
 - **A file from a newer tool is refused** with `crawl_schema_too_new` (exit code 6), with `details.file_schema_version` and `details.tool_schema_version`, and the file is left unchanged. The hint says to upgrade.
 - **No upgrades before v0.1.** Until the first release the schema is not yet public and stays at version `1`: changes edit the tables directly, and a crawl file made by an earlier development build may fail as `crawl_file_invalid`; crawl again. From v0.1 on, every schema change adds 1 to the version and brings an in-place upgrade of older files.
+- **Original Rules preview.** A file with the original 18-Rule schema and both recorded Rule snapshots, including the three exact placeholder queries, supports Continue and Issue reads without a migration. The schema still lacks all four Health fields, so there is no stored Health to read. A current file missing those fields is still invalid.
 
 ## Not measured is NULL
 

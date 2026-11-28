@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import Connection, Select, func, select, update
 from sqlalchemy.sql import FromClause
 
+from openlinx.store.preview import is_historical_preview, missing_health_columns
 from openlinx.store.schema import affected_urls, crawl, pages, rules
 from openlinx.store.writer import Unit
 
@@ -63,6 +64,8 @@ def record_health(calculated_at: datetime) -> Unit[None]:
     """Update the score and both counts together, with a timestamp fixed for writer replay."""
 
     def unit(connection: Connection) -> None:
+        if is_historical_preview(connection, missing_health_columns(connection)):
+            return
         result = materialised_health(connection)
         connection.execute(
             _RECORD_HEALTH,

@@ -74,6 +74,8 @@ does not add it to the direct test seams.
 The [URL Rule tests](../tests/rules/test_urls.py) rerun the saved queries in plain SQLite.
 The [image Rule tests](../tests/rules/test_images.py) exercise Link measurement, Resource
 requests and Store write failures using the fixture site.
+The [preview Continue tests](../tests/rules/test_preview_continue.py) use copies of Crawl
+files made by the original pre-Health producer in WAL and DELETE mode.
 
 The ALPN capability-probe tests in [tests/crawl/alpn/](../tests/crawl/alpn/)
 cover admission, deadlines, lifecycle and system DNS, plus the
