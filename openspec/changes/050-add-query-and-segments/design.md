@@ -49,7 +49,7 @@ Every predicate except `is [not] null` compiles to `(col IS NOT NULL AND <predic
 - *Alternative:* plain SQL three-valued logic, where `not (word_count >= 300)` silently drops null rows. That surprises agents and people alike.
 
 ### D3. Regex and case-folded `contains` as SQLite functions
-Every read connection that the Query Service opens registers two deterministic functions:
+The Query Service registers its deterministic filter functions on the connections that evaluate `--where` and Segment expressions. Public `linx sql` connections use SQLite functions without these filter helpers:
 - `openlinx_regexp(pattern, value)`: Python `re.search`, with compiled patterns in an LRU cache.
 - `openlinx_contains(value, needle)`: `needle.casefold() in value.casefold()`.
 

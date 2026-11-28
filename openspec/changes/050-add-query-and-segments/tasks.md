@@ -6,7 +6,7 @@ Each implementation task below is **one red → green slice** for one scenario, 
 3. Run ruff, the strict type checker and pytest with coverage.
 4. Make one commit whose message names the scenario.
 
-**The thin slice** (ROADMAP, Build order) is group 1: `issues` and `issues <rule-id>` over `040`'s Issues reader, ending with the cross-OS end-to-end test. It needs no `--where`, no `pages` and no `summary`. Groups 2–8 widen the change to the rest of v0.1. Groups 9–13 are v0.2, and their tasks are marked (v0.2).
+**The thin slice** (ROADMAP, Build order) is group 1: `issues` and `issues <rule-id>` over `040`'s Issues reader, ending with the cross-OS end-to-end test. It needs no `--where`, no `pages` and no `summary`. Groups 2–8 widen the change to the rest of v0.1, except task 3.9. Task 3.9 and groups 9–13 are v0.2.
 
 From group 1 on, the tests use the `crawl_store` factory (design.md, Test seams). It writes only tables and columns documented in `docs/schema.md`, through the store API of `015-add-crawl-store`. It grows in the slice that first needs a table. No boundary doubles are used.
 
@@ -32,10 +32,10 @@ Every group ends with a docs task and a review task.
 
 ## 2. The basic `--where` language (seam 4: Pure-logic)
 
-- [ ] 2.1 Drive `Where filter language › Comparison`: a tokenizer, a recursive-descent parser and a Core compiler for `column compare literal`, evaluated on an in-memory SQLite table defined by the test. Verify: red → green; one commit.
-- [ ] 2.2 Drive `Where filter language › and requires both`. Verify: red → green; one commit.
-- [ ] 2.3 Drive `Where filter language › Column names are case-insensitive`. Verify: red → green; one commit.
-- [ ] 2.4 Drive `Where filter language › contains ignores case in any script`: the `openlinx_contains` casefold function. Verify: red → green; one commit.
+- [x] 2.1 Drive `Where filter language › Comparison`: a tokenizer, a recursive-descent parser and a Core compiler for `column compare literal`, evaluated on an in-memory SQLite table defined by the test. Verify: red → green; one commit.
+- [x] 2.2 Drive `Where filter language › and requires both`. Verify: red → green; one commit.
+- [x] 2.3 Drive `Where filter language › Column names are case-insensitive`. Verify: red → green; one commit.
+- [x] 2.4 Drive `Where filter language › contains ignores case in any script` (Services): the `openlinx_contains` casefold function on the connection that runs the Pages filter. Verify: red → green; one commit.
 - [ ] 2.5 Drive `Where filter language › is null and is not null`. Verify: red → green; one commit.
 - [ ] 2.6 Drive the pair `Where filter language › Doubled quotes inside a string` and `› Double-quoted string`. Verify: red → green; one commit.
 - [ ] 2.7 Drive `Where filter language › Boolean literal`. Verify: red → green; one commit.
@@ -48,14 +48,14 @@ Every group ends with a docs task and a review task.
 ## 3. Query foundation and `pages` (seams 2: Services, 1: CLI)
 
 - [ ] 3.1 Drive `Query Commands read the selected Crawl without changing it › A specific Crawl is selected` (Services). Add the Query Service `pages` entry point, using 015's `--crawl` resolution and returning `total`. Verify: red → green; one commit.
-- [ ] 3.2 Drive `Page listing › Default fields` (Services): the six default fields in 010's envelope. Verify: red → green; one commit.
-- [ ] 3.3 Drive the pair `Page listing › Selected fields` and `› All fields` (Services): the available fields are the `pages` columns in `linx schema` order. Verify: red → green; one commit.
+- [ ] 3.2 Drive `Page listing › Default Page fields` (Services): the six default fields in 010's envelope. Verify: red → green; one commit.
+- [ ] 3.3 Drive the pair `Page listing › Selected fields` and `› All Page fields` (Services): the available fields are the `pages` columns in `linx schema` order. Verify: red → green; one commit.
 - [ ] 3.4 Drive `Unknown names in --where, --sort and --fields › Unknown field in --fields` (CLI): the `linx pages` Typer command, raising 010's `unknown_field`. Verify: red → green; one commit.
 - [ ] 3.5 Drive `Page listing › Filtered listing` (CLI): wire `--where` into `pages`. Verify: red → green; one commit.
 - [ ] 3.6 Drive `Query error codes › Error shape` (CLI). Verify: red → green; one commit.
 - [ ] 3.7 Drive `Unknown names in --where, --sort and --fields › Unknown column in --where` (CLI): `unknown_column` with `details.suggestions` from `difflib`. Verify: red → green; one commit.
 - [ ] 3.8 Drive the pair `Filter values fit the column type › String compared with a number column` and `› Number compared with a text column` (CLI). Verify: red → green; one commit.
-- [ ] 3.9 Drive `Filter values fit the column type › Invalid regular expression` (CLI). Verify: red → green; one commit.
+- [ ] 3.9 (v0.2) After 9.5, drive `Filter values fit the column type › Invalid regular expression` (CLI). Verify: red → green; one commit.
 - [ ] 3.10 Drive `Filter syntax errors › Position of a syntax error` (CLI). Verify: red → green; one commit.
 - [ ] 3.11 Drive `Filter syntax errors › SQL cannot be smuggled in` (CLI). Verify: red → green; one commit.
 - [ ] 3.12 Drive `Filter syntax errors › A smuggling attempt leaves the store unchanged` (CLI, SQL dump before and after). Verify: red → green; one commit.

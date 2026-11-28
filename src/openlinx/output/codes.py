@@ -103,6 +103,18 @@ INVALID_VALUE = _declare(
     "A flag or argument value that is not allowed, or a value given with the settings that its "
     "setting refuses; details.key names the setting, when there is one.",
 )
+INVALID_WHERE = _declare(
+    "invalid_where",
+    "error",
+    ExitCode.USAGE,
+    "A --where expression with invalid syntax or an invalid comparison value.",
+)
+UNKNOWN_COLUMN = _declare(
+    "unknown_column",
+    "error",
+    ExitCode.USAGE,
+    "A column the queried view does not have. Details list the closest column names.",
+)
 UNKNOWN_FIELD = _declare(
     "unknown_field", "error", ExitCode.USAGE, "A --fields name the Command does not have."
 )

@@ -1,4 +1,4 @@
-"""The ``--where`` language, paging and Segments: 050-add-query-and-segments.
+"""Parse the ``--where`` language for compilation by the Store.
 
-It parses only; the SQL it compiles to is built in openlinx.store.query.
+where: parse, Expression, Comparison, And, Value.
 """
