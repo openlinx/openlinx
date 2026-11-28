@@ -135,6 +135,21 @@ def _columns(table: str) -> dict[str, dict[str, Any]]:
     return {column["name"]: column for column in columns}
 
 
+def test_redirect_url_describes_how_meta_refresh_selects_its_target() -> None:
+    description = _columns("pages")["redirect_url"]["description"]
+
+    assert (
+        "If the Page extractor fails (urls.parse_error is extractor_error), "
+        "meta_refresh is NULL and the first discovered meta refresh Link can supply redirect_url."
+    ) in description
+    assert (
+        "For meta refresh after successful Page extraction, the first declaration "
+        "must contain a URL reference. "
+        "The first resolved meta refresh Link supplies the target, which can come "
+        "from a later declaration if the first reference cannot be resolved."
+    ) in description
+
+
 def test_deferred_columns_are_described_with_their_release() -> None:
     # Every later column, not only the spec's three, so a wrong release anywhere fails.
     pages, links = _columns("pages"), _columns("links")

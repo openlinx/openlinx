@@ -105,7 +105,7 @@ def test_meta_refresh_with_a_quoted_target() -> None:
     )
 
 
-def test_only_the_first_meta_refresh_redirects() -> None:
+def test_a_first_meta_refresh_without_a_url_prevents_a_later_redirect() -> None:
     # A news page's five-minute reload, then a redirect a second template adds.
     row = page_row(
         '<html><head><meta http-equiv="refresh" content="300">'

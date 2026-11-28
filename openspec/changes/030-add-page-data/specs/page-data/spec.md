@@ -293,7 +293,7 @@ A Page SHALL have `redirect_url` and `redirect_type` set in these cases:
 
 - **HTTP redirect.** A Page with a 3xx status code has `redirect_type` `http_redirect`. Its `redirect_url` is the URL that `urls.redirect_url_id` (`022-add-fetch-policy`) points to, or NULL when that is null.
 - **HTTP Refresh.** A Page with a 2xx status code whose `Refresh` header names a URL different from its own URL, the target of the `http_refresh` Link that `020-add-crawl-core` discovers, has `redirect_type` `http_refresh` and `redirect_url` set to that URL.
-- **Meta refresh.** An analysed Page without an HTTP Refresh redirect, whose meta refresh names a URL different from its own URL, has `redirect_type` `meta_refresh` and `redirect_url` set to that URL (see "Meta refresh").
+- **Meta refresh.** An analysed Page without an HTTP Refresh redirect has `redirect_type` `meta_refresh` and `redirect_url` set to the target selected by "Meta refresh" below, when that target differs from the Page's own URL.
 
 In every other case both columns SHALL be NULL. `redirect_type` also lists `javascript_redirect`, which JavaScript rendering fills from v1.1.
 
@@ -518,7 +518,9 @@ An analysed Page SHALL store the robots directives found in its HTML, and every 
 - **THEN** `x_robots_tag` is `noindex`, `x_robots_tag_noindex` is 1, `x_robots_tag_nofollow` is 0 and `meta_robots` is NULL
 
 ### Requirement: Meta refresh
-`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none. Only that first element can redirect: when its `content` names a URL, the refresh target is the target of the first `meta_refresh` Link that `020-add-crawl-core` discovers, and otherwise there is none.
+`meta_refresh` SHALL be the normalised `content` of the first `<meta>` element whose `http-equiv` is `refresh` (compared case-insensitively). It is NULL when there is none.
+
+When the first element's `content` contains a URL reference, the meta refresh target SHALL be the target of the first `meta_refresh` Link that `020-add-crawl-core` discovers. A reference that cannot be resolved to a Link leaves a later element eligible to supply that first Link. If the first element has no URL reference or discovery finds no `meta_refresh` Link, there is no meta refresh target.
 
 #### Scenario: Meta refresh with a quoted target
 - **WHEN** the analysed Page `https://example.test/old` contains `<meta http-equiv="Refresh" content="5; URL='/new'">`
@@ -528,9 +530,14 @@ An analysed Page SHALL store the robots directives found in its HTML, and every 
 - **WHEN** an analysed Page contains `<meta http-equiv="refresh" content="30">`
 - **THEN** `meta_refresh` is `30` and `redirect_type` is NULL
 
-#### Scenario: Only the first meta refresh redirects
+#### Scenario: A first meta refresh without a URL prevents a later redirect
 - **WHEN** an analysed Page's head contains `<meta http-equiv="refresh" content="300">` and then `<meta http-equiv="refresh" content="0; url=/new">`
 - **THEN** `meta_refresh` is `300`, and `redirect_type` and `redirect_url` are NULL
+
+#### Scenario: An unresolvable first meta refresh uses the next Link
+- **WHEN** the analysed Page `{site}/old` responds 200 and contains `<meta http-equiv="refresh" content="0; url=http://[::1">` followed by `<meta http-equiv="refresh" content="0; url=/next">`
+- **THEN** the Crawl requests `{site}/next`, and the original Page has `meta_refresh` `0; url=http://[::1`, `redirect_type` `meta_refresh` and `redirect_url` `{site}/next`
+- **AND** its `indexability` is `non_indexable` and its `indexability_status` is `redirected`
 
 ### Requirement: Canonicals
 The canonical columns of an analysed Page SHALL be computed from its *canonical declarations*. A canonical declaration is a `canonical` Link that `020-add-crawl-core` discovers in the Page's response and that is declared in one of two places:
