@@ -26,6 +26,7 @@ RULE_FIELDS = (
     "description",
     "why_it_matters",
     "how_to_fix",
+    "reproduce_sql",
 )
 LIST_FIELDS = Fields(available=RULE_FIELDS, default=RULE_FIELDS)
 

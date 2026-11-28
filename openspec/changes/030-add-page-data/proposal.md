@@ -4,7 +4,7 @@
 
 ## What Changes
 
-> **v0.1 scope (2026-10-05, see ROADMAP.md):** v0.1 ships the minimum. **Deferred to v0.2:** Flesch Reading Ease, the Readability band and the syllable count; `--detect-language` and py3langid; SERP pixel widths; and raw HTML storage (`page_sources`, zstd, `--store-html/--no-store-html`). Their columns and the `page_sources` table exist in v0.1 and stay empty, so v0.2 fills them without a migration (ADR-0005). HTML storage is opt-in when it arrives (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file).
+> **v0.1 scope (see ROADMAP.md):** v0.1 ships the first meta description's pixel width for the Rules catalogue. **Deferred to v0.2:** Flesch Reading Ease, the Readability band and the syllable count; `--detect-language` and py3langid; pixel widths for both titles and the second meta description; and raw HTML storage (`page_sources`, zstd, `--store-html/--no-store-html`). Their columns and the `page_sources` table exist in v0.1 and stay empty, so v0.2 fills them without a migration (ADR-0005). HTML storage is opt-in when it arrives (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file).
 
 - **New crawl-store tables.** Each follows the schema conventions of `018-add-schema-conventions` (ADR-0005: a `STRICT` table, with CHECKs on its enumerations and flags), is described column by column in `linx schema` and is documented in `docs/schema.md`. Every table and column is added in the TDD slice whose scenario first needs it.
   - `pages`: one row per Page, keyed by `url_id`, with one unique index on `address`. This is the flat Page record of 96 columns, the Page record's columns and the small additions below: identity and response, titles and headings, directives, size, content, links and structured data.
@@ -19,7 +19,7 @@
   - **(v0.2)** Flesch Reading Ease and a Readability band, for Pages that declare one of seven languages (en, de, es, fr, nl, pt, ru)
   - Text Ratio
   - the Exact Duplicate hash
-- **(v0.2) SERP pixel widths** for titles (Arial 20 px) and meta descriptions (Arial 14 px), from a bundled table of Arial-metric character widths.
+- **SERP pixel widths** use bundled Liberation Sans Regular advances. The first meta description is measured at 14 px in v0.1. Titles (20 px) and the second meta description (14 px) stay scheduled for v0.2.
 - **Structured data:** item counts and types for JSON-LD and Microdata, plus a count of JSON-LD blocks that fail to parse.
 - **Link data:**
   - Inlink and outlink counts, including the share of Pages that link to the Page (`linking_pages_pct`). The inlink counts are computed in the post-crawl passes.
@@ -36,7 +36,7 @@
   - `--store-html` / `--no-store-html` (`store_html = true | false`). HTML is not stored unless storage is turned on. The decision is made when the Crawl starts, recorded, and kept on resume.
   - `--detect-language` (`detect_language = false`) also stores the language detected from the Content Area text.
 - **Columns measured by later releases** exist now and stay NULL:
-  - the four SERP pixel widths, `syllable_count`, `flesch_reading_ease`, `readability`, `detected_language`, `link_score` and `http_version` (v0.2)
+  - both title widths and the second meta description width, `syllable_count`, `flesch_reading_ease`, `readability`, `detected_language`, `link_score` and `http_version` (v0.2)
   - `closest_similarity_pct` and `near_duplicate_count` (v0.3)
   - `structured_data_error_count` and `structured_data_warning_count` (v0.3)
   - `unique_js_inlinks`, `unique_js_outlinks` and `js_cookie_count` (v1.1)

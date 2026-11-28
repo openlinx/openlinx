@@ -1,6 +1,8 @@
 """Resolve redirect loops and hop limits from stored rows so replay gives the same result."""
 
-from sqlalchemy import Connection, bindparam, select, update
+from collections.abc import Iterator
+
+from sqlalchemy import Connection, bindparam, select, text, update
 
 from openlinx.store.records import DiscoveredVia
 from openlinx.store.schema import urls
@@ -14,7 +16,24 @@ _REDIRECT_URL_ID = (
     .values(redirect_url_id=bindparam("target_id"))
 )
 _REDIRECTS_TO = select(urls.c.redirect_url_id).where(urls.c.id == bindparam("url_id"))
-_IN_LOOP = update(urls).where(urls.c.id == bindparam("url_id")).values(in_redirect_loop=True)
+_FIRST_INCOMING = (
+    select(urls.c.id)
+    .where(urls.c.redirect_url_id == bindparam("url_id"))
+    .order_by(urls.c.id)
+    .limit(1)
+)
+_NEXT_INCOMING = _FIRST_INCOMING.where(urls.c.id > bindparam("after"))
+
+_MARK_LOOP = text("""
+    WITH RECURSIVE members(id) AS (
+        SELECT :url_id
+        UNION ALL
+        SELECT urls.redirect_url_id
+        FROM members JOIN urls ON urls.id = members.id
+        WHERE urls.redirect_url_id != :url_id
+    )
+    UPDATE urls SET in_redirect_loop = 1 WHERE id IN (SELECT id FROM members)
+""")
 
 
 def chain_via(
@@ -30,12 +49,12 @@ def past_the_hop_limit(connection: Connection, url_id: int, limit: int) -> bool:
     return _chain_back(connection, via, found_on, limit)[0] >= limit
 
 
-def link_redirect(connection: Connection, url_id: int, target_id: int, limit: int) -> None:
-    """Records the URL's redirect to its target, and marks the loop it closes, if any."""
+def link_redirect(connection: Connection, url_id: int, target_id: int) -> None:
+    """Record the edge and mark the loop in the same writer unit."""
+    closes_loop = _closes_loop(connection, url_id, target_id)
     connection.execute(_REDIRECT_URL_ID, {"url_id": url_id, "target_id": target_id})
-    loop = _loop_through(connection, url_id, target_id, limit)
-    if loop:
-        connection.execute(_IN_LOOP, [{"url_id": looping} for looping in loop])
+    if closes_loop:
+        connection.execute(_MARK_LOOP, {"url_id": url_id})
 
 
 def _chain_back(
@@ -51,19 +70,47 @@ def _chain_back(
     return hops, via
 
 
-def _loop_through(connection: Connection, url_id: int, target_id: int, limit: int) -> list[int]:
-    # The redirect just stored can only close a loop that runs through it: walk forward from
-    # its target, at most `limit` + 1 reads, back to the URL. A URL seen twice is a loop that
-    # does not run through it, which ends the walk at once (022-add-fetch-policy D2).
-    path = [url_id]
-    for _ in range(limit + 1):
-        if target_id == url_id:
-            return path
-        if target_id in path:
-            break
-        path.append(target_id)
-        following = connection.execute(_REDIRECTS_TO, {"url_id": target_id}).scalar()
-        if following is None:
-            break
-        target_id = following
-    return []
+def _closes_loop(connection: Connection, url_id: int, target_id: int) -> bool:
+    # A new edge closes a loop exactly when its target already leads to its source. Alternate
+    # between following targets and tracing incoming edges. For a non-loop edge, the work is
+    # bounded by the smaller connected component. Charging each merge to that component
+    # gives O(n log n) indexed reads, plus one walk and one write per member to mark a loop.
+    incoming = _walk_incoming(connection, url_id)
+    current = checkpoint = target_id
+    interval = remaining = 1
+    while current != url_id:
+        following: int | None = connection.execute(_REDIRECTS_TO, {"url_id": current}).scalar()
+        if following is None or next(incoming, None) is None:
+            return False
+        current = following
+        # Exponentially spaced checkpoints detect a target-side cycle with no visited set.
+        if current == checkpoint:
+            return False
+        remaining -= 1
+        if remaining == 0:
+            checkpoint = current
+            interval *= 2
+            remaining = interval
+    return True
+
+
+def _walk_incoming(connection: Connection, url_id: int) -> Iterator[int]:
+    # Each URL has at most one outgoing edge, so it supplies its own parent on the way
+    # back up. Each step uses indexed reads and carries no stack or set of visited URLs.
+    current = url_id
+    previous: int | None = None
+    while True:
+        if previous is None:
+            child = connection.execute(_FIRST_INCOMING, {"url_id": current}).scalar()
+        else:
+            child = connection.execute(
+                _NEXT_INCOMING, {"url_id": current, "after": previous}
+            ).scalar()
+        if child is not None:
+            current, previous = child, None
+        elif current == url_id:
+            return
+        else:
+            parent: int = connection.execute(_REDIRECTS_TO, {"url_id": current}).scalar_one()
+            current, previous = parent, current
+        yield current

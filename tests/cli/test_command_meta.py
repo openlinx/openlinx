@@ -110,6 +110,29 @@ def test_default_fields_are_available() -> None:
         build_app(extra=AppExtra(commands=[unavailable_default_field]))
 
 
+def test_default_fields_for_an_argument_are_available() -> None:
+    @command_meta(
+        output="list",
+        formats=[Format.JSON],
+        fields=Fields(("n",), ("n",)),
+        fields_by_argument={"selection": Fields(("value",), ("unknown",))},
+    )
+    def with_argument(
+        selection: Annotated[str | None, typer.Argument()] = None,
+        output_format: FormatOpt = Format.JSON,
+        limit: int = 50,
+        cursor: str | None = None,
+        fields: str | None = None,
+    ) -> Any:
+        return None
+
+    with pytest.raises(
+        TypeError,
+        match=r"^Command with_argument: its default fields for selection are not all available\.$",
+    ):
+        build_app(extra=AppExtra(commands=[with_argument]))
+
+
 @command_meta(output="document", formats=[Format.JSON, Format.TABLE])
 def secret_twice(
     output_format: FormatOpt = Format.JSON,

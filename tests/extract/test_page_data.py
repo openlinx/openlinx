@@ -4,6 +4,7 @@ import sys
 from dataclasses import fields
 from types import FrameType
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -80,10 +81,53 @@ def test_meta_description_is_normalised() -> None:
     assert (row.meta_description_1, row.meta_description_1_length) == ("Buy shoes", 9)
 
 
+@pytest.mark.parametrize(
+    ("description", "pixels"),
+    [
+        ("αЖé—", 43),
+        ("iW+", 25),
+        ("☰", 14),
+        ("日Ａ", 28),
+        ("𐌀", 8),
+        ("א", 8),
+        ("\u1ab0\u20e3\u2060", 0),
+        ("か\u3099", 14),
+    ],
+    ids=[
+        "font-advances",
+        "half-up-after-summing",
+        "unicode-16-wide",
+        "wide-fullwidth",
+        "default",
+        "outside-covered-blocks",
+        "zero",
+        "wide-combining-mark",
+    ],
+)
+def test_meta_description_pixel_width(description: str, pixels: int) -> None:
+    row = page_row(f'<meta name="description" content="{description}">')
+
+    assert row.meta_description_1_width_px == pixels
+
+
+def test_absent_meta_description_has_no_pixel_width() -> None:
+    row = page_row("<title>Title</title>")
+
+    assert (row.meta_description_1, row.meta_description_1_width_px) == (None, None)
+
+
 def test_a_meta_description_without_content_is_empty() -> None:
     row = page_row('<meta name=" description ">')
 
-    assert (row.meta_description_1, row.meta_description_1_length) == ("", 0)
+    assert (
+        row.meta_description_1,
+        row.meta_description_1_length,
+        row.meta_description_1_width_px,
+    ) == (
+        "",
+        0,
+        0,
+    )
 
 
 def test_a_meta_description_in_noscript_is_ignored() -> None:

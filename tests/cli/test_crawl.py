@@ -1,6 +1,8 @@
 """Verify the crawl Command's inputs, output and recorded results."""
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +12,11 @@ from tests.fixture_site.routes import Page, Site, Status
 from tests.support.cli import run_cli
 from tests.support.crawling import crawled
 from tests.support.crawls import crawl_row, query
+from tests.support.settings import (
+    TABLE_REQUIRED_REASON,
+    UNKNOWN_SETTING_REASON,
+    assert_setting_problem,
+)
 from tests.support.workspace import TempWorkspace
 
 SMALL_SITE = Site(
@@ -62,7 +69,7 @@ def test_a_negative_network_wait_in_the_settings_file_is_refused(
 def test_negative_threshold(temp_workspace: TempWorkspace, fixture_site: StartSite) -> None:
     server = fixture_site(Site(routes={"/": Page(body="<p>A Page.</p>")}))
     settings_file = temp_workspace.root / "openlinx.toml"
-    settings_file.write_bytes(b"[rules.low-word-count]\nmin_words = -5\n")
+    settings_file.write_bytes(b"[rules.title-too-long]\nmax_chars = -5\n")
 
     result = run_cli("crawl", server.url("/"))
 
@@ -70,7 +77,90 @@ def test_negative_threshold(temp_workspace: TempWorkspace, fixture_site: StartSi
     assert result.exit_code == 3
     (error,) = result.errors()
     assert error["code"] == "settings_invalid"
-    assert error["details"]["errors"][0]["key"] == "rules.low-word-count.min_words"
+    assert error["details"]["errors"][0]["key"] == "rules.title-too-long.max_chars"
+
+
+def test_settings_from_preview_rule_tables_control_a_new_crawl(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(Site({"/": Page(body="<p>Two words</p>")}))
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(
+        b"rules.low-word-count.min_words = 3\n"
+        b"rules.url-parameters = {enabled = false}\n"
+        b"[rules.h2-missing]\nenabled = true\n"
+    )
+
+    result = run_cli("crawl", server.url("/?page=2"))
+
+    assert result.exit_code == 0, result.stderr
+    assert [(request.method, request.path) for request in server.requests] == [
+        ("GET", "/robots.txt"),
+        ("GET", "/?page=2"),
+    ]
+    file = Path(result.json()["crawl_file"])
+    rows = query(
+        file,
+        "SELECT id, enabled, thresholds FROM rules"
+        " WHERE id IN ('h2-missing', 'low-word-count', 'url-parameters') ORDER BY id",
+    )
+    assert [
+        (rule_id, enabled, json.loads(thresholds)) for rule_id, enabled, thresholds in rows
+    ] == [
+        ("h2-missing", 1, {}),
+        ("low-word-count", 1, {"min_words": 3}),
+        ("url-parameters", 0, {}),
+    ]
+    rows = query(
+        file,
+        "SELECT rule_id, url, detail FROM affected_urls JOIN urls ON id = url_id"
+        " WHERE rule_id IN ('h2-missing', 'low-word-count', 'url-parameters') ORDER BY rule_id",
+    )
+    assert [
+        (rule_id, url, None if detail is None else json.loads(detail))
+        for rule_id, url, detail in rows
+    ] == [
+        ("h2-missing", server.url("/?page=2"), None),
+        ("low-word-count", server.url("/?page=2"), {"word_count": 2}),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source", "key", "reason"),
+    [
+        pytest.param(
+            "rules.url-parameters = []\n",
+            "rules.url-parameters",
+            TABLE_REQUIRED_REASON,
+            id="wrong-type",
+        ),
+        pytest.param(
+            "[rules.h2-missing.nested]\n",
+            "rules.h2-missing.nested",
+            UNKNOWN_SETTING_REASON,
+            id="nested-empty",
+        ),
+    ],
+)
+def test_an_invalid_setting_in_a_preview_rule_table_is_refused_before_http(
+    temp_workspace: TempWorkspace,
+    fixture_site: StartSite,
+    source: str,
+    key: str,
+    reason: re.Pattern[str],
+) -> None:
+    server = fixture_site(Site({"/": Page(body="<p>A Page.</p>")}))
+    settings_file = temp_workspace.root / "openlinx.toml"
+    settings_file.write_bytes(source.encode("utf-8"))
+
+    result = run_cli("crawl", server.url("/"))
+
+    assert (result.exit_code, server.requests) == (3, ())
+    (error,) = result.errors()
+    assert error["code"] == "settings_invalid"
+    assert error["details"]["file"] == str(settings_file.resolve())
+    (problem,) = error["details"]["errors"]
+    assert_setting_problem(problem, key, reason)
 
 
 def test_a_seed_with_userinfo_is_rejected_with_a_hint_about_auth(

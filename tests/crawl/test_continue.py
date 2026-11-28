@@ -2,8 +2,11 @@
 
 import json
 import os
+import re
+import sqlite3
 import subprocess
 from collections.abc import Sequence
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
@@ -46,6 +49,50 @@ def test_continuing_a_stopped_crawl_completes_it(
         result.summary.state,
         query(result.crawl_file, "SELECT count(*) FROM urls WHERE fetch_state = 'fetched'"),
     ) == ("max_urls", "completed", [(10,)])
+
+
+@pytest.mark.parametrize(
+    "missing_tables",
+    [("rules", "affected_urls"), ("affected_urls",)],
+    ids=["before-rules", "no-affected-urls"],
+)
+def test_a_continue_refuses_a_crawl_without_rule_tables_before_writing(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, missing_tables: tuple[str, ...]
+) -> None:
+    server = fixture_site(
+        Site({"/": Page(body='<a href="/next">Next</a>'), "/next": Page(body="<p>Next</p>")})
+    )
+    stopped = crawl_result(server.url("/"), max_urls=1)
+    file = stopped.crawl_file
+
+    # Development builds before Rules also created schema version 1.
+    with closing(sqlite3.connect(file)) as connection:
+        connection.execute("DROP TABLE affected_urls")
+        if "rules" in missing_tables:
+            connection.execute("DROP VIEW issues")
+            connection.execute("DROP TABLE rules")
+
+    assert query(file, "PRAGMA user_version") == [(1,)]
+    assert query(file, "SELECT state, (SELECT count(*) FROM pages) FROM crawl") == [("stopped", 1)]
+    before = sha256_of(file)
+    reporter = Collected()
+
+    with pytest.raises(OpenLinxError) as caught:
+        continued(stopped, CrawlOverrides(max_urls=None), reporter=reporter)
+
+    assert (caught.value.code, caught.value.exit_code, dict(caught.value.diagnostic.details)) == (
+        "crawl_file_invalid",
+        6,
+        {"file": str(file)},
+    )
+    message = caught.value.diagnostic.message.replace(str(file), "").casefold()
+    words = set(re.findall(r"\w+", message))
+    assert words & {"missing", "lacks", "absent"}
+    assert words & {"table", "tables"}
+    assert words & {"rules", "affected_urls"} == set(missing_tables)
+    assert reporter.events == []
+    assert sha256_of(file) == before
+    assert [request.path for request in server.requests] == ["/robots.txt", "/"]
 
 
 def test_a_continue_records_the_settings_it_runs_with(

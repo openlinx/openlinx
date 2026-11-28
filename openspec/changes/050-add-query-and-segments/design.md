@@ -23,7 +23,7 @@ This change adds to that contract the `csv` format, the CSV policy, `--no-bom` a
 
 All query logic lives in the **Query Service** (`src/openlinx/services/query.py` plus `src/openlinx/query/`). The CLI modules only parse flags and serialise, and `090-add-mcp-server` wraps the same service calls.
 
-The scenarios use the column names that 030 publishes (`address`, `status_code`, `title_1`, `title_1_length`, `meta_description_1`, `word_count`, `crawl_depth`, `unique_inlinks`, `indexability`, `indexability_status`), the table names `pages`, `links`, `urls`, `issues` and `affected_urls`, and rule ids from 040's catalogue (`title-missing`, `title-too-long`, `h1-missing`, `meta-description-too-long`, `image-broken`). The summary's `crawl.completed_at` is `015`'s `crawl.completed_at`. Rule ids in the scenarios come from `040`'s 42-Rule catalogue; v0.1 ships 15 of them, and a scenario's stored Issues need not be ones v0.1 evaluates.
+The scenarios use the column names that 030 publishes (`address`, `status_code`, `title_1`, `title_1_length`, `meta_description_1`, `word_count`, `crawl_depth`, `unique_inlinks`, `indexability`, `indexability_status`), the table names `pages`, `links`, `urls`, `issues` and `affected_urls`, and rule ids from 040's catalogue (`title-missing`, `title-too-long`, `h1-missing`, `meta-description-too-long`, `image-broken`). The summary's `crawl.completed_at` is `015`'s `crawl.completed_at`. A new v0.1 Crawl evaluates the 42 Rules in `040`'s catalogue. Queries on an existing Crawl use the Rules it recorded.
 
 ## Goals / Non-Goals
 
@@ -134,6 +134,7 @@ Moved from the `-o` bullet of 010's D3. 010's `Output` object holds the optional
 
 ### D14. Issues are read through 040's reader
 Every Issue that `summary`, `issues`, `issues <rule-id>` and `page <url>` show comes from `040`'s Issues reader, which this change never bypasses:
+- **One read snapshot per response.** The Query Service opens the selected Crawl with its file identity and requests `reading(..., snapshot=True)`. The Issue source, results and recorded Rule metadata share a snapshot in WAL and rollback-journal mode. A rollback-journal read can delay a Writer commit while the Service collects the response data. The Service releases the read before formatting and between requests for pages.
 - **Materialised** when `crawl.state` is `completed` or `stopped`: the `issues` view, whose `affected_count` is a COUNT over `affected_urls`, and `affected_urls` by its key prefix or by `affected_urls_url_id`.
 - **Live** in every other state (`running`, `failed`, `interrupted`): every enabled Rule's `reproduce_sql`, run read-only over the stored rows. `affected_urls` is ignored, because after a resume it holds the previous pass's rows.
 - `issues <rule-id>` adds the Rule's `reproduce_sql` to its `rule`, so an agent can rerun it with `sql` and read the Affected URLs as they are now.

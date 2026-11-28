@@ -197,6 +197,49 @@ class SecretNames:
     settings: SecretSettings = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RuleRow:
+    """The catalogue metadata and effective settings recorded when a Crawl starts."""
+
+    id: str
+    category: RuleCategory
+    issue_type: IssueType
+    priority: Priority
+    applies_to: AppliesTo
+    enabled: bool
+    thresholds: dict[str, int]
+    description: str
+    why_it_matters: str
+    how_to_fix: str
+    reproduce_sql: str
+
+
+@dataclass(frozen=True, slots=True)
+class AffectedUrl:
+    """A URL matched by a Rule, with its measured values when the Rule reports them."""
+
+    url_id: int
+    detail: dict[str, Any] | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UrlIssue:
+    """One Rule's result for a URL, as stored in affected_urls."""
+
+    rule_id: str
+    url_id: int
+    detail: dict[str, Any] | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Issue:
+    rule_id: str
+    category: RuleCategory
+    issue_type: IssueType
+    priority: Priority
+    affected_count: int
+
+
 @dataclass(frozen=True, kw_only=True)
 class NewCrawl:
     workspace: Workspace
@@ -210,6 +253,7 @@ class NewCrawl:
     # store.journal_mode setting would silently ignore it.
     secret_names: SecretNames
     journal_setting: JournalSetting
+    rules: Sequence[RuleRow]
     section_crawl: bool
     settings_file: Path | None = None
 

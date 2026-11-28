@@ -7,9 +7,6 @@ from openlinx.store.records import AppliesTo, IssueType, Priority, RuleCategory
 
 type ThresholdUnit = Literal["characters", "pixels", "words", "kilobytes", "hops"]
 
-# The catalogue can describe a Rule before its condition is available.
-NO_ROWS = "SELECT id AS url_id, NULL AS detail FROM urls WHERE 0"
-
 
 @dataclass(frozen=True, slots=True)
 class Threshold:

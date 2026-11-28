@@ -64,7 +64,7 @@ slice:   000 ─► 010 ─► 015 ─► 017 ─► 018 ─► 020 ─► 030-m
 widen:                                        ├─► 022-min ─┐
                                               ├─► 060-min ─┤
                                               ├─► 026 parse pool, synthetic site, benchmark baseline (before the slice's e2e test) ─────┐
-                                              └────────────┴─► rest of 030-min ─► 040 (15 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
+                                              └────────────┴─► rest of 030-min ─► 040 (42 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
 ```
 
 - **Where the build is:**
@@ -73,7 +73,7 @@ widen:                                        ├─► 022-min ─┐
   - **Older branches:** 026, 040 and 050 contain partial implementations that still need the package rename and current contracts. Bounded worker shutdown, Rule populations and remaining Rules, query review fixes, and the integrated Crawl → Issues proof remain open. [Development state](docs/development-state.md) links verified checkpoints, tasks and dependencies.
   - **Not started:** 080 (the agent Skill) and 085 (the release).
 - **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
-- **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 15 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
+- **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 42 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts its synthetic site alongside 020 and the rest once 020's slice is in (its first pull request), and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
 - **HTML parser:** selectolax 1.0.1 or later, parsing with scripting on, as a browser that runs scripts does. A head `<noscript>` therefore keeps the later head elements (canonical, meta description, robots, hreflang) in `<head>`, and a body `<noscript>` gives its Links.
 - **Release:** 085 comes last, before the v0.1 tag, and publishes under the product name, OpenLinx. `docs/crawler.md`, the page that 022's User-Agent names, must exist by then.
@@ -81,17 +81,20 @@ widen:                                        ├─► 022-min ─┐
 
 ### The v0.1 Rules
 
-040 ships these 15 Rules in v0.1, each with a reproducing SQL query over the public schema. The other 27 Rules of its catalogue move to v0.2.
+v0.1 ships all 42 Rules below. Each Rule has a reproducing SQL query over the public schema. The initial integration slice supplied 15 Rules. The release includes the other 27 under the same evaluation and configuration contract.
 
 | Category | Rules |
 |---|---|
-| `response_codes` | `internal-4xx`, `internal-5xx`, `internal-no-response`, `internal-3xx`, `redirect-chain`, `redirect-loop`, `internal-blocked-by-robots-txt` |
-| `security` | `http-url` (a Warning with High Priority) |
-| `titles` | `title-missing`, `title-duplicate`, `title-too-long` (characters only, since pixel widths are v0.2) |
-| `meta_descriptions` | `meta-description-missing` |
-| `headings` | `h1-missing` |
-| `directives` | `noindex` |
-| `canonicals` | `canonical-to-non-indexable` |
+| `response_codes` | `internal-4xx`, `internal-5xx`, `internal-no-response`, `internal-blocked-by-robots-txt`, `internal-3xx`, `redirect-chain`, `redirect-loop` |
+| `security` | `http-url` |
+| `titles` | `title-missing`, `title-duplicate`, `title-too-long`, `title-too-short`, `title-multiple`, `title-same-as-h1` |
+| `meta_descriptions` | `meta-description-missing`, `meta-description-duplicate`, `meta-description-too-long`, `meta-description-too-short`, `meta-description-multiple` |
+| `headings` | `h1-missing`, `h1-duplicate`, `h1-multiple`, `h1-too-long`, `h2-missing` |
+| `canonicals` | `canonical-missing`, `canonicalised`, `canonical-to-non-indexable`, `canonical-conflicting`, `canonical-relative` |
+| `directives` | `noindex`, `nofollow`, `meta-refresh` |
+| `content` | `low-word-count`, `exact-duplicate` |
+| `urls` | `url-uppercase`, `url-underscores`, `url-parameters`, `url-too-long`, `url-non-ascii` |
+| `images` | `image-missing-alt-text`, `image-too-large`, `image-broken` |
 
 ### What each change owns
 
@@ -195,9 +198,10 @@ If a change needs something another change owns, it depends on that change inste
   - Inlink and outlink counts, computed in the post-crawl passes.
   - The Content Area and content metrics, and the Exact Duplicate hash.
   - Structured-data item counts, and cookie names without their values.
-  - **(v0.2)** Flesch Reading Ease and the Readability band, language detection (`--detect-language`, py3langid), SERP pixel widths, and **raw HTML storage** (zstd). HTML is not stored by default; storing it is opt-in by `--store-html` (`[crawl] store_html`) (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file). The `page_sources` table and the v0.2 columns exist, empty, in v0.1.
-- **040-add-rules** (15 Rules in v0.1):
-  - The Rule model and the 15 Rules listed above; `http-url` is a Warning with High Priority. **(v0.2)** the other 27 Rules of the 42-Rule catalogue.
+  - The width of the first meta description in pixels for `meta-description-too-long`. In v0.1 `title-too-long` checks characters.
+  - **(v0.2)** Flesch Reading Ease and the Readability band, language detection (`--detect-language`, py3langid), the remaining SERP pixel widths, and **raw HTML storage** (zstd). HTML is not stored by default; storing it is opt-in by `--store-html` (`[crawl] store_html`) (decided 2026-10-11: in the store benchmark, HTML was about 70% of the crawl file). The `page_sources` table and the v0.2 columns exist, empty, in v0.1.
+- **040-add-rules** (42 Rules in v0.1):
+  - The Rule model and the 42 Rules listed above; `http-url` is a Warning with High Priority.
   - Thresholds and disabling in `openlinx.toml`.
   - **Every Rule is one reproducing SQL query** over the public schema, the foundation of v0.3's User SQL Rules, and it is the Rule's only form:
     - a running Crawl writes no Issue; while a Crawl has no final pass (`running`, `failed` or `interrupted`), the Issues reader runs the queries live, read-only, and returns the shape of the stored Issues
@@ -342,7 +346,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 | 100 | `100-add-installers` | `installation` | none (install scripts) | planned |
 | 110 | `110-add-ci-gate` | decided when it is drafted | `diff A B`, `--fail-on`; a GitHub Action | planned, not drafted yet |
 
-- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands and its MCP UI widgets; the future fetching items listed under 022 (bot-challenge detection with the External re-check and Web Bot Auth); 030's readability, language, pixel widths and HTML storage; 040's other 27 Rules, the `ai_search` category and the Rules pack; 050's `export` (with Pages as Markdown), the fix-first ranking, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, fix and verify, dry run and Hand-off, install-script one-liners, plugin marketplace and plugins.
+- **The rest of the v0.1 and v0.1.1 changes,** marked **(v0.2)** under "What each change owns": the rest of 060; 090's tools for the v0.2 Commands and its MCP UI widgets; the future fetching items listed under 022 (bot-challenge detection with the External re-check and Web Bot Auth); 030's readability, language, the remaining pixel widths and HTML storage; 040's `ai_search` category and the Rules pack; 050's `export` (with Pages as Markdown), the fix-first ranking, Segments, the full `--where`, the `csv` format, `--no-bom` and `-o`; 080's Full audit, fix and verify, dry run and Hand-off, install-script one-liners, plugin marketplace and plugins.
 - **Order:** 024 first. The rest of 060 needs 022 and 024 (List mode, and the sitemap reader for the dry-run estimate). 070 needs 050's `export` and CSV writer, and 060 for its end-to-end test. 110 needs 024 and 040's Issues. 100 comes last.
 - Link graph views: `links <url> --in|--out`.
 - Redirect Chain analysis: `redirects`, with per-hop headers and timing.

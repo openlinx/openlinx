@@ -75,7 +75,7 @@ def _entry(name: str, command: Command, tables: SettingsTables) -> dict[str, Any
     # Source line breaks are not content: each paragraph becomes one line.
     paragraphs = (inspect.getdoc(inspect.unwrap(callback)) or "").split("\n\n")
     doc = "\n\n".join(" ".join(paragraph.split()) for paragraph in paragraphs)
-    return {
+    entry = {
         "name": name,
         "summary": doc.partition("\n")[0],
         "description": doc,
@@ -87,6 +87,11 @@ def _entry(name: str, command: Command, tables: SettingsTables) -> dict[str, Any
         "fields": None if meta.fields is None else meta.fields.to_json(),
         "examples": [example.to_json() for example in meta.examples],
     }
+    if meta.fields_by_argument:
+        entry["fields_by_argument"] = {
+            argument: fields.to_json() for argument, fields in meta.fields_by_argument.items()
+        }
+    return entry
 
 
 def _arguments(command: Command) -> list[dict[str, Any]]:

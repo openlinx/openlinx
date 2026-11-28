@@ -13,12 +13,17 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     MetaData,
+    Select,
     Table,
     Text,
+    func,
     literal_column,
     or_,
+    select,
 )
+from sqlalchemy.sql.ddl import CreateView
 
+from openlinx.naming import COMMAND_NAME, SETTINGS_FILE_NAME
 from openlinx.store.page_records import (
     HtmlSource,
     Indexability,
@@ -29,6 +34,7 @@ from openlinx.store.page_records import (
     SameSite,
 )
 from openlinx.store.records import (
+    AppliesTo,
     CrawlMode,
     CrawlState,
     DeclaredIn,
@@ -36,12 +42,15 @@ from openlinx.store.records import (
     FetchError,
     FetchState,
     HttpVersion,
+    IssueType,
     JournalMode,
     LinkAttribute,
     LinkElement,
     LinkType,
     ParseError,
+    Priority,
     RobotsState,
+    RuleCategory,
     SkipReason,
     StopReason,
 )
@@ -89,7 +98,7 @@ def one_of(column: ColumnElement[Any], values: Iterable[str]) -> ColumnElement[b
 
 
 def public_tables() -> list[Table]:
-    """The declared tables but the internal ones, whose names start with an underscore."""
+    """Public tables and views in declaration order."""
     return [table for table in metadata.tables.values() if not table.name.startswith("_")]
 
 
@@ -110,6 +119,28 @@ def public_table(
         sqlite_strict=True,
         sqlite_with_rowid=not without_rowid,
     )
+
+
+def public_view(
+    name: str, *columns: Column[Any], query: Select[Any], comment: str, change: int
+) -> Table:
+    """Declare a public view with the column metadata exposed by the schema Command.
+
+    SQLite's view metadata loses nullability and declared types of computed columns.
+    """
+    # Checked before CreateView, which adds the view to the metadata.
+    if [column.name for column in query.selected_columns] != [column.name for column in columns]:
+        raise TypeError(f"The view {name} declares other columns than its query selects.")
+    view = CreateView(query, name, metadata=metadata).table
+    for declared in columns:
+        column = view.c[declared.name]
+        column.type = declared.type
+        column.nullable = declared.nullable
+        column.comment = declared.comment
+        column.info.update(declared.info)
+    view.comment = comment
+    view.info["change"] = change
+    return view
 
 
 crawl = public_table(
@@ -698,8 +729,8 @@ pages = public_table(
     Column(
         "meta_description_1_width_px",
         Integer,
-        comment="Filled from v0.2. The width of meta_description_1 in Arial regular at 14 px, in "
-        "pixels.",
+        comment="The estimated width of meta_description_1 in pixels at 14 px, using Liberation "
+        "Sans Regular advances. NULL when absent or not measured.",
     ),
     Column(
         "meta_description_2",
@@ -1365,4 +1396,147 @@ page_sources = public_table(
     comment="Filled from v0.2. The HTML of each Page of a Crawl started with HTML storage on; "
     "empty otherwise.",
     change=30,
+)
+
+rules = public_table(
+    "rules",
+    Column(
+        "id",
+        Text,
+        primary_key=True,
+        comment=f"The Rule id, as typed in {COMMAND_NAME} rules show and {SETTINGS_FILE_NAME}.",
+    ),
+    Column(
+        "category",
+        Text,
+        nullable=False,
+        comment="The Rule's category.",
+        info={"values": literal_values(RuleCategory)},
+    ),
+    Column(
+        "issue_type",
+        Text,
+        nullable=False,
+        comment="The Issue Type of the Rule's Issues.",
+        info={"values": literal_values(IssueType)},
+    ),
+    Column(
+        "priority",
+        Text,
+        nullable=False,
+        comment="The Priority of the Rule's Issues.",
+        info={"values": literal_values(Priority)},
+    ),
+    Column(
+        "applies_to",
+        Text,
+        nullable=False,
+        comment="The population the Rule is evaluated over.",
+        info={"values": literal_values(AppliesTo)},
+    ),
+    Column(
+        "enabled",
+        Flag,
+        nullable=False,
+        comment="1 when the Rule is enabled in the configuration recorded at Crawl creation.",
+    ),
+    Column(
+        "thresholds",
+        Json(wide_integers=True),
+        nullable=False,
+        comment="The effective thresholds as integer values. An empty object for a Rule "
+        "without thresholds.",
+    ),
+    Column("description", Text, nullable=False, comment="What the Rule checks."),
+    Column("why_it_matters", Text, nullable=False, comment="Why its Issues matter."),
+    Column("how_to_fix", Text, nullable=False, comment="How to fix its Issues."),
+    Column(
+        "reproduce_sql",
+        Text,
+        nullable=False,
+        comment="The Rule's read-only SELECT over this Crawl, returning its Affected URLs "
+        "as url_id and detail.",
+    ),
+    comment="One row for each Rule in the catalogue, with its configuration at Crawl creation.",
+    change=40,
+)
+
+affected_urls = public_table(
+    "affected_urls",
+    Column(
+        "rule_id",
+        Text,
+        ForeignKey("rules.id"),
+        primary_key=True,
+        comment="The Rule that fired.",
+    ),
+    Column(
+        "url_id",
+        Integer,
+        ForeignKey("urls.id"),
+        primary_key=True,
+        autoincrement=False,
+        comment="The Affected URL.",
+    ),
+    Column(
+        "detail",
+        Json,
+        comment="Measured values as an object with the keys listed for the Rule, or NULL "
+        "when the Rule lists none.",
+    ),
+    comment="One row per Rule and Affected URL from the last post-crawl pass.",
+    change=40,
+    without_rowid=True,
+)
+
+Index(
+    "affected_urls_url_id",
+    affected_urls.c.url_id,
+    info={"description": "The Issues of one URL and the Health Score's count of affected Pages."},
+)
+
+issues = public_view(
+    "issues",
+    Column(
+        "rule_id",
+        Text,
+        nullable=False,
+        comment="The Rule that fired.",
+        info={"references": "rules.id"},
+    ),
+    Column(
+        "category", Text, nullable=False, comment="The Rule's category.", info=rules.c.category.info
+    ),
+    Column(
+        "issue_type",
+        Text,
+        nullable=False,
+        comment="The Issue Type of the Rule's Issues.",
+        info=rules.c.issue_type.info,
+    ),
+    Column(
+        "priority",
+        Text,
+        nullable=False,
+        comment="The Priority of the Rule's Issues.",
+        info=rules.c.priority.info,
+    ),
+    Column(
+        "affected_count",
+        Integer,
+        nullable=False,
+        comment="The number of the Rule's rows in affected_urls.",
+    ),
+    # Grouped by the primary key's prefix, so the count reads affected_urls in key order.
+    query=select(
+        rules.c.id.label("rule_id"),
+        rules.c.category,
+        rules.c.issue_type,
+        rules.c.priority,
+        func.count().label("affected_count"),
+    )
+    .join_from(affected_urls, rules, affected_urls.c.rule_id == rules.c.id)
+    .group_by(affected_urls.c.rule_id),
+    comment="One row per Rule with at least one Affected URL in the last post-crawl pass.",
+    change=40,
 )

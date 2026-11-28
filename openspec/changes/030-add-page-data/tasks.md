@@ -184,14 +184,16 @@ Task 12.4 moved to group 4 as task 4.0.
 - [x] 4.14 Docs: add the size and HTTP redirect concepts to `docs/page-data.md`.
 - [ ] 4.15 Review: run the code-review skill on group 4b's commits and then on the whole change, and refactor with the whole suite green. Before the change is archived, reduce each Risks entry of tests named after no scenario to the test's name and the failure class it guards.
 
-## 13. (v0.2) SERP pixel widths
+## 13. SERP pixel widths
 
-- [ ] 13.1 (v0.2) Drive "Title pixel width" at seam 4. Add the width-table generator script, the generated Liberation Sans table with its OFL notice and the width function, and fill `title_1_width_px`.
+Task 13.4 ships in v0.1. The remaining tasks follow in v0.2.
+
+- [ ] 13.1 (v0.2) Drive "Title pixel width" at seam 4. Reuse the bundled advances and fallback tables from 13.4 to fill `title_1_width_px`.
 - [ ] 13.2 (v0.2) Drive "Wide characters use one em" at seam 4 (fallback widths).
 - [ ] 13.3 (v0.2) Drive "Realistic long title" at seam 4.
-- [ ] 13.4 (v0.2) Drive "Meta description pixel width" at seam 4, and fill `meta_description_1_width_px`.
+- [x] 13.4 (v0.1, before the snippet Rule in `040`) Drive "Meta description pixel width" at seam 3+6 and the fallback and rounding cases at seam 4. Generate the bundled Liberation Sans advance table and Unicode fallback data with their notices. Fill `meta_description_1_width_px` and document the method in `docs/page-data.md` and the measured column in `docs/schema.md`.
 - [ ] 13.5 (v0.2) Drive "Widths of second elements" at seam 4, and fill `title_2_width_px` and `meta_description_2_width_px`.
-- [ ] 13.6 (v0.2) Docs: add the pixel-width method (source table, font sizes, fallbacks) to `docs/page-data.md`. Drop the `Filled from v0.2. ` prefix from the descriptions of the columns this group fills, and take them out of the list of later columns in the spec.
+- [ ] 13.6 (v0.2) Docs: extend `docs/page-data.md` with the remaining measured widths. Drop the `Filled from v0.2. ` prefix from the descriptions of both title width columns and the second meta description width column, and take them out of the list of later columns in the spec.
 - [ ] 13.7 (v0.2) Review: run the code-review skill on group 13's commits, then refactor with the whole suite green.
 
 ## 14. (v0.2) Syllables, readability and language detection

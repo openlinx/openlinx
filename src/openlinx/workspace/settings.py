@@ -30,6 +30,7 @@ from openlinx.workspace.toml_order import (
     decimal_digits,
     declarations,
     file_positions,
+    format_toml_key,
     oversized_decimals,
     replace_literals,
 )
@@ -102,7 +103,7 @@ def load_settings(
             raise refused from error
         settings = None
         validation_error = error
-        problems = [(problem["loc"], problem["msg"]) for problem in error.errors()]
+        problems.extend((detail["loc"], detail["msg"]) for detail in error.errors())
         hint = _suggestion(error, root_model)
     if len(problems) > 1 or unrecovered:
         # Use the same normalization and table choice as the settings source.
@@ -123,7 +124,7 @@ def load_settings(
         raise _invalid(
             settings_file,
             "is invalid",
-            [{"key": ".".join(map(str, key)), "message": message} for key, message in problems],
+            [{"key": format_toml_key(key), "message": message} for key, message in problems],
             hint=hint,
         ) from validation_error
     if settings is None:

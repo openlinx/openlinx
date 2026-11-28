@@ -4,7 +4,7 @@ import aiohttp
 import pytest
 
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Route, Site
+from tests.fixture_site.routes import Page, Responses, Route, Site, Status
 
 
 def _made_for(path: str) -> Route | None:
@@ -28,3 +28,22 @@ async def test_fixture_site_uses_a_resolver_for_undeclared_paths(
     async with aiohttp.ClientSession() as session, session.get(server.url(path)) as response:
         body = await response.text() if expected[1] is not None else None
         assert (response.status, body) == expected
+
+
+async def test_resolved_responses_advance_independently_for_each_path(
+    fixture_site: StartSite,
+) -> None:
+    def resolve(path: str) -> Route | None:
+        if path in ("/a", "/b"):
+            return Responses((Status(503), Page(body="ready")))
+        return None
+
+    server = fixture_site(Site(resolve=resolve))
+
+    statuses = []
+    async with aiohttp.ClientSession() as session:
+        for path in ("/a", "/b", "/a", "/b", "/a"):
+            async with session.get(server.url(path)) as response:
+                statuses.append(response.status)
+
+    assert statuses == [503, 503, 200, 200, 200]

@@ -18,7 +18,7 @@ from tests.fixture_site.hosts import StartHosts
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Redirect, Site, Status
 from tests.support.clock import FakeClock
-from tests.support.crawling import crawl_result
+from tests.support.crawling import crawl_result, crawled
 from tests.support.crawls import query
 from tests.support.fetcher import FakeFetcher, FakePage
 from tests.support.page_data import LATER_PAGE_COLUMNS
@@ -36,6 +36,30 @@ def test_html_response_becomes_a_page(
     crawl_file = crawl_result(server.url("/about")).crawl_file
 
     assert query(crawl_file, "SELECT address FROM pages") == [(server.url("/about"),)]
+
+
+def test_crawl_stores_the_width_of_the_normalised_first_meta_description(
+    temp_workspace: TempWorkspace, fixture_site: StartSite
+) -> None:
+    server = fixture_site(
+        Site(
+            routes={
+                "/": Page(
+                    body="<title>First</title><title>Second</title>"
+                    '<meta name="description" content="  Buy &#32; shoes ">'
+                    '<meta name="description" content="Another description">'
+                )
+            }
+        )
+    )
+
+    crawl_file = crawled(server.url("/"))
+
+    assert query(
+        crawl_file,
+        "SELECT meta_description_1, meta_description_1_length, meta_description_1_width_px, "
+        "meta_description_2_width_px, title_1_width_px, title_2_width_px FROM pages",
+    ) == [("Buy shoes", 9, 65, None, None, None)]
 
 
 def test_error_page_keeps_response_data(

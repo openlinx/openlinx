@@ -22,7 +22,7 @@ In the scenarios, `{site}` is the origin of the local fixture site.
 
 #### Scenario: Rule ids are unique kebab-case
 - **WHEN** `linx rules list --limit 50` runs
-- **THEN** all 42 `id` values match `^[a-z0-9]+(-[a-z0-9]+)*$` and no value appears twice
+- **THEN** all returned `id` values match `^[a-z0-9]+(-[a-z0-9]+)*$` and no value appears twice
 
 #### Scenario: Every Rule has its guidance
 - **WHEN** `linx rules list --limit 50` runs
@@ -33,9 +33,9 @@ Each Rule SHALL be evaluated over exactly one population, and its Affected URLs 
 
 - **`internal_urls`**: the rows of the `urls` table of `020-add-crawl-core` (including the columns that `022-add-fetch-policy` adds) with `is_internal` = 1 that were requested (`fetch_state` `fetched` or `error`) or are disallowed by robots.txt (`blocked_by_robots_txt` = 1). Internal URLs outside a Section Crawl's Scope are included.
 - **`internal_pages`**: the rows of `030-add-page-data`'s `pages` table whose URL was parsed (`urls.parsed` = 1), which are the analysed Pages, including a Page on which an extractor failed (`urls.parse_error` = `extractor_error`), whose columns from that extractor are NULL. Rules marked *Indexable only* further restrict this to Pages whose `indexability` is `indexable`.
-- **`resources`**: image Resources, meaning URLs that are the target of at least one `image` Link whose source is a Page, and that were requested by `022-add-fetch-policy`'s Resource checks (`fetch_state` `fetched` or `error`), whether Internal or External. A Resource is a non-HTML file that a Page references (CONTEXT.md); the Rules of this catalogue check only images.
+- **`resources`**: Internal or External URLs that have at least one stored `image` Link from a Page and a recorded outcome from a request to that same URL (`fetch_state` `fetched` or `error` and `attempt_count` greater than zero). The population records use as an image, regardless of how the URL was discovered or dispatched. An individual Rule may further restrict the response it checks.
 
-A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). For example, a canonical target that the Crawl never requested produces no Affected URL.
+A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). For example, an unrequested canonical target with no recorded robots.txt verdict produces no Affected URL.
 
 #### Scenario: External URLs are not Internal URLs
 - **WHEN** an External URL linked from a Page responded 404
@@ -50,11 +50,15 @@ A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). 
 - **THEN** `title-missing` and `h1-missing` have no Affected URL for it
 
 ### Requirement: The v0.1 catalogue
-The Rule catalogue SHALL contain exactly the 42 Rules defined in the category requirements below, with the Issue Type, Priority, population, default thresholds, condition and `detail` keys given there. Column names refer to the `urls` table and to the tables of `030-add-page-data`.
+The v0.1 registry SHALL contain exactly the 42 Rules in [the ROADMAP](../../../../../ROADMAP.md#the-v01-rules), each with a runnable evaluation query. The same ids SHALL appear in `linx rules list`, in generated Workspace settings, and in a new Crawl’s `crawl.config.rules` and `rules` table. Each Rule SHALL have the Issue Type, Priority, population, default thresholds, condition and `detail` keys defined below.
 
 #### Scenario: Catalogue size
 - **WHEN** `linx rules list --limit 50` runs in a Workspace without `[rules]` settings
-- **THEN** `total` is 42 and every item has `enabled` true
+- **THEN** `total` is 42, the returned ids are exactly the 42 v0.1 Rule ids in the ROADMAP, and every listed Rule has `enabled` true
+
+#### Scenario: A table of named tables in the template
+- **WHEN** `linx init` creates the Workspace’s settings file
+- **THEN** it generates an empty table with commented defaults for each of the 42 v0.1 Rules
 
 ### Requirement: Response code Rules
 The `response_codes` category SHALL contain these Rules, all over `internal_urls`:
@@ -142,7 +146,7 @@ The `titles` category SHALL contain these Rules, all over `internal_pages`:
 
 In v0.1, `title-too-long` checks characters only. `030-add-page-data` fills `title_1_width_px` from v0.2, and the Rule's `max_pixels` threshold and its `width_px` detail key arrive with it, so v0.1 shows no threshold that cannot fire.
 
-#### Scenario: Missing title
+#### Scenario: Missing title produces an Affected URL
 - **WHEN** an analysed Page has `title_count` 0
 - **THEN** `title-missing` fires for it
 
@@ -217,7 +221,7 @@ The `meta_descriptions` category SHALL contain these Rules, all over `internal_p
 - **WHEN** an analysed Page has `meta_description_1_length` 69
 - **THEN** `meta-description-too-short` fires for it with `detail` `{"length": 69}`
 
-#### Scenario: Multiple meta descriptions
+#### Scenario: Multiple meta descriptions raise an Issue
 - **WHEN** an analysed Page has `meta_description_count` 2
 - **THEN** `meta-description-multiple` fires for it with `detail` `{"count": 2}`
 
@@ -257,6 +261,8 @@ The `headings` category SHALL contain these Rules, all over `internal_pages`:
 - **THEN** `h2-missing` fires for it
 
 ### Requirement: Canonical Rules
+**In short:** Check canonical declarations and the Indexability of their targets.
+
 The `canonicals` category SHALL contain these Rules, all over `internal_pages`:
 
 | id | Issue Type | Priority | Fires for a Page where… | `detail` |
@@ -270,7 +276,7 @@ The `canonicals` category SHALL contain these Rules, all over `internal_pages`:
 The *target's Indexability* SHALL come from `030-add-page-data`:
 
 - **When the target is a Page,** it is the Page's stored `indexability` and `indexability_status`.
-- **When the target is not a Page,** steps 1–4 of 030's Indexability order are applied to the target's `urls` row: `blocked_by_robots_txt`, `redirected`, `client_error` or `server_error`. A target with `fetch_state` `error` is non-indexable with the reason `no_response`. The reason goes in `detail.target_reason`, not under the column name `indexability_status`, because `no_response` is not one of that column's values. A target with any other outcome, such as a 2xx response that is not HTML, counts as indexable. A target that was never requested has no Indexability, and the Rule does not fire.
+- **For a target without a Page,** apply steps 1–4 of 030's Indexability order to the target's `urls` row by checking `blocked_by_robots_txt`, `redirected`, `client_error` and `server_error` in that order. If none applies, the target is Non-Indexable with reason `no_response` only when its own request failed without a response, recorded as `fetch_state = 'error'`, `attempt_count > 0` and a `fetch_error` other than `record_failed`. The Rule fires only when one of these reasons applies.
 
 #### Scenario: Missing canonical
 - **WHEN** an analysed Page has `canonical_count` 0 and no noindex directive
@@ -293,8 +299,16 @@ The *target's Indexability* SHALL come from `030-add-page-data`:
 - **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "target_reason": "noindex"}`
 
 #### Scenario: Canonical to a URL without a response
-- **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and `/b` is not a Page and has `fetch_state` `error`
+- **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and a request to `/b` times out, recording `fetch_state` `error`, `fetch_error` `timeout`, a positive `attempt_count` and no Page
 - **THEN** `canonical-to-non-indexable` fires for `/a` with `detail` `{"canonical_url": "https://example.test/b", "target_reason": "no_response"}`
+
+#### Scenario: Canonical target robots.txt preflight fails
+- **WHEN** a Page's canonical target has `fetch_state` `error` from a robots.txt preflight failure, `attempt_count` 0 and no other reason applies
+- **THEN** `canonical-to-non-indexable` has no Affected URL for the Page
+
+#### Scenario: Canonical target response could not be recorded
+- **WHEN** a Page's canonical target has `fetch_state` `error`, `fetch_error` `record_failed`, a positive `attempt_count` and no other reason applies
+- **THEN** `canonical-to-non-indexable` has no Affected URL for the Page
 
 #### Scenario: Canonical to an indexable Page
 - **WHEN** `https://example.test/a` has `canonical_url` `https://example.test/b`, and `/b` is a 200 Page with `indexability` `indexable`
@@ -426,8 +440,10 @@ The `images` category SHALL contain these Rules:
 | id | Issue Type | Priority | Applies to | Fires for… | Thresholds | `detail` |
 |---|---|---|---|---|---|---|
 | `image-missing-alt-text` | opportunity | low | `internal_pages` | a Page with at least one `image` Link whose `element` is `img`, `attribute` is `src`, and `alt_text` is NULL or the empty string | none | `missing_alt_attribute` (count of NULL), `empty_alt` (count of empty) |
-| `image-too-large` | opportunity | medium | `resources` | an image Resource whose `urls.size_bytes` is more than `max_kb` × 1024 | `max_kb` 100 (kilobytes of 1024 bytes) | `size_bytes` |
-| `image-broken` | issue | medium | `resources` | an image Resource with a `status_code` from 400 to 599, or with `fetch_state` `error` and a `fetch_error` other than `record_failed` | none | `status_code` or `error` (the `fetch_error`) |
+| `image-too-large` | opportunity | medium | `resources` | an image target whose `urls.size_bytes` is more than `max_kb` × 1024, excluding known HTML or XHTML responses | `max_kb` 100 (kilobytes of 1024 bytes) | `size_bytes` |
+| `image-broken` | issue | medium | `resources` | an image target with a `status_code` from 400 to 599, including an HTML error document, or with `fetch_state` `error` and a `fetch_error` other than `record_failed` | none | `status_code` or `error` (the `fetch_error`) |
+
+For `image-too-large`, known HTML means a Content-Type media type of `text/html` or `application/xhtml+xml`, ignoring case and parameters. For `image-broken`, the status or failure is the target URL's own outcome. If the Crawl fetches `/bad` through a hyperlink and receives an HTML 404, and a later Page contains `<img src="/bad">`, `image-broken` reports `/bad` once.
 
 #### Scenario: Images without alt text
 - **WHEN** an analysed Page has one `img`/`src` `image` Link with `alt_text` NULL and one with `alt_text` equal to the empty string
@@ -449,9 +465,25 @@ The `images` category SHALL contain these Rules:
 - **WHEN** the image Resource `https://example.test/hero.jpg` has `size_bytes` 102400
 - **THEN** `image-too-large` has no Affected URL for it
 
+#### Scenario: Image size excludes HTML responses
+- **WHEN** image Links target an HTML Page and an External XHTML response larger than the size limit, and a PNG above the limit was requested through a hyperlink before the Crawl found its image Link
+- **THEN** `image-too-large` reports only the PNG once, with its recorded size
+
 #### Scenario: Broken external image
 - **WHEN** a Page links the External image `https://cdn.other.test/x.png`, which has `status_code` 404
 - **THEN** `image-broken` fires for it with `detail` `{"status_code": 404}`
+
+#### Scenario: HTML 404 for an image target in either Link order
+- **WHEN** the Crawl records an HTML 404 at a URL with both a hyperlink and an image Link, with either Link found first
+- **THEN** `image-broken` reports the target once with `detail` `{"status_code": 404}`
+
+#### Scenario: An image request keeps its result when provenance changes
+- **WHEN** an image target returns an HTML 404 and a shorter route of a different Link type is discovered while its request is in flight
+- **THEN** `image-broken` reports the URL once with `detail` `{"status_code": 404}` regardless of the change in recorded provenance
+
+#### Scenario: A robots.txt failure before an image request does not count
+- **WHEN** a robots.txt failure leaves an image target in `fetch_state` `error` with `attempt_count` zero
+- **THEN** `image-broken` has no Affected URL for it
 
 #### Scenario: An image that failed to be recorded is not broken
 - **WHEN** a Page links the image `https://example.test/odd.png`, which has `fetch_state` `error` and `fetch_error` `record_failed`
@@ -470,7 +502,11 @@ The table name is the Rule id itself. These settings mirror no flag, so `010-add
 - **THEN** `title-too-long` has no Affected URL for it
 
 #### Scenario: Disabled Rule produces no Issue
-- **WHEN** `openlinx.toml` has `[rules.h2-missing]` with `enabled = false`, and a Crawl of the fixture site with Pages without `<h2>` ends as `completed`
+- **WHEN** `openlinx.toml` has `[rules.title-missing]` with `enabled = false`, and a Crawl of the fixture site with Pages without `<title>` ends as `completed`
+- **THEN** `issues` holds no row for `title-missing`
+
+#### Scenario: Disable the missing H2 check
+- **WHEN** a Crawl with `rules.h2-missing.enabled = false` completes with a Page that lacks an H2
 - **THEN** `issues` holds no row for `h2-missing`
 
 #### Scenario: Override shown by the rules Command
@@ -489,15 +525,17 @@ Any Command that loads the Workspace's `openlinx.toml` SHALL fail with the setti
 - a threshold is not a non-negative integer, or its value is at least 10^4300
 - `enabled` is not a boolean
 
-Each problem's `details.errors[].key` SHALL be the dotted key, for example `rules.title-to-long`, and the hint SHALL name the closest known Rule id or key when there is one. `linx crawl` SHALL fail before any URL is requested.
+The loader SHALL accept the empty tables for `h2-missing`, `low-word-count` and `url-parameters` generated by preview versions of `linx init` and preserve the file's contents. Valid settings in those tables SHALL configure the installed Rules.
+
+Each problem's `details.errors[].key` SHALL be the dotted key, for example `rules.title-to-long`. A problem with an unknown Rule id or a key on an installed Rule SHALL have a hint with the closest known id or key when there is one. Problems SHALL follow TOML declaration order. `linx crawl` SHALL fail before any URL is requested.
 
 #### Scenario: Misspelt Rule id
 - **WHEN** `openlinx.toml` has `[rules.title-to-long]` and `linx rules list` runs
 - **THEN** the exit code is 3, the error has the code `settings_invalid` and `details.errors[0].key` `"rules.title-to-long"`, and the hint contains `title-too-long`
 
 #### Scenario: Negative threshold
-- **WHEN** `openlinx.toml` has `[rules.low-word-count]` with `min_words = -5` and `linx crawl {site}/` runs
-- **THEN** the exit code is 3, `details.errors[0].key` is `"rules.low-word-count.min_words"`, and the fixture site receives 0 requests
+- **WHEN** `openlinx.toml` has `[rules.title-too-long]` with `max_chars = -5` and `linx crawl {site}/` runs
+- **THEN** the exit code is 3, `details.errors[0].key` is `"rules.title-too-long.max_chars"`, and the fixture site receives 0 requests
 
 #### Scenario: First threshold above the limit
 - **WHEN** `rules.title-too-long.max_chars` in `openlinx.toml` is 10^4300 (1 followed by 4300 zeros), written as a decimal or hexadecimal TOML integer, and a Command reads that Workspace
@@ -505,11 +543,23 @@ Each problem's `details.errors[].key` SHALL be the dotted key, for example `rule
 - **AND** when the Command is `linx crawl {site}/`, the fixture site receives 0 requests
 
 #### Scenario: Unknown key
-- **WHEN** `openlinx.toml` has `[rules.h2-missing]` with `max_chars = 10` and `linx rules list` runs
-- **THEN** the exit code is 3 and `details.errors[0].key` is `"rules.h2-missing.max_chars"`
+- **WHEN** `openlinx.toml` has `[rules.h1-missing]` with `max_chars = 10` and `linx rules list` runs
+- **THEN** the exit code is 3 and `details.errors[0].key` is `"rules.h1-missing.max_chars"`
+
+#### Scenario: Empty preview Rule tables are accepted without rewriting
+- **WHEN** `openlinx.toml` has all three generated preview Rule tables containing only comments, and the user runs `linx init`, `linx rules show title-too-long` and `linx crawl {site}/`
+- **THEN** the Commands succeed, the settings file retains its original bytes, and the Crawl records the 42 v0.1 Rule ids
+
+#### Scenario: Explicit settings for formerly preview Rules
+- **WHEN** a new Crawl starts with `rules.h2-missing.enabled = false` and `rules.low-word-count.min_words = 300`
+- **THEN** its recorded Rule settings disable `h2-missing` and set the threshold of `low-word-count` to 300
+
+#### Scenario: Invalid Rule settings keep TOML order
+- **WHEN** an unknown key on `h2-missing` appears between two other invalid Rule settings
+- **THEN** the three settings problems appear in declaration order with their respective dotted keys
 
 ### Requirement: Rule configuration is fixed per Crawl
-When a Crawl starts, it SHALL resolve every Rule's enabled state and effective thresholds and write them to its `rules` table, in the same transaction that creates the `crawl` row. The table follows the conventions of `018-add-schema-conventions` (ADR-0005): it is `STRICT` and `WITHOUT ROWID`, keyed by the Rule id. It holds one row per catalogue Rule, with these columns:
+When a Crawl starts, it SHALL resolve every Rule's enabled state and effective thresholds and write them to its `rules` table, in the same transaction that creates the `crawl` row. The table follows the conventions of `018-add-schema-conventions` (ADR-0005): it is an ordinary `STRICT` rowid table with the TEXT Rule id as its primary key. It holds one row per catalogue Rule, with these columns:
 
 | Column | Type | Null | Format / values | Description |
 |---|---|---|---|---|
@@ -518,30 +568,50 @@ When a Crawl starts, it SHALL resolve every Rule's enabled state and effective t
 | `issue_type` | TEXT | no | `issue`, `warning`, `opportunity` | The Issue Type of the Rule's Issues |
 | `priority` | TEXT | no | `high`, `medium`, `low` | The Priority of the Rule's Issues |
 | `applies_to` | TEXT | no | `internal_urls`, `internal_pages`, `resources` | The population the Rule is evaluated over |
-| `enabled` | INTEGER | no | boolean | 1 when the Rule was evaluated in this Crawl |
+| `enabled` | INTEGER | no | boolean | 1 when the Rule is enabled in the configuration recorded at Crawl creation |
 | `thresholds` | TEXT | no | json | The effective thresholds, as an object of names to integers; `{}` for a Rule without thresholds |
 | `description` | TEXT | no | | What the Rule checks |
 | `why_it_matters` | TEXT | no | | Why its Issues matter |
 | `how_to_fix` | TEXT | no | | How to fix its Issues |
 | `reproduce_sql` | TEXT | no | | The Rule's reproducing query (see "Rules are SQL queries") |
 
-The Crawl SHALL use this configuration throughout, including after `resume`. Editing `openlinx.toml` later SHALL NOT change the Issues stored for an existing Crawl. v0.1 has no Command that recomputes them; `rules apply` arrives in v0.2.
+The Crawl SHALL use this configuration throughout, including after `resume`. A continued preview Crawl SHALL preserve its recorded `crawl.config.rules` and `rules` rows. Live reads and the final pass SHALL evaluate only installed Rules enabled in the recorded snapshot. A historical placeholder SHALL produce zero Affected URLs when its id is one of `h2-missing`, `low-word-count` or `url-parameters` and its recorded SQL exactly matches the shipped preview query. The application SHALL evaluate queries supplied by the installed implementation. Editing `openlinx.toml` later SHALL NOT change the Issues stored for an existing Crawl. v0.1 has no Command that recomputes them; `rules apply` arrives in v0.2.
 
 #### Scenario: Keys of the Rule tables
 - **WHEN** `linx schema rules` and `linx schema affected_urls` run
 - **THEN** the columns with `primary_key` true are `id` of `rules`, with the type `TEXT`, and `rule_id` and `url_id` of `affected_urls`, whose `references` are `rules.id` and `urls.id`
 
 #### Scenario: Crawl records the thresholds it used
-- **WHEN** a Crawl runs with `[rules.low-word-count]` `min_words = 300`
-- **THEN** its `rules` row for `low-word-count` has `thresholds` `{"min_words": 300}`
+- **WHEN** a Crawl starts with `[rules.title-too-long]` `max_chars = 70`
+- **THEN** its `rules` row for `title-too-long` has `thresholds` `{"max_chars": 70}`
+
+#### Scenario: Crawl records the word-count threshold
+- **WHEN** a Crawl starts with `rules.low-word-count.min_words = 300`
+- **THEN** its `rules` row for `low-word-count` has `thresholds` equal to `{"min_words": 300}`
 
 #### Scenario: Later edits do not change a completed Crawl
-- **WHEN** a Crawl ended as `completed` with the default `min_words` and `openlinx.toml` then sets `min_words = 5000`
-- **THEN** that Crawl's `issues` and `affected_urls` rows for `low-word-count` are unchanged
+- **WHEN** a Crawl completed with an 80-character title and the default `title-too-long.max_chars` of 60, and the Workspace then sets `max_chars = 100` for that Rule
+- **THEN** that Crawl's `issues` and `affected_urls` rows for `title-too-long` are unchanged, including the Affected URL with the 80-character title
+
+#### Scenario: Raising the word-count threshold after completion preserves existing results
+- **WHEN** a Crawl completes with the default `low-word-count.min_words` and the Workspace then sets that threshold to 5000
+- **THEN** the Crawl retains its recorded `affected_urls` rows for `low-word-count`
 
 #### Scenario: Resumed Crawl keeps the recorded configuration
-- **WHEN** a Crawl started with `min_words = 300` stops at its `--max-urls` limit, `openlinx.toml` is changed to `min_words = 50`, and the Crawl is resumed through the Crawl Service with a higher limit
-- **THEN** an Indexable Page with `word_count` 120 written after the resume is an Affected URL of `low-word-count`
+- **WHEN** a Crawl started with `title-too-long.max_chars` set to 70 stops at its `--max-urls` limit, the Workspace raises the threshold to 100, and the Crawl is resumed through the Crawl Service with a higher URL limit
+- **THEN** a Page with an 80-character title written after the resume is an Affected URL of `title-too-long`
+
+#### Scenario: Resumed Crawl applies its original word-count threshold
+- **WHEN** a Crawl starts with `low-word-count.min_words` set to 300, the Workspace changes it to 50, and Continue fetches an Indexable Page with `word_count` 120
+- **THEN** that Page is an Affected URL of `low-word-count`
+
+#### Scenario: Continue preserves a preview placeholder
+- **WHEN** a preview Crawl recorded `h2-missing` with the shipped query that returns zero rows, and Continue processes an analysed Page with no H2
+- **THEN** the live Issues reader and the final pass each return zero Affected URLs for that Rule, and the Crawl retains its recorded query
+
+#### Scenario: Continue preserves the preview snapshot and applies an active Rule
+- **WHEN** a preview Crawl with all three preview Rules and `title-too-long.max_chars = 70` stops at `--max-urls`, the Workspace raises the limit to 90, and Continue fetches the remaining Page with a 71-character title
+- **THEN** both Rule snapshots retain their recorded entries and settings, and the newly crawled Page is an Affected URL of `title-too-long` with `detail.length` 71
 
 ### Requirement: Rules are SQL queries
 Every Rule SHALL have a reproducing query and SHALL be evaluated only by it. The query is one read-only SQL `SELECT` over the public schema that returns the Rule's Affected URLs in a crawl file, as the columns `url_id` and `detail`.
@@ -623,7 +693,11 @@ The Issues SHALL be a view `issues` over `rules` and `affected_urls`, with one r
 - **THEN** its `affected_urls` row for `title-too-long` has `detail` `{"length": 61}`
 
 #### Scenario: Rule that did not fire has no Issue
-- **WHEN** a Crawl ends as `completed` and no Page has more than one `<title>`
+- **WHEN** a Crawl ends as `completed` and every analysed Page has a non-empty first title (`title_1`)
+- **THEN** `issues` holds no row for `title-missing`
+
+#### Scenario: Multiple titles have no Issue when all Pages have one title
+- **WHEN** a Crawl completes and every analysed Page has one title
 - **THEN** `issues` holds no row for `title-multiple`
 
 #### Scenario: Issues is a view
@@ -715,8 +789,8 @@ The output SHALL follow the output contract of `010-add-workspace-and-cli-contra
 - **THEN** the item with `id` `title-missing` has `thresholds` `{}`
 
 #### Scenario: Disabled Rule is listed
-- **WHEN** `openlinx.toml` has `[rules.url-parameters]` with `enabled = false` and `linx rules list --limit 50` runs
-- **THEN** the item with `id` `url-parameters` has `enabled` false
+- **WHEN** `openlinx.toml` has `[rules.title-missing]` with `enabled = false` and `linx rules list --limit 50` runs
+- **THEN** the item with `id` `title-missing` has `enabled` false
 
 ### Requirement: Show one Rule
 `linx rules show <id>` SHALL print one JSON object with the same fields as a list item. An unknown id SHALL fail with the error code `rule_not_found`, which maps to exit code 4 under the rules of `010-add-workspace-and-cli-contract`. Its `message` SHALL contain the id and its `hint` SHALL mention `linx rules list`.
@@ -728,6 +802,10 @@ The output SHALL follow the output contract of `010-add-workspace-and-cli-contra
 #### Scenario: Unknown Rule id
 - **WHEN** `linx rules show nope` runs
 - **THEN** the exit code is 4, the error has the code `rule_not_found`, its `message` contains `nope` and its `hint` contains `linx rules list`
+
+#### Scenario: Show a formerly preview Rule
+- **WHEN** the user runs `linx rules show` for `h2-missing`, `low-word-count` or `url-parameters`
+- **THEN** it exits 0 and prints that Rule's id, guidance, effective settings and reproducing SQL
 
 #### Scenario: Windows console output
 - **WHEN** `linx rules show title-too-long` runs as a subprocess on Windows with console code page 1251

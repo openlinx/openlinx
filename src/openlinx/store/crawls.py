@@ -4,6 +4,7 @@ import platform
 import sqlite3
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, closing, contextmanager
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ from sqlalchemy.exc import DBAPIError
 
 from openlinx import __version__
 from openlinx.json_numbers import decode_json_object
-from openlinx.output.codes import WORKSPACE_NOT_WRITABLE
+from openlinx.output.codes import CRAWL_FILE_INVALID, WORKSPACE_NOT_WRITABLE
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.store.claim import claim_writer
 from openlinx.store.connections import connect, not_writable_name, opening
@@ -31,7 +32,15 @@ from openlinx.store.records import (
     RecordedScope,
     StopReason,
 )
-from openlinx.store.schema import SCHEMA_VERSION, crawl, metadata, seeds
+from openlinx.store.schema import (
+    SCHEMA_VERSION,
+    affected_urls,
+    crawl,
+    issues,
+    metadata,
+    rules,
+    seeds,
+)
 from openlinx.store.transitions import check_transition
 from openlinx.store.urls import requeue_for_a_continue
 from openlinx.workspace.creation import as_workspace_not_writable, create_data_folder
@@ -119,6 +128,7 @@ def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedC
         ).one()
         if selected is not None:
             check_crawl_id(selected.path, selected.id, row.id)
+        check_rule_schema(connection, path)
         urls: list[str] = list(
             connection.execute(select(seeds.c.url).order_by(seeds.c.position)).scalars()
         )
@@ -129,6 +139,32 @@ def read_recorded(path: Path, *, selected: CrawlFile | None = None) -> RecordedC
             scope=orjson.loads(row.scope),
             seeds=tuple(urls),
             warnings=tuple(orjson.loads(row.warnings)),
+        )
+
+
+def check_rule_schema(connection: Connection, path: Path) -> None:
+    """Refuse Crawl files missing the Rule tables or the stored Issues view."""
+    table_names = (rules.name, affected_urls.name)
+    present: set[str] = set(
+        connection.exec_driver_sql(
+            "SELECT name FROM sqlite_schema WHERE (type = 'table' AND name IN (?, ?))"
+            " OR (type = 'view' AND name = ?)",
+            (*table_names, issues.name),
+        ).scalars()
+    )
+    missing_tables = ", ".join(name for name in table_names if name not in present)
+    missing = []
+    if missing_tables:
+        missing.append(f"required Rule tables: {missing_tables}")
+    if issues.name not in present:
+        missing.append(f"required Rule view: {issues.name}")
+    if missing:
+        objects = " and ".join(missing)
+        raise OpenLinxError(
+            CRAWL_FILE_INVALID,
+            f"The crawl file {path} is missing {objects}.",
+            hint="Crawl again with this tool to record Rules and their Affected URLs.",
+            details={"file": str(path)},
         )
 
 
@@ -238,6 +274,8 @@ def _write_new_file(
                 for position, url in enumerate(request.seeds, start=1)
             ],
         )
+        if request.rules:
+            connection.execute(insert(rules), [asdict(rule) for rule in request.rules])
 
 
 @contextmanager
