@@ -1,6 +1,7 @@
 """Exercise read-only SQL and its result document through the public Command."""
 
 import re
+import signal
 from codecs import BOM_UTF8
 from pathlib import Path
 
@@ -17,6 +18,7 @@ _QUERY_CONFLICT = re.compile(
 _REQUIRED_QUERY = re.compile(
     r"\b(?:required|missing|no (?:sql )?query|(?:not|didn't) (?:provide|supply|give))\b"
 )
+_LIMIT_HINT = r"^(?:use|pass|supply|give)\b(?=.*--limit)(?=.*\binteger\b).*\b1\b.*\b100,?000\b"
 
 
 @pytest.fixture
@@ -120,6 +122,78 @@ def test_sql_timeout_uses_the_declared_budget(sql_crawl: Path) -> None:
     assert (result.exit_code, result.stdout) == (1, b"")
     (error,) = result.errors()
     assert error["code"] == "sql_timeout"
+    assert re.search(r"\b(?:increase|raise)\b.*--timeout", error["hint"] or "", re.I)
+
+
+def test_sql_interrupted_during_workspace_lookup_can_be_retried(
+    temp_workspace: TempWorkspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = temp_workspace.root / "named-workspace"
+    workspace.mkdir()
+    is_dir = Path.is_dir
+
+    def interrupted_is_dir(path: Path) -> bool:
+        if path == workspace:
+            signal.raise_signal(signal.SIGINT)
+        return is_dir(path)
+
+    with monkeypatch.context() as filesystem:
+        filesystem.setattr(Path, "is_dir", interrupted_is_dir)
+        result = run_cli("sql", "SELECT 1", "--workspace", str(workspace))
+
+    assert (result.exit_code, result.stdout) == (130, b"")
+    (error,) = result.stderr_json_lines()
+    assert error["code"] == "interrupted"
+    assert re.search(r"\b(?:rerun|run .* again|retry)\b", error["hint"] or "", re.I), error
+
+
+@pytest.mark.parametrize("existing_file", [False, True], ids=["missing", "regular-file"])
+def test_sql_workspace_error_points_to_an_existing_directory(
+    temp_workspace: TempWorkspace, existing_file: bool
+) -> None:
+    invalid = temp_workspace.root / "query inputs"
+    if existing_file:
+        invalid.write_text("SELECT 1", encoding="utf-8")
+
+    result = run_cli("sql", "SELECT 1", "--workspace", str(invalid))
+
+    assert (result.exit_code, result.stdout) == (4, b"")
+    (error,) = result.errors()
+    assert error["code"] == "workspace_not_found"
+    assert re.search(r"\bexisting (?:Workspace )?(?:directory|folder)\b", error["hint"] or "", re.I)
+    assert "--workspace" in error["hint"]
+
+
+@pytest.mark.parametrize(
+    ("option", "hint_pattern"),
+    [
+        ("--limit=0", _LIMIT_HINT),
+        ("--limit=abc", _LIMIT_HINT),
+        ("--timeout=-1", r"--timeout.*\b(?:nonnegative|non-negative)\b"),
+        ("--timeout=abc", r"(?=.*--timeout)(?=.*\bfinite\b)(?=.*\bnon[- ]?negative\b).*seconds"),
+        ("--timeout=nan", r"--timeout.*\bfinite\b"),
+        ("--timeout=inf", r"--timeout.*\bfinite\b"),
+    ],
+)
+def test_sql_invalid_option_value_explains_the_accepted_input(
+    sql_crawl: Path, option: str, hint_pattern: str
+) -> None:
+    result = run_cli("sql", "SELECT 1", "--crawl", str(sql_crawl), option)
+
+    assert (result.exit_code, result.stdout) == (2, b"")
+    (error,) = result.errors()
+    assert error["code"] == "invalid_value"
+    assert re.search(hint_pattern, error["hint"] or "", re.I), error
+
+
+@pytest.mark.parametrize("extra", ["--file", "--unknown-sql-option", "extra-query"])
+def test_sql_usage_errors_point_to_command_help(extra: str) -> None:
+    result = run_cli("sql", "SELECT 1", extra)
+
+    assert (result.exit_code, result.stdout) == (2, b"")
+    (error,) = result.errors()
+    assert error["code"] == "usage_error"
+    assert "linx sql --help" in (error["hint"] or ""), error
 
 
 def test_unknown_column(sql_crawl: Path) -> None:
@@ -166,14 +240,49 @@ def test_sql_reports_the_native_syntax_error(sql_crawl: Path) -> None:
     (error,) = result.errors()
     assert error["code"] == "sql_error"
     assert 'near "FROM": syntax error' in error["message"]
+    pattern = (
+        r"\b(?:fix|correct|revise)\b.*\b(?:sql|query|statement)\b.*sqlite.*(?:error|diagnostic)"
+    )
+    assert re.search(pattern, error["hint"] or "", re.I), error
 
 
-def test_sql_does_not_expose_a_write_path(sql_crawl: Path) -> None:
-    result = run_cli("sql", "DELETE FROM pages", "--crawl", str(sql_crawl))
+def test_sql_query_error_explains_how_to_recover(sql_crawl: Path) -> None:
+    result = run_cli("sql", "SELECT unknown_sql_function()", "--crawl", str(sql_crawl))
+
+    assert (result.exit_code, result.stdout) == (2, b"")
+    (error,) = result.errors()
+    assert error["code"] == "sql_error"
+    assert "no such function: unknown_sql_function" in error["message"]
+    pattern = (
+        r"\b(?:fix|correct|revise)\b.*\b(?:sql|query|statement)\b.*sqlite.*(?:error|diagnostic)"
+    )
+    assert re.search(pattern, error["hint"] or "", re.I), error
+
+
+@pytest.mark.parametrize(
+    ("query", "hint_pattern"),
+    [
+        ("DELETE FROM pages", r"\b(?:replace|rewrite)\b.*\bread-only\b.*\bSELECT\b"),
+        ("PRAGMA user_version", r"\b(?:omit|remove)\b.*PRAGMA"),
+        ("SELECT * FROM pragma_table_info('pages')", r"\b(?:run|use)\s+linx schema\b"),
+        ("WITH x AS (SELECT 1) DELETE FROM pages", r"\b(?:replace|rewrite)\b.*\bread-only\b"),
+        ("SELECT load_extension('example')", r"\b(?:remove|omit)\b.*\bload_extension\b"),
+        (
+            "SELECT 1; SELECT 2",
+            r"^(?:pass|run|give|submit|execute|supply) (?:only )?"
+            r"(?:one|a single) (?:SQL )?statement\b",
+        ),
+    ],
+)
+def test_sql_explains_how_to_replace_a_refused_statement(
+    sql_crawl: Path, query: str, hint_pattern: str
+) -> None:
+    result = run_cli("sql", query, "--crawl", str(sql_crawl))
 
     assert (result.exit_code, result.stdout) == (2, b"")
     (error,) = result.errors()
     assert error["code"] == "sql_not_allowed"
+    assert re.search(hint_pattern, error["hint"] or "", re.I), error
 
 
 def test_sql_table_prints_query_text_literally(sql_crawl: Path) -> None:
@@ -261,6 +370,12 @@ def test_sql_reports_query_file_errors(tmp_path: Path, kind: str) -> None:
     assert error["code"] == "invalid_value"
     assert error["details"]["file"] == str(path)
     assert ("UTF-8" in error["message"]) is (kind == "not-utf8")
+    pattern = (
+        r"\b(?:save|convert|encode)\b.*UTF-8"
+        if kind == "not-utf8"
+        else r"(?=.*\breadable\b)(?=.*--file)"
+    )
+    assert re.search(pattern, error["hint"] or "", re.I), error
 
 
 def test_query_file_with_a_byte_order_mark_on_windows(sql_crawl: Path, tmp_path: Path) -> None:

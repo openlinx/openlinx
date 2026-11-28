@@ -325,6 +325,22 @@ def test_a_short_query_can_exceed_the_timeout(temp_workspace: TempWorkspace) -> 
     assert read_sql(crawl, "SELECT 1", timeout=1.0, monotonic=lambda: 100.0).rows == ((1,),)
 
 
+def test_interrupt_during_sql_execution_is_not_a_timeout(temp_workspace: TempWorkspace) -> None:
+    crawl = create_any_crawl(temp_workspace)
+    ticks = iter((100.0,))
+
+    def interrupt_at_progress_check() -> float:
+        try:
+            return next(ticks)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+
+    with pytest.raises(KeyboardInterrupt):
+        read_sql(crawl, _NUMBERED_ROWS, monotonic=interrupt_at_progress_check)
+
+    assert read_sql(crawl, "SELECT 1").rows == ((1,),)
+
+
 @pytest.mark.parametrize(
     "timeout", [-1.0, float("inf"), float("nan")], ids=["negative", "inf", "nan"]
 )

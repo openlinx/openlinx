@@ -8,7 +8,7 @@ import typer
 from openlinx.cli.meta import Example, command_meta
 from openlinx.cli.options import CrawlOpt, FormatOpt, WorkspaceOpt
 from openlinx.naming import COMMAND_NAME
-from openlinx.output.codes import INVALID_VALUE, USAGE_ERROR
+from openlinx.output.codes import INVALID_VALUE, USAGE_ERROR, WORKSPACE_NOT_FOUND
 from openlinx.output.diagnostics import OpenLinxError
 from openlinx.output.sql import sql_document
 from openlinx.output.writer import Format
@@ -44,7 +44,18 @@ def sql(
     """Run one read-only SELECT or WITH statement."""
     statement = _query_text(query, query_file)
     request = QueryRequest(cwd=Path.cwd(), home=Path.home(), workspace=workspace_dir, crawl=crawl)
-    return sql_document(sql_query(request, statement, limit=limit, timeout=timeout))
+    try:
+        result = sql_query(request, statement, limit=limit, timeout=timeout)
+    except OpenLinxError as error:
+        if error.code != WORKSPACE_NOT_FOUND.code:
+            raise
+        raise OpenLinxError(
+            WORKSPACE_NOT_FOUND,
+            error.diagnostic.message,
+            hint="Pass an existing Workspace directory to --workspace.",
+            details=error.diagnostic.details,
+        ) from error
+    return sql_document(result)
 
 
 def _query_text(query: str | None, file: Path | None) -> str:
@@ -60,11 +71,15 @@ def _query_text(query: str | None, file: Path | None) -> str:
         return file.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError as error:
         raise OpenLinxError(
-            INVALID_VALUE, f"SQL query file {file} must be UTF-8.", details={"file": str(file)}
+            INVALID_VALUE,
+            f"SQL query file {file} must be UTF-8.",
+            hint="Save the SQL query file as UTF-8 and run the Command again.",
+            details={"file": str(file)},
         ) from error
     except OSError as error:
         raise OpenLinxError(
             INVALID_VALUE,
             f"Cannot read SQL query file {file}: {error.strerror or error}",
+            hint="Pass a readable SQL file to --file, or supply the query as an argument.",
             details={"file": str(file)},
         ) from error

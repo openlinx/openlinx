@@ -50,6 +50,10 @@ numbers, SQL NULL stays `null`, and TEXT values such as `"Infinity"` and
 results, in seconds. The default is 30. Use a finite nonnegative number.
 A zero budget times out immediately.
 
+Each error includes a `hint` with a next action. Use `linx sql --help` to check
+argument and option syntax. For a timed-out query, narrow the query or increase
+`--timeout` in seconds.
+
 | Code | Exit | Meaning |
 |---|---:|---|
 | `usage_error` | 2 | Supply one query source. |

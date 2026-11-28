@@ -14,7 +14,13 @@ from sqlalchemy.exc import DBAPIError
 from openlinx.naming import COMMAND_NAME
 from openlinx.output.codes import INVALID_VALUE, SQL_ERROR, SQL_NOT_ALLOWED, SQL_TIMEOUT
 from openlinx.output.diagnostics import OpenLinxError
-from openlinx.query.sql import DEFAULT_SQL_LIMIT, DEFAULT_SQL_TIMEOUT, MAX_SQL_LIMIT
+from openlinx.query.sql import (
+    DEFAULT_SQL_LIMIT,
+    DEFAULT_SQL_TIMEOUT,
+    MAX_SQL_LIMIT,
+    SQL_LIMIT_HINT,
+    SQL_TIMEOUT_HINT,
+)
 from openlinx.store.connections import is_busy
 from openlinx.store.reading import reading_selected
 from openlinx.store.records import CrawlFile
@@ -25,6 +31,7 @@ _LEADING_TRIVIA = re.compile(r"[ \t\n\r\f\ufeff]+|--[^\n]*|/\*.*?(?:\*/|\Z)", re
 # SQLite permits non-ASCII characters and dollar signs inside unquoted identifiers.
 _IDENTIFIER_CHAR = r"[\w$\x80-\U0010ffff]"
 _READ_START = re.compile(rf"(?:SELECT|WITH)(?!{_IDENTIFIER_CHAR})", re.IGNORECASE | re.ASCII)
+_PRAGMA_START = re.compile(rf"PRAGMA(?!{_IDENTIFIER_CHAR})", re.IGNORECASE | re.ASCII)
 # Comments, quoted tokens and named parameter suffixes can contain literal semicolons.
 _STATEMENT_TOKENS = re.compile(
     rf"""{_LEADING_TRIVIA.pattern}|'(?:[^']|'')*+(?:'|\Z)|"(?:[^"]|"")*+(?:"|\Z)"""
@@ -37,6 +44,9 @@ _READ_ACTIONS = frozenset({sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.S
 # CPython rejects a second statement before stepping the first, without a SQLite error code.
 _MULTIPLE_STATEMENTS = "You can only execute one statement at a time."
 _MISSING_LOAD_EXTENSION = "no such function: load_extension"
+_ONE_STATEMENT_HINT = "Pass one SQL statement per invocation."
+_READ_ONLY_HINT = "Rewrite the query as a read-only SELECT or WITH statement."
+_PRAGMA_HINT = f"Omit PRAGMA. Use {COMMAND_NAME} schema to inspect tables and columns."
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -58,7 +68,9 @@ def _check_statement(statement: str) -> None:
     start = _skip_trivia(statement, 0)
     if _READ_START.match(statement, start) is None:
         raise OpenLinxError(
-            SQL_NOT_ALLOWED, "A read-only SQL statement must start with SELECT or WITH."
+            SQL_NOT_ALLOWED,
+            "A read-only SQL statement must start with SELECT or WITH.",
+            hint=_PRAGMA_HINT if _PRAGMA_START.match(statement, start) else _READ_ONLY_HINT,
         )
     if ";" not in statement:
         return
@@ -66,7 +78,9 @@ def _check_statement(statement: str) -> None:
     for token in _STATEMENT_TOKENS.finditer(statement, start):
         if token[0] == ";":
             if _skip_trivia(statement, token.end()) < len(statement):
-                raise OpenLinxError(SQL_NOT_ALLOWED, "SQL accepts only one statement.")
+                raise OpenLinxError(
+                    SQL_NOT_ALLOWED, "SQL accepts only one statement.", hint=_ONE_STATEMENT_HINT
+                )
             return
 
 
@@ -79,7 +93,21 @@ def _authorize_read(action: int, detail: str | None) -> int:
 
 
 def _timeout_error(timeout: float) -> OpenLinxError:
-    return OpenLinxError(SQL_TIMEOUT, f"SQL exceeded its {timeout:g}-second time limit.")
+    return OpenLinxError(
+        SQL_TIMEOUT,
+        f"SQL exceeded its {timeout:g}-second time limit.",
+        hint="Increase --timeout in seconds or narrow the query to fewer rows.",
+    )
+
+
+def _denied_error(action: int) -> OpenLinxError:
+    if action == sqlite3.SQLITE_FUNCTION:
+        hint = "Remove load_extension from the query and use SQLite's built-in functions."
+    elif action == sqlite3.SQLITE_PRAGMA:
+        hint = _PRAGMA_HINT
+    else:
+        hint = _READ_ONLY_HINT
+    return OpenLinxError(SQL_NOT_ALLOWED, "SQL may only read the Crawl.", hint=hint)
 
 
 def _query_error(error: sqlite3.Error) -> OpenLinxError:
@@ -90,7 +118,9 @@ def _query_error(error: sqlite3.Error) -> OpenLinxError:
     elif kind == "no such column":
         names = {str(column.name) for table in public_tables() for column in table.columns}
     else:
-        return OpenLinxError(SQL_ERROR, message)
+        return OpenLinxError(
+            SQL_ERROR, message, hint="Revise the statement using SQLite's error message and retry."
+        )
     return OpenLinxError(
         SQL_ERROR,
         message,
@@ -110,11 +140,17 @@ def read_sql(
     """Read a bounded result in column order, with native SQLite values for the caller."""
     if not 1 <= limit <= MAX_SQL_LIMIT:
         raise OpenLinxError(
-            INVALID_VALUE, f"SQL result limit must be between 1 and {MAX_SQL_LIMIT}."
+            INVALID_VALUE,
+            f"SQL result limit must be between 1 and {MAX_SQL_LIMIT}.",
+            hint=SQL_LIMIT_HINT,
         )
     if not 0 <= timeout < inf:
-        raise OpenLinxError(INVALID_VALUE, "SQL timeout must be finite and nonnegative.")
-    denied = False
+        raise OpenLinxError(
+            INVALID_VALUE,
+            "SQL timeout must be finite and nonnegative.",
+            hint=SQL_TIMEOUT_HINT,
+        )
+    denied: int | None = None
 
     def authorize(
         action: int,
@@ -125,16 +161,20 @@ def read_sql(
     ) -> int:
         nonlocal denied
         decision = _authorize_read(action, detail)
-        denied = denied or decision == sqlite3.SQLITE_DENY
+        if decision == sqlite3.SQLITE_DENY and denied is None:
+            denied = action
         return decision
 
     with reading_selected(selected) as connection:
         _check_statement(statement)
         driver = cast(sqlite3.Connection, connection.connection.driver_connection)
         deadline = monotonic() + timeout
+        deadline_reached = False
 
         def expired() -> bool:
-            return monotonic() >= deadline
+            nonlocal deadline_reached
+            deadline_reached = monotonic() >= deadline
+            return deadline_reached
 
         # Read-only mode protects the Crawl file. The authorizer also protects TEMP and ATTACH.
         driver.set_authorizer(authorize)
@@ -151,12 +191,19 @@ def read_sql(
             if not isinstance(cause, sqlite3.Error) or is_busy(error):
                 raise
             if getattr(cause, "sqlite_errorcode", None) == sqlite3.SQLITE_INTERRUPT:
-                raise _timeout_error(timeout) from error
+                if deadline_reached:
+                    raise _timeout_error(timeout) from error
+                # A Ctrl+C inside the Python progress callback surfaces as SQLITE_INTERRUPT.
+                raise KeyboardInterrupt from error
             # SQLite builds without extension loading cannot authorize an absent function.
-            if denied or str(cause).casefold() == _MISSING_LOAD_EXTENSION:
-                raise OpenLinxError(SQL_NOT_ALLOWED, "SQL may only read the Crawl.") from error
+            if str(cause).casefold() == _MISSING_LOAD_EXTENSION:
+                raise _denied_error(sqlite3.SQLITE_FUNCTION) from error
+            if denied is not None:
+                raise _denied_error(denied) from error
             if isinstance(cause, sqlite3.ProgrammingError) and str(cause) == _MULTIPLE_STATEMENTS:
-                raise OpenLinxError(SQL_NOT_ALLOWED, "SQL accepts only one statement.") from error
+                raise OpenLinxError(
+                    SQL_NOT_ALLOWED, "SQL accepts only one statement.", hint=_ONE_STATEMENT_HINT
+                ) from error
             raise _query_error(cause) from error
         finally:
             driver.set_progress_handler(None, 0)
