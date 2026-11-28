@@ -1,6 +1,6 @@
 ## Why
 
-`030-add-page-data` stores what each Page contains, but not what is wrong with it. Agents need deterministic findings with fixed guidance to prioritise and explain problems without guessing, because the tool never calls an LLM ([ADR-0004](../../../docs/adr/0004-tool-never-calls-an-llm.md)). The Report and `summary` also need a Health Score that means the same thing in every Crawl. This change adds the Rules, the Issues they produce and the Health Score, using Screaming Frog's model of Issue Type × Priority.
+`030-add-page-data` stores what each Page contains, but not what is wrong with it. Agents need deterministic findings with fixed guidance to prioritise and explain problems without guessing, because the tool never calls an LLM ([ADR-0004](../../../../docs/adr/0004-tool-never-calls-an-llm.md)). The Report and `summary` also need a Health Score that means the same thing in every Crawl. This change adds the Rules, the Issues they produce and the Health Score, using Screaming Frog's model of Issue Type × Priority.
 
 ## What Changes
 
@@ -10,7 +10,7 @@
 >
 > **Rules are only SQL (user decision, 2026-10-11):** every Rule is evaluated only by its query. A running Crawl writes no Issue; the Issues reader computes them live from the queries while a Crawl has no final pass, and the post-crawl pass materialises them into `affected_urls` when the Crawl ends.
 >
-> **Schema blueprint (2026-10-11):** the tables follow [ADR-0005](../../../docs/adr/0005-crawl-file-schema-conventions.md) and `018-add-schema-conventions`. `rules` is keyed by the Rule id, `issues` is a view that counts each Rule's Affected URLs, so no count is stored, `affected_urls` is keyed by `(rule_id, url_id)` with an index on `url_id`, and the `health_*` fields are derived, with `health_score` in place of `health_score_pct`.
+> **Schema blueprint (2026-10-11):** the tables follow [ADR-0005](../../../../docs/adr/0005-crawl-file-schema-conventions.md) and `018-add-schema-conventions`. `rules` is keyed by the Rule id, `issues` is a view that counts each Rule's Affected URLs, so no count is stored, `affected_urls` is keyed by `(rule_id, url_id)` with an index on `url_id`, and the `health_*` fields are derived, with `health_score` in place of `health_score_pct`.
 
 - **The Rule model.** Each Rule has:
   - a stable kebab-case id and a category

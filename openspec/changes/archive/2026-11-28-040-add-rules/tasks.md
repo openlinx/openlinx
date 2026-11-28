@@ -13,7 +13,7 @@ Seams: 1 CLI, 2 services and store API, 4 pure-logic modules, 6 store contract. 
 
 **Order against `020` and `030`:** the slice starts once `020`'s first pull request (its groups 1–6: `urls` with `is_internal`, `in_scope`, `fetch_state`, `status_code`, `fetch_error`, `parsed` and `parse_error`) and `030`'s slice (its groups 1–3: `pages` with the title and heading columns) are on main. A Rule whose columns come later (`020`'s `blocked_by_robots_txt` in task 10.5; `022`-min's redirect and size columns; `030`'s Indexability, canonical, directive, link and content columns) joins the v0.1 catalogue when its own task delivers an executable query. Each task names its dependencies where they are not obvious.
 
-**Release scope.** v0.1 ships all [42 ROADMAP Rules](../../../ROADMAP.md#the-v01-rules). Rule-specific work includes 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9. In 6.2 verify the first meta description's pixel width from 030 as well as the character limit. The additional pixel threshold for `title-too-long` belongs to v0.2.
+**Release scope.** v0.1 ships all [42 ROADMAP Rules](../../../../ROADMAP.md#the-v01-rules). Rule-specific work includes 3.16, 5.5–5.6, 5.8, 6.2–6.8, 8.1–8.4, 8.11–8.12 and group 9. In 6.2 verify the first meta description's pixel width from 030 as well as the character limit. The additional pixel threshold for `title-too-long` belongs to v0.2.
 
 **Initial integration.** The first 15 Rules established the configuration snapshot, public reproducing queries and live and stored Issues paths.
 

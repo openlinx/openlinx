@@ -6,7 +6,7 @@ Terms follow [CONTEXT.md](CONTEXT.md). How the pieces fit together is in [docs/a
 
 Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change numbers name the changes; the build order below says when each one starts.
 
-**Scope cut (2026-10-05).** v0.1 is cut to the core path: crawl a site, store it, and ask it for Issues. Several changes ship only their minimum in v0.1 (marked *min*), and the rest of them moves to v0.2. The specs stay as written. The `design.md` and `tasks.md` of 015 and later are drafts: each is re-grounded against the code with `/opsx:update` just before its change starts, and that is also when the deferred requirements leave its specs.
+**Scope cut (2026-10-05).** v0.1 is cut to the core path: crawl a site, store it, and ask it for Issues. Several changes ship only their minimum in v0.1 (marked *min*), and the rest of them moves to v0.2. The specs stay as written. At that cut, the `design.md` and `tasks.md` of 015 and later were drafts. Each draft is re-grounded against the code with `/opsx:update` before its change starts, when its deferred requirements leave the specs.
 
 **060-min joins v0.1 (2026-10-05).** An agent runs Commands through its shell tool, which times out after minutes, so a foreground Crawl caps what an agent can crawl. With `crawl --detach`, `status` and `stop` in v0.1, an agent crawls a large site in the background and queries the crawl file while the Crawl is still writing.
 
@@ -20,16 +20,20 @@ Each milestone ships as a set of OpenSpec changes in `openspec/changes/`. Change
 
 ## Positioning
 
-A deep, local technical crawler for agents. Other tools already ship a crawler with a CLI, an MCP server and a Skill, and a SQLite store or no telemetry alone sets none apart; the open all-in-one SEO suites offer the audit as one capped module on top of a paid data API. This one leads with:
-- **Your crawl is a database:** arbitrary read-only SQL over a public, versioned schema, with every Issue reproducible by a query. Each Crawl is a SQLite file with a documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)), and `linx sql` works while a background Crawl is still writing.
+A deep, local technical crawler for agents. Other tools already ship a crawler with a CLI, an MCP server and a Skill, and a SQLite store or no telemetry alone sets none apart; the open all-in-one SEO suites offer the audit as one capped module on top of a paid data API. The roadmap targets these capabilities.
+- **Your crawl is a database:** arbitrary read-only SQL over a public, versioned schema, with every Issue reproducible by a query. Each Crawl is a SQLite file with a documented schema ([ADR-0002](docs/adr/0002-sqlite-crawl-store-public-schema.md)). The planned `linx sql` Command will support reads while a background Crawl writes.
 - **A contract-tested CLI for agents:** one JSON result per Command, a registry of diagnostics and error codes, and cursor paging.
-- **Local diff and crawl continue:** a stopped or interrupted Crawl continues where it ended, and Crawl Diff (v0.2) compares two crawl files on your machine, with no cloud.
-- **Built for large sites, with no page cap:** a full crawl of every URL in Scope, never a sample, at the scale target of about 500k URLs. Checking 50 pages is a commodity; a complete crawl of a large site, run in the background for hours and queried while it runs, is the job. The frontier lives in the crawl file, so memory stays flat.
+- **Local diff and crawl continue:** 060 will let a stopped or interrupted Crawl continue where it ended. Crawl Diff (v0.2) will compare two local crawl files.
+- **Built for large sites, with no page cap:** a full crawl of every URL in Scope, never a sample, at the scale target of about 500k URLs. Checking 50 pages is a commodity; a complete crawl of a large site, run in the background for hours and queried while it runs, is the job. The frontier lives in the crawl file. The 026 soak test will measure memory at the scale target.
 - **No account, no paid API keys, no telemetry, no LLM calls** ([ADR-0004](docs/adr/0004-tool-never-calls-an-llm.md)).
 
 We deliberately do not claim these as unique: the MCP server, the Skill, the CI gate, the Health Score and `llms.txt` checks.
 
 ## v0.1: first public pre-release
+
+The foreground Spider Crawl from a single URL Seed already records a crawl file
+and supports both Issues Commands. List and Sitemap modes belong to the
+[024 draft for v0.2](openspec/changes/024-add-list-and-sitemap-modes/tasks.md).
 
 | # | Change | Capabilities (specs) | Commands | Status |
 |---|---|---|---|---|
@@ -40,21 +44,21 @@ We deliberately do not claim these as unique: the MCP server, the Skill, the CI 
 | 018 | `018-add-schema-conventions` | `crawl-store` (modified) | `schema` (`indexes`) | done |
 | 020 | `020-add-crawl-core` | `crawling` | `crawl <url>` (foreground) | done |
 | 021 | `021-rename-to-openlinx` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | `linx`, `openlinx` | done |
-| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | v0.1 through group 10 in main. All 156 tasks complete and [archived](openspec/changes/archive/2026-11-18-022-add-fetch-policy/tasks.md) on the [PR #42](https://github.com/openlinx/openlinx/pull/42) branch. |
+| 022 | `022-add-fetch-policy` | `fetching` | `crawl` fetch flags | All 156 tasks complete and [archived](openspec/changes/archive/2026-11-18-022-add-fetch-policy/tasks.md) in [PR #42](https://github.com/openlinx/openlinx/pull/42). |
 | 023 | `023-fix-code-audit` | `workspace`, `cli-contract`, `crawl-store`, `crawling` (modified) | existing Commands | merged and archived |
-| 030 | `030-add-page-data` | `page-data` | none (data only) | foundation in main; local 4b and review fixes complete; whole-change acceptance open |
-| 040 | `040-add-rules` | `rules` | `rules` | partial older branch; integration and remaining v0.1 Rules open |
-| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | partial older branch; review fixes and 040 integration open |
-| 026 | `026-add-parse-pool` | `crawl-performance` | none | partial older branch; bounded shutdown and scale proof open |
-| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop`, `resume` | local ownership frozen at task 0.6 (`5fcf25e2`); Commands not implemented |
-| 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | planned, min |
+| 030 | `030-add-page-data` | `page-data` | none (data only) | Page data used by Rules in main. [PR #85](https://github.com/openlinx/openlinx/pull/85) covers meta refresh. Links layout, writer-capacity proof and whole-change review remain open. |
+| 040 | `040-add-rules` | `rules` | `rules` | All 42 Rules and saved and live Issue readers in main through [PR #83](https://github.com/openlinx/openlinx/pull/83). Health Score merged in [PR #84](https://github.com/openlinx/openlinx/pull/84). [Archived tasks](openspec/changes/archive/2026-11-28-040-add-rules/tasks.md) and [Rules specification](openspec/specs/rules/spec.md). |
+| 050 | `050-add-query-and-segments` | `querying` | `summary`, `pages`, `page`, `issues`, `sql` | Both Issues forms in main through PR #83. The foreground Crawl and Issues subprocess test passed on all three platforms. Group 1 acceptance and the remaining query Commands are open. |
+| 026 | `026-add-parse-pool` | `crawl-performance` | none | Page preparation in-process on main. Worker pool, bounded shutdown and scale proof open. |
+| 060 | `060-add-crawl-control` | `crawl-control` | `crawl --detach` (Spider mode), `status`, `stop`, `resume` | Writer ownership 0.1–0.10 merged in [PR #82](https://github.com/openlinx/openlinx/pull/82). Group review and control Commands open. |
+| 080 | `080-add-agent-skill` | `agent-skill`, `diagnostics` | `skill install`, `doctor` | draft, v0.1 min |
 | 085 | `085-add-release` | decided when it is drafted | none (release workflow) | planned, not drafted yet |
 
-v0.1 is installed from PyPI, where 085 publishes it, with `uv tool install` (or `pipx`). The install scripts come with 100 in v0.2.
+085 will publish v0.1 to PyPI for installation with `uv tool install` or `pipx`. The install scripts come with 100 in v0.2.
 
 ### Build order
 
-A thin end-to-end slice comes first, so the first Issues reach a user early. The changes then widen.
+The planned sequence starts with a thin end-to-end slice so the first Issues reach a user early. The changes then widen.
 
 ```
 slice:   000 ─► 010 ─► 015 ─► 017 ─► 018 ─► 020 ─► 030-min ─► 040-min ─► 050 issues
@@ -67,13 +71,9 @@ widen:                                        ├─► 022-min ─┐
                                               └────────────┴─► rest of 030-min ─► 040 (42 Rules) ─► 050 sql, summary/pages/page ─► 080 ─┴─► 026 benchmark re-run (sizes the pool) ─► 085 ─► v0.1 tag
 ```
 
-- **Where the build is:**
-  - **In main:** the foundation through 021, the completed and archived 023 audit, 022's v0.1 scope through group 10, and the 030 Page data foundation. 030's deferred-column and Windows cleanup findings C01/C02 are closed by PR #37; PR #41 fixes the pause-count wait.
-  - **Local integration:** 030 at `c31c717e` includes group 4b, Max-Age/Content Area fixes and the completed sentence-splitting and cookie Domain review fixes; whole-change acceptance remains open. 022 is archived on the PR #42 branch after Standards and Spec review and the nine-job OS/Python matrix passed at `ee7ee390`. The platform runner fix at `30ca0c46` is integrated locally and checks all three type targets on every host. 060 stays frozen at `5fcf25e2` after task 0.6; its control Commands, remaining ownership scenarios, review and actual cross-OS CI remain open.
-  - **Older branches:** 026, 040 and 050 contain partial implementations that still need the package rename and current contracts. Bounded worker shutdown, Rule populations and remaining Rules, query review fixes, and the integrated Crawl → Issues proof remain open. [Development state](docs/development-state.md) links verified checkpoints, tasks and dependencies.
-  - **Not started:** 080 (the agent Skill) and 085 (the release).
+- **Current progress:** [Development state](docs/development-state.md) links public checkpoints, task lists and CI evidence.
 - **The slice:** 015 → 017 → 018 → 020 → 030-min → 040-min → 050-issues. 017 speeds up 015's writer before 020 writes through it, and 018 sets the schema conventions before 020 adds the first tables after 015's. 030's slice is its task groups 1–3 (Page rows, titles, meta descriptions and headings, which `title-missing` and `h1-missing` read), and its groups 4–12, Indexability included, widen after 022-min, whose size and redirect columns 030 copies. 040 starts with 3–5 Rules that need no redirects (for example `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing`, `h1-missing`), and 050 with `issues` and `issues <rule-id>`. The slice ends with a cross-OS end-to-end CI test: a foreground `crawl` → `issues` on Windows, macOS and Linux. 050's slice is its task group 1, `issues` and `issues <rule-id>` with the end-to-end test; 040's slice is its task groups 1–4, the Rule model and `linx rules`, `[rules.<id>]` settings, the Rules as queries with stored and live Issues, and `internal-4xx`, `internal-5xx`, `internal-no-response`, `title-missing` and `h1-missing`.
-- **Widening:** 022-min and 060-min can each start as soon as 020 is in, in their own worktrees, alongside the slice. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 42 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
+- **Widening:** 022-min and 060-min can start alongside the slice as soon as 020 is in. 060-min needs only 015 and 020, and must land before 080, whose workflows start Crawls detached. The rest of 030-min, 040 up to its 42 Rules, and the rest of 050 follow. 050's `sql` can land right after `issues`, before `summary`, `pages` and `page`. 080 comes after them, because the Skill is generated from the finished Commands, columns and Rules.
 - **Scale proof:** 026, the parse pool with its synthetic site and benchmark script, starts its synthetic site alongside 020 and the rest once 020's slice is in (its first pull request), and lands before the slice's end-to-end test; its first run is the baseline. The benchmark is re-run on the full v0.1 pipeline after 080, before 085, to size the pool, and its numbers go in `docs/benchmarks.md`.
 - **HTML parser:** selectolax 1.0.1 or later, parsing with scripting on, as a browser that runs scripts does. A head `<noscript>` therefore keeps the later head elements (canonical, meta description, robots, hreflang) in `<head>`, and a body `<noscript>` gives its Links.
 - **Release:** 085 comes last, before the v0.1 tag, and publishes under the product name, OpenLinx. `docs/crawler.md`, the page that 022's User-Agent names, must exist by then.
@@ -81,7 +81,7 @@ widen:                                        ├─► 022-min ─┐
 
 ### The v0.1 Rules
 
-v0.1 ships all 42 Rules below. Each Rule has a reproducing SQL query over the public schema. The initial integration slice supplied 15 Rules. The release includes the other 27 under the same evaluation and configuration contract.
+All 42 Rules planned for v0.1 are in main through PR #83. Each Rule has a reproducing SQL query over the public schema. The 27 Rules added after the initial 15 share the same evaluation and configuration contract.
 
 | Category | Rules |
 |---|---|
@@ -180,11 +180,11 @@ If a change needs something another change owns, it depends on that change inste
   - The `response_headers` table, where cookie values are always stored as `***`. No cookies are sent.
   - The standard proxy variables `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` are honoured, the one exception 022 adds to the no-environment-variables rule, and listed under `environment` in `linx commands`, with proxy passwords redacted.
   - HTTPS, virtual hosts and gzip on the fixture site (trustme).
-  - **(v0.2, groups 11–14 complete and archived on the PR #42 branch)** Custom headers and basic auth for Internal URLs, safe secret recording and fresh continue inputs, the `--proxy` flag (and `[crawl] proxy`), bounded offered HTTP capability per origin via ALPN (`http_1_1` / `http_2`) while requests stay HTTP/1.1, and bounded zstd decoding. Task 14.8 verified all three Python versions on Windows, macOS and Linux.
+  - **(v0.2, groups 11–14 complete and archived in PR #42)** Custom headers and basic auth for Internal URLs, safe secret recording and fresh continue inputs, the `--proxy` flag (and `[crawl] proxy`), bounded offered HTTP capability per origin via ALPN (`http_1_1` / `http_2`) while requests stay HTTP/1.1, and bounded zstd decoding. Task 14.8 verified all three Python versions on Windows, macOS and Linux.
   - **(v0.2)** Bot-challenge detection, with the hostile-site work: a bot-protection or WAF challenge page, recognised by the headers, cookies and body markers of the common CDNs and WAFs, marks its URL `blocked`, never a Page with a missing title or H1. It detects and classifies; it never evades.
   - **(v0.2)** With that detection, an External URL that answers 403 or a challenge is checked again with a browser-like request before it counts as broken. External URLs are already checked with GET, never HEAD.
   - **(v0.2)** Web Bot Auth, opt-in: requests are signed per RFC 9421 (Ed25519, with the public key served from a key directory), so a site owner behind a bot gatekeeper can verify the crawler and allow it. With no key configured, requests go out unsigned.
-- **024-add-list-and-sitemap-modes** (v0.2):
+- **024-add-list-and-sitemap-modes** (v0.2, draft):
   - List mode (`--list <file|->`) and Sitemap mode (`--sitemap <url>`, repeatable, with index files and gzip).
   - `mode_conflict` when two Crawl Modes are given.
 - **026-add-parse-pool** (v0.1: the pool and its benchmark):
@@ -340,7 +340,7 @@ The changes deferred by the 2026-10-05 scope cut come first, then the link-graph
 
 | # | Change | Capabilities (specs) | Commands | Status |
 |---|---|---|---|---|
-| 024 | `024-add-list-and-sitemap-modes` | `crawl-modes` | `crawl --list`, `crawl --sitemap` | planned |
+| 024 | `024-add-list-and-sitemap-modes` | `crawl-modes` | `crawl --list`, `crawl --sitemap` | [Draft for v0.2](openspec/changes/024-add-list-and-sitemap-modes/tasks.md). Foreground Spider mode is available in main. |
 | 060 | `060-add-crawl-control` | `crawl-control` | `crawl --dry-run`, `crawls`, detached List mode | planned, rest after v0.1 |
 | 070 | `070-add-html-report` | `reporting` | `report`, `report brief` | planned |
 | 100 | `100-add-installers` | `installation` | none (install scripts) | planned |

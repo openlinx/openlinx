@@ -50,7 +50,7 @@ A Rule SHALL NOT fire when a value its condition needs was not measured (NULL). 
 - **THEN** `title-missing` and `h1-missing` have no Affected URL for it
 
 ### Requirement: The v0.1 catalogue
-The v0.1 registry SHALL contain exactly the 42 Rules in [the ROADMAP](../../../../../ROADMAP.md#the-v01-rules), each with a runnable evaluation query. The same ids SHALL appear in `linx rules list`, in generated Workspace settings, and in a new Crawl’s `crawl.config.rules` and `rules` table. Each Rule SHALL have the Issue Type, Priority, population, default thresholds, condition and `detail` keys defined below.
+The v0.1 registry SHALL contain exactly the 42 Rules in [the ROADMAP](../../../../../../ROADMAP.md#the-v01-rules), each with a runnable evaluation query. The same ids SHALL appear in `linx rules list`, in generated Workspace settings, and in a new Crawl’s `crawl.config.rules` and `rules` table. Each Rule SHALL have the Issue Type, Priority, population, default thresholds, condition and `detail` keys defined below.
 
 #### Scenario: Catalogue size
 - **WHEN** `linx rules list --limit 50` runs in a Workspace without `[rules]` settings
