@@ -22,20 +22,24 @@ from openlinx.store.records import AffectedUrl, Issue, RuleRow
 from tests.fixture_site.plugin import StartSite
 from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawls import query
+from tests.support.workspace import TempWorkspace
 
+# Discover the HTTP error URLs in an order that differs from their alphabetical order.
 _RULE_PAGES = Site(
     {
-        "/rules/": Page(body='<a href="/rules/z-titled">Pears</a>'),
+        "/rules/": Page(
+            body='<a href="/rules/z-not-found">Not found</a><a href="/rules/z-titled">Pears</a>',
+        ),
         "/rules/z-titled": Page(
             body='<title>Pears</title><a href="/rules/a-titled">Tea</a>',
         ),
-        "/rules/a-titled": Page(body='<title>Tea</title><a href="/rules/gone">Gone</a>'),
-        "/rules/gone": Status(404, body="Not found", content_type="text/plain"),
+        "/rules/a-titled": Page(body='<title>Tea</title><a href="/rules/a-gone">Gone</a>'),
+        "/rules/z-not-found": Status(404, body="Not found", content_type="text/plain"),
+        "/rules/a-gone": Status(410, body="Gone", content_type="text/plain"),
     }
 )
 
-# Returning the fixture Rule's two URLs in reverse ID order makes the reader's ordering
-# observable even when the catalogue Rules produce no Issue with multiple Affected URLs.
+# The fixture Rule forces reverse URL id order in SQL, regardless of SQLite's scan plan.
 _TITLE_LENGTH = Rule(
     id="fixture-title-length",
     category="titles",
@@ -118,17 +122,31 @@ def _crawl_rule_pages(seed: str) -> tuple[Path, _IssueRead]:
     return result.crawl_file, live
 
 
-@pytest.mark.usefixtures("temp_workspace")
-def test_live_and_materialised_issues_agree(fixture_site: StartSite) -> None:
+@pytest.mark.parametrize("journal_mode", ["wal", "delete"])
+def test_live_and_materialised_issues_agree(
+    temp_workspace: TempWorkspace, fixture_site: StartSite, journal_mode: str
+) -> None:
+    (temp_workspace.root / "openlinx.toml").write_text(
+        f'[store]\njournal_mode = "{journal_mode}"\n', encoding="utf-8"
+    )
     server = fixture_site(_RULE_PAGES)
     crawl_file, (live_issues, live_affected) = _crawl_rule_pages(server.url("/rules/"))
     assert query(crawl_file, "SELECT state FROM crawl") == [("completed",)]
+    assert query(crawl_file, "PRAGMA journal_mode") == [(journal_mode,)]
     stored_issues, stored_affected = _read_issues_and_affected_urls(crawl_file)
     assert stored_issues == live_issues
     assert stored_affected == live_affected
 
+    not_found_url = server.url("/rules/z-not-found")
+    gone_url = server.url("/rules/a-gone")
+    errors = query(
+        crawl_file,
+        "SELECT url, id, status_code FROM urls WHERE url IN (?, ?) ORDER BY id",
+        (not_found_url, gone_url),
+    )
+    assert [(url, code) for url, _, code in errors] == [(not_found_url, 404), (gone_url, 410)]
+    (_, not_found, _), (_, gone, _) = errors
     ids = dict(query(crawl_file, "SELECT url, id FROM urls"))
-    gone = ids[server.url("/rules/gone")]
     missing = ids[server.url("/rules/")]
     pears = ids[server.url("/rules/z-titled")]
     tea = ids[server.url("/rules/a-titled")]
@@ -140,7 +158,7 @@ def test_live_and_materialised_issues_agree(fixture_site: StartSite) -> None:
             category="response_codes",
             issue_type="issue",
             priority="high",
-            affected_count=1,
+            affected_count=2,
         ),
         Issue(
             rule_id="title-missing",
@@ -157,7 +175,10 @@ def test_live_and_materialised_issues_agree(fixture_site: StartSite) -> None:
             affected_count=2,
         ),
     ]
-    assert live_affected["internal-4xx"] == [AffectedUrl(url_id=gone, detail={"status_code": 404})]
+    assert live_affected["internal-4xx"] == [
+        AffectedUrl(url_id=not_found, detail={"status_code": 404}),
+        AffectedUrl(url_id=gone, detail={"status_code": 410}),
+    ]
     assert live_affected["title-missing"] == [AffectedUrl(url_id=missing, detail=None)]
     assert live_affected["title-too-long"] == []
     assert live_affected["fixture-title-length"] == [

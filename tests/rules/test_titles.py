@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import update
 
 from openlinx.clock import SystemClock
+from openlinx.rules.headings import H1_MISSING
 from openlinx.rules.registry import RULES
 from openlinx.rules.titles import TITLE_DUPLICATE, TITLE_MISSING, TITLE_TOO_LONG
 from openlinx.store.issues import evaluate_rule
@@ -67,14 +68,37 @@ def test_non_analysed_pages_are_skipped_by_page_rules(fixture_site: StartSite) -
     [(analysed_id,)] = query(
         file, "SELECT id FROM urls WHERE url = ? AND parsed = 1", (server.url("/"),)
     )
-    assert query(
+    [(unanalysed_id, status, parsed, title_count, title, h1_count, h1)] = query(
         file,
-        "SELECT urls.status_code, urls.parsed, pages.title_count, pages.title_1 "
+        "SELECT urls.id, urls.status_code, urls.parsed, pages.title_count, pages.title_1, "
+        "pages.h1_count, pages.h1_1 "
         "FROM urls JOIN pages ON pages.url_id = urls.id WHERE urls.url = ?",
         (server.url("/not-found"),),
-    ) == [(404, 0, None, None)]
+    )
+    assert (status, parsed, title_count, title, h1_count, h1) == (404, 0, None, None, None, None)
 
-    assert evaluate_rule(file, TITLE_MISSING) == [AffectedUrl(url_id=analysed_id, detail=None)]
+    expected = [AffectedUrl(url_id=analysed_id, detail=None)]
+    assert evaluate_rule(file, TITLE_MISSING) == expected
+    assert evaluate_rule(file, H1_MISSING) == expected
+
+    # Zero counts isolate the parsed population filter from the missing-element predicates.
+    with CrawlWriter(file, SystemClock()) as writer:
+        writer.run(
+            executing(
+                update(pages)
+                .where(pages.c.url_id == unanalysed_id)
+                .values(title_count=0, h1_count=0)
+            )
+        )
+
+    assert query(
+        file,
+        "SELECT urls.parsed, pages.title_count, pages.h1_count FROM urls "
+        "JOIN pages ON pages.url_id = urls.id WHERE urls.id = ?",
+        (unanalysed_id,),
+    ) == [(0, 0, 0)]
+    assert evaluate_rule(file, TITLE_MISSING) == expected
+    assert evaluate_rule(file, H1_MISSING) == expected
 
 
 @pytest.mark.usefixtures("temp_workspace")

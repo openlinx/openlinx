@@ -8,21 +8,22 @@ from sqlalchemy import Connection, Engine, event, update
 
 from openlinx.clock import SystemClock
 from openlinx.rules.headings import H1_MISSING
+from openlinx.rules.response_codes import INTERNAL_4XX
 from openlinx.rules.titles import TITLE_MISSING
 from openlinx.store.crawls import read_recorded, record_continue
 from openlinx.store.issues import read_url_issues
 from openlinx.store.records import UrlIssue
-from openlinx.store.schema import pages
+from openlinx.store.schema import pages, urls
 from openlinx.store.writer import CrawlWriter
 from tests.fixture_site.plugin import StartSite
-from tests.fixture_site.routes import Page, Site
+from tests.fixture_site.routes import Page, Site, Status
 from tests.support.crawling import crawl_result
 from tests.support.crawls import query
 from tests.support.workspace import TempWorkspace
 from tests.support.writer import executing
 
 _AT = datetime(2026, 11, 19, 16, tzinfo=UTC)
-_CATALOGUE = (TITLE_MISSING,)
+_CATALOGUE = (TITLE_MISSING, INTERNAL_4XX)
 
 
 def test_one_url_reads_stored_then_live_issues(
@@ -36,20 +37,23 @@ def test_one_url_reads_stored_then_live_issues(
                 ),
                 "/present": Page(
                     body='<title>Present</title><meta name="description" content="Present">'
-                    '<a href="/future">Future</a>'
+                    '<a href="/gone">Gone</a><a href="/future">Future</a>'
                 ),
+                "/gone": Status(404, content_type="text/plain"),
                 "/future": Page(body="<p>Not fetched yet</p>"),
             }
         )
     )
-    result = crawl_result(server.url("/"), max_urls=2, concurrency=1)
+    result = crawl_result(server.url("/"), max_urls=3, concurrency=1)
     assert (result.summary.state, result.summary.stop_reason) == ("stopped", "max_urls")
     file = result.crawl_file
     [(root_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/"),))
     [(present_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/present"),))
+    [(gone_id,)] = query(file, "SELECT id FROM urls WHERE url = ?", (server.url("/gone"),))
     assert query(file, "SELECT url, fetch_state FROM urls ORDER BY id") == [
         (server.url("/"), "fetched"),
         (server.url("/present"), "fetched"),
+        (server.url("/gone"), "fetched"),
         (server.url("/future"), "queued"),
     ]
 
@@ -68,6 +72,8 @@ def test_one_url_reads_stored_then_live_issues(
                 .values(title_count=0, title_1=None, title_1_length=None)
             )
         )
+        # Keep the detail from the last Pass at 404 while the current URL records 410.
+        writer.run(executing(update(urls).where(urls.c.id == gone_id).values(status_code=410)))
         writer.flush()
 
     assert read_url_issues(file, root_id, _CATALOGUE) == [
@@ -79,6 +85,9 @@ def test_one_url_reads_stored_then_live_issues(
         UrlIssue(rule_id="h1-missing", url_id=present_id, detail=None),
         UrlIssue(rule_id="http-url", url_id=present_id, detail={"status_code": 200}),
     ]
+    assert read_url_issues(file, gone_id, _CATALOGUE) == [
+        UrlIssue(rule_id="internal-4xx", url_id=gone_id, detail={"status_code": 404})
+    ]
 
     with CrawlWriter(file, SystemClock()) as writer:
         writer.run(record_continue(read_recorded(file).config, _AT))
@@ -87,6 +96,9 @@ def test_one_url_reads_stored_then_live_issues(
     assert read_url_issues(file, root_id, _CATALOGUE) == []
     assert read_url_issues(file, present_id, _CATALOGUE) == [
         UrlIssue(rule_id="title-missing", url_id=present_id, detail=None)
+    ]
+    assert read_url_issues(file, gone_id, _CATALOGUE) == [
+        UrlIssue(rule_id="internal-4xx", url_id=gone_id, detail={"status_code": 410})
     ]
 
 
