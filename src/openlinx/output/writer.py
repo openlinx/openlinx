@@ -11,7 +11,7 @@ import orjson
 
 from openlinx.json_numbers import encode_json
 from openlinx.output.diagnostics import Diagnostic, OpenLinxError
-from openlinx.output.table import render_items_table, render_table
+from openlinx.output.table import TitledTables, render_items_table, render_table
 
 # Not a terminal: a fixed width, so the table is the same on every OS and in CI.
 TABLE_WIDTH = 120
@@ -56,6 +56,8 @@ class Output:
             width = shutil.get_terminal_size().columns if self._stdout.isatty() else TABLE_WIDTH
             if document.kind == "list":
                 text = render_items_table(document.value["items"], width)
+            elif isinstance(document.value, TitledTables):
+                text = document.value.render(width)
             else:
                 text = render_table(document.value, width)
             self._stdout.write(text.encode())

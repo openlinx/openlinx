@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, get_args
+from typing import TYPE_CHECKING, Any, get_args
 
 from openlinx.output.codes import INVALID_VALUE
 from openlinx.output.diagnostics import OpenLinxError
@@ -23,10 +23,14 @@ from openlinx.store.records import LATEST, CrawlFile, IssueType, Priority, RuleC
 from openlinx.workspace.discovery import resolve_workspace
 
 if TYPE_CHECKING:
+    from openlinx.query.summary import SummaryModel
     from openlinx.store.sql import SqlResult
 
 ISSUES = "issues"
 PAGES = "pages"
+DEFAULT_SUMMARY_TOP = 10
+MAX_SUMMARY_TOP = 100
+SUMMARY_TOP_HINT = f"Use --top with an integer from 0 to {MAX_SUMMARY_TOP}."
 PAGE_FIELDS = Fields(
     available=PAGE_COLUMNS,
     default=(
@@ -171,6 +175,34 @@ def sql_query(request: QueryRequest, statement: str, *, limit: int, timeout: flo
     from openlinx.store.sql import read_sql
 
     return read_sql(_crawl_file(request), statement, limit=limit, timeout=timeout)
+
+
+def page(request: QueryRequest, url: str, *, headers: bool = False) -> dict[str, Any]:
+    """Read one Page and its related data from the selected Crawl."""
+    from openlinx.rules.registry import RULES
+    from openlinx.store.query_page import page_in
+    from openlinx.store.reading import reading_selected
+
+    crawl_file = _crawl_file(request)
+    with reading_selected(crawl_file) as connection:
+        return page_in(connection, crawl_file.path, url, RULES, headers=headers)
+
+
+def summary(request: QueryRequest, *, top: int = DEFAULT_SUMMARY_TOP) -> "SummaryModel":
+    """Summarise the committed rows of the selected Crawl."""
+    from openlinx.rules.registry import RULES
+    from openlinx.store.query_summary import summary_in
+    from openlinx.store.reading import reading_selected
+
+    if not 0 <= top <= MAX_SUMMARY_TOP:
+        raise OpenLinxError(
+            INVALID_VALUE,
+            f"The number of top Issues must be between 0 and {MAX_SUMMARY_TOP}.",
+            hint=SUMMARY_TOP_HINT,
+        )
+    crawl_file = _crawl_file(request)
+    with reading_selected(crawl_file) as connection:
+        return summary_in(connection, crawl_file.path, RULES, top=top)
 
 
 def _crawl_file(request: QueryRequest) -> CrawlFile:

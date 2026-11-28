@@ -60,12 +60,12 @@ does not add it to the direct test seams.
 
 | Folder | Seam |
 |---|---|
-| `tests/cli/` | 1, CLI |
+| `tests/cli/` | 1, CLI, including [Page and Summary diagnostics](../tests/cli/test_page_summary_diagnostics.py) |
 | `tests/workspace/`, `tests/store/` | 2, the Workspace and its service, and the crawl-store API (including Writer [connection](../tests/store/writer/test_connections.py), [unit result](../tests/store/writer/test_unit_results.py) and [loop commit deadline](../tests/store/writer/test_loop_deadline.py) tests); 4, the store's pure logic, such as crawl ids |
 | `tests/output/` | 4, the output layer's pure logic |
 | `tests/crawl/` | 4, the crawler's pure logic, such as URL normalisation; 3 and 3+6, Crawls of the fixture site; 2, the Crawl Service, and its reporter, the warning log (`test_warning_log.py`) |
 | `tests/rules/` | 2, Rule evaluation on real Crawl Stores, including [HTTP responses](../tests/rules/test_http_url.py); 3+6, Crawls of the fixture site read through the Rule tables, including stored and live [redirect loops](../tests/rules/test_redirect_loop.py) |
-| `tests/query/` | 2, the Query Service reading the [Issue list](../tests/query/test_issue_list.py) and [Rule detail](../tests/query/test_issue_detail.py) from a real crawl store |
+| `tests/query/` | 2, the Query Service reading the [Issue list](../tests/query/test_issue_list.py), [Rule detail](../tests/query/test_issue_detail.py), [Page detail](../tests/query/test_page_detail.py) and [Crawl summary](../tests/query/test_summary.py) from a real Crawl Store; 1 and 3+6, CLI output from the same queries after a Crawl of the fixture site |
 | `tests/extract/` | 4, the Page extractor and the Page handler; 3+6, Crawls of the fixture site read through the Page data tables |
 | `tests/contract/` | 6, the store contract (`test_schema.py`, which reads `docs/schema.md` with `openlinx.services.schema_doc.parse_tables`), and the hand-written expected JSON of the CLI contract tests (`commands/`) |
 | `tests/js/` | 9, the Report script |

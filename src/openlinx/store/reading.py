@@ -75,10 +75,15 @@ def _check_schema_version(connection: Connection, path: Path) -> None:
 
 def read_metadata(path: Path, *, identity: CrawlFileIdentity | None = None) -> dict[str, Any]:
     with reading(path, identity=identity, snapshot=True) as connection:
-        statement = _CRAWL_METADATA
-        if is_historical_preview(connection, missing_health_columns(connection)):
-            statement = _PREVIEW_METADATA
-        return dict(connection.execute(statement).mappings().one())
+        return metadata_in(connection)
+
+
+def metadata_in(connection: Connection) -> dict[str, Any]:
+    """Read Crawl metadata from the caller's snapshot."""
+    statement = _CRAWL_METADATA
+    if is_historical_preview(connection, missing_health_columns(connection)):
+        statement = _PREVIEW_METADATA
+    return dict(connection.execute(statement).mappings().one())
 
 
 def invalid_crawl_file(path: Path) -> OpenLinxError:

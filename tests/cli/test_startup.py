@@ -204,6 +204,8 @@ SETTINGS_MODELS = {
         (["rules", "list", "--help"], STARTUP_ALLOWLIST),
         (["rules", "show", "--help"], STARTUP_ALLOWLIST),
         (["issues", "--help"], STARTUP_ALLOWLIST),
+        (["page", "--help"], STARTUP_ALLOWLIST),
+        (["summary", "--help"], STARTUP_ALLOWLIST),
         (["sql", "--help"], STARTUP_ALLOWLIST),
         (["status", "--help"], STARTUP_ALLOWLIST),
         (["stop", "--help"], STARTUP_ALLOWLIST),
